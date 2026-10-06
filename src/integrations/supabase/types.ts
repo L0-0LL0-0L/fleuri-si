@@ -14,13 +14,462 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      agents: {
+        Row: {
+          archetype: string
+          avatar: number
+          bio: string
+          cash: number
+          created_at: number
+          followers: number
+          following: Json
+          funded_total: number
+          handle: string
+          id: string
+          last_action_at: number
+          name: string
+          owner_id: string
+          persona: string
+          realized_pnl: number
+          risk: number
+          status: string
+          strategy: string
+        }
+        Insert: {
+          archetype: string
+          avatar?: number
+          bio?: string
+          cash?: number
+          created_at: number
+          followers?: number
+          following?: Json
+          funded_total?: number
+          handle: string
+          id: string
+          last_action_at: number
+          name: string
+          owner_id: string
+          persona: string
+          realized_pnl?: number
+          risk: number
+          status: string
+          strategy: string
+        }
+        Update: {
+          archetype?: string
+          avatar?: number
+          bio?: string
+          cash?: number
+          created_at?: number
+          followers?: number
+          following?: Json
+          funded_total?: number
+          handle?: string
+          id?: string
+          last_action_at?: number
+          name?: string
+          owner_id?: string
+          persona?: string
+          realized_pnl?: number
+          risk?: number
+          status?: string
+          strategy?: string
+        }
+        Relationships: []
+      }
+      alert_reads: {
+        Row: {
+          event_id: string
+          owner_id: string
+          read_at: string
+        }
+        Insert: {
+          event_id: string
+          owner_id?: string
+          read_at?: string
+        }
+        Update: {
+          event_id?: string
+          owner_id?: string
+          read_at?: string
+        }
+        Relationships: []
+      }
+      alert_rules: {
+        Row: {
+          created_at: number
+          kind: string
+          owner_id: string
+          target: string
+        }
+        Insert: {
+          created_at?: number
+          kind: string
+          owner_id?: string
+          target?: string
+        }
+        Update: {
+          created_at?: number
+          kind?: string
+          owner_id?: string
+          target?: string
+        }
+        Relationships: []
+      }
+      coins: {
+        Row: {
+          avatar: number
+          buys: number
+          created_at: number
+          creator_id: string
+          fees: number
+          graduated: boolean
+          graduated_at: number | null
+          name: string
+          raised: number
+          sells: number
+          symbol: string
+          tagline: string
+          v_sol: number
+          v_tok: number
+          volume: number
+        }
+        Insert: {
+          avatar?: number
+          buys?: number
+          created_at: number
+          creator_id: string
+          fees?: number
+          graduated?: boolean
+          graduated_at?: number | null
+          name: string
+          raised?: number
+          sells?: number
+          symbol: string
+          tagline?: string
+          v_sol: number
+          v_tok: number
+          volume?: number
+        }
+        Update: {
+          avatar?: number
+          buys?: number
+          created_at?: number
+          creator_id?: string
+          fees?: number
+          graduated?: boolean
+          graduated_at?: number | null
+          name?: string
+          raised?: number
+          sells?: number
+          symbol?: string
+          tagline?: string
+          v_sol?: number
+          v_tok?: number
+          volume?: number
+        }
+        Relationships: []
+      }
+      cycle_runs: {
+        Row: {
+          agent_id: string
+          bucket: string
+          decision: string
+          mode: string
+          reason: string
+          t: number
+          trigger: string
+        }
+        Insert: {
+          agent_id: string
+          bucket: string
+          decision: string
+          mode: string
+          reason?: string
+          t: number
+          trigger: string
+        }
+        Update: {
+          agent_id?: string
+          bucket?: string
+          decision?: string
+          mode?: string
+          reason?: string
+          t?: number
+          trigger?: string
+        }
+        Relationships: []
+      }
+      events: {
+        Row: {
+          agent_id: string
+          bot_likes: number
+          id: string
+          kind: string
+          parent_id: string | null
+          price: number | null
+          reply_count: number
+          sol: number | null
+          symbol: string | null
+          t: number
+          target_id: string | null
+          text: string | null
+          tokens: number | null
+        }
+        Insert: {
+          agent_id: string
+          bot_likes?: number
+          id: string
+          kind: string
+          parent_id?: string | null
+          price?: number | null
+          reply_count?: number
+          sol?: number | null
+          symbol?: string | null
+          t: number
+          target_id?: string | null
+          text?: string | null
+          tokens?: number | null
+        }
+        Update: {
+          agent_id?: string
+          bot_likes?: number
+          id?: string
+          kind?: string
+          parent_id?: string | null
+          price?: number | null
+          reply_count?: number
+          sol?: number | null
+          symbol?: string | null
+          t?: number
+          target_id?: string | null
+          text?: string | null
+          tokens?: number | null
+        }
+        Relationships: []
+      }
+      garden_meta: {
+        Row: {
+          id: number
+          rng: number
+          seq: number
+          treasury: number
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          id?: number
+          rng?: number
+          seq?: number
+          treasury?: number
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          id?: number
+          rng?: number
+          seq?: number
+          treasury?: number
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
+      holdings: {
+        Row: {
+          agent_id: string
+          amount: number
+          cost: number
+          symbol: string
+        }
+        Insert: {
+          agent_id: string
+          amount: number
+          cost?: number
+          symbol: string
+        }
+        Update: {
+          agent_id?: string
+          amount?: number
+          cost?: number
+          symbol?: string
+        }
+        Relationships: []
+      }
+      ledger: {
+        Row: {
+          agent_id: string | null
+          amount: number
+          id: string
+          kind: string
+          note: string
+          owner_id: string | null
+          symbol: string | null
+          t: number
+        }
+        Insert: {
+          agent_id?: string | null
+          amount: number
+          id: string
+          kind: string
+          note?: string
+          owner_id?: string | null
+          symbol?: string | null
+          t: number
+        }
+        Update: {
+          agent_id?: string | null
+          amount?: number
+          id?: string
+          kind?: string
+          note?: string
+          owner_id?: string | null
+          symbol?: string | null
+          t?: number
+        }
+        Relationships: []
+      }
+      owners: {
+        Row: {
+          created_at: number
+          id: string
+          vsol: number
+          wallet_address: string | null
+          wallet_provider: string | null
+          wallet_signed_at: number | null
+          wallet_verified: boolean
+        }
+        Insert: {
+          created_at: number
+          id: string
+          vsol?: number
+          wallet_address?: string | null
+          wallet_provider?: string | null
+          wallet_signed_at?: number | null
+          wallet_verified?: boolean
+        }
+        Update: {
+          created_at?: number
+          id?: string
+          vsol?: number
+          wallet_address?: string | null
+          wallet_provider?: string | null
+          wallet_signed_at?: number | null
+          wallet_verified?: boolean
+        }
+        Relationships: []
+      }
+      price_points: {
+        Row: {
+          id: number
+          p: number
+          symbol: string
+          t: number
+        }
+        Insert: {
+          id?: number
+          p: number
+          symbol: string
+          t: number
+        }
+        Update: {
+          id?: number
+          p?: number
+          symbol?: string
+          t?: number
+        }
+        Relationships: []
+      }
+      saves: {
+        Row: {
+          event_id: string
+          kind: string
+          owner_id: string
+        }
+        Insert: {
+          event_id: string
+          kind: string
+          owner_id?: string
+        }
+        Update: {
+          event_id?: string
+          kind?: string
+          owner_id?: string
+        }
+        Relationships: []
+      }
+      thoughts: {
+        Row: {
+          agent_id: string
+          id: number
+          mode: string
+          t: number
+          text: string
+        }
+        Insert: {
+          agent_id: string
+          id?: number
+          mode?: string
+          t: number
+          text: string
+        }
+        Update: {
+          agent_id?: string
+          id?: number
+          mode?: string
+          t?: number
+          text?: string
+        }
+        Relationships: []
+      }
+      trades: {
+        Row: {
+          agent_id: string
+          event_id: string
+          price: number
+          side: string
+          sol: number
+          symbol: string
+          t: number
+          tokens: number
+        }
+        Insert: {
+          agent_id: string
+          event_id: string
+          price: number
+          side: string
+          sol: number
+          symbol: string
+          t: number
+          tokens: number
+        }
+        Update: {
+          agent_id?: string
+          event_id?: string
+          price?: number
+          side?: string
+          sol?: number
+          symbol?: string
+          t?: number
+          tokens?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      garden_commit: { Args: { p: Json }; Returns: number }
+      my_alerts: {
+        Args: { p_limit?: number }
+        Returns: {
+          event_id: string
+          is_read: boolean
+          reason: string
+          t: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
