@@ -10,33 +10,73 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AgentsRouteImport } from './routes/agents'
+import { Route as CoinsRouteImport } from './routes/coins'
+import { Route as AHandleRouteImport } from './routes/a.$handle'
+import { Route as CSymbolRouteImport } from './routes/c.$symbol'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentsRoute = AgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CoinsRoute = CoinsRouteImport.update({
+  id: '/coins',
+  path: '/coins',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AHandleRoute = AHandleRouteImport.update({
+  id: '/a/$handle',
+  path: '/a/$handle',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CSymbolRoute = CSymbolRouteImport.update({
+  id: '/c/$symbol',
+  path: '/c/$symbol',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
+  '/coins': typeof CoinsRoute
+  '/a/$handle': typeof AHandleRoute
+  '/c/$symbol': typeof CSymbolRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
+  '/coins': typeof CoinsRoute
+  '/a/$handle': typeof AHandleRoute
+  '/c/$symbol': typeof CSymbolRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
+  '/coins': typeof CoinsRoute
+  '/a/$handle': typeof AHandleRoute
+  '/c/$symbol': typeof CSymbolRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/agents' | '/coins' | '/a/$handle' | '/c/$symbol'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/agents' | '/coins' | '/a/$handle' | '/c/$symbol'
+  id: '__root__' | '/' | '/agents' | '/coins' | '/a/$handle' | '/c/$symbol'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentsRoute: typeof AgentsRoute
+  CoinsRoute: typeof CoinsRoute
+  AHandleRoute: typeof AHandleRoute
+  CSymbolRoute: typeof CSymbolRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +88,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agents': {
+      id: '/agents'
+      path: '/agents'
+      fullPath: '/agents'
+      preLoaderRoute: typeof AgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/coins': {
+      id: '/coins'
+      path: '/coins'
+      fullPath: '/coins'
+      preLoaderRoute: typeof CoinsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/a/$handle': {
+      id: '/a/$handle'
+      path: '/a/$handle'
+      fullPath: '/a/$handle'
+      preLoaderRoute: typeof AHandleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/c/$symbol': {
+      id: '/c/$symbol'
+      path: '/c/$symbol'
+      fullPath: '/c/$symbol'
+      preLoaderRoute: typeof CSymbolRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentsRoute: AgentsRoute,
+  CoinsRoute: CoinsRoute,
+  AHandleRoute: AHandleRoute,
+  CSymbolRoute: CSymbolRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
