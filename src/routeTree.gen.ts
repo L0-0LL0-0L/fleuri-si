@@ -10,8 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as AgentsRouteImport } from './routes/agents'
+import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as CoinsRouteImport } from './routes/coins'
+import { Route as DocsRouteImport } from './routes/docs'
+import { Route as MeRouteImport } from './routes/me'
+import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as AHandleRouteImport } from './routes/a.$handle'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
 
@@ -20,14 +25,39 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ActivityRoute = ActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgentsRoute = AgentsRouteImport.update({
   id: '/agents',
   path: '/agents',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AlertsRoute = AlertsRouteImport.update({
+  id: '/alerts',
+  path: '/alerts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CoinsRoute = CoinsRouteImport.update({
   id: '/coins',
   path: '/coins',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MeRoute = MeRouteImport.update({
+  id: '/me',
+  path: '/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TerminalRoute = TerminalRouteImport.update({
+  id: '/terminal',
+  path: '/terminal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AHandleRoute = AHandleRouteImport.update({
@@ -43,38 +73,89 @@ const CSymbolRoute = CSymbolRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/activity': typeof ActivityRoute
   '/agents': typeof AgentsRoute
+  '/alerts': typeof AlertsRoute
   '/coins': typeof CoinsRoute
+  '/docs': typeof DocsRoute
+  '/me': typeof MeRoute
+  '/terminal': typeof TerminalRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/activity': typeof ActivityRoute
   '/agents': typeof AgentsRoute
+  '/alerts': typeof AlertsRoute
   '/coins': typeof CoinsRoute
+  '/docs': typeof DocsRoute
+  '/me': typeof MeRoute
+  '/terminal': typeof TerminalRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/activity': typeof ActivityRoute
   '/agents': typeof AgentsRoute
+  '/alerts': typeof AlertsRoute
   '/coins': typeof CoinsRoute
+  '/docs': typeof DocsRoute
+  '/me': typeof MeRoute
+  '/terminal': typeof TerminalRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agents' | '/coins' | '/a/$handle' | '/c/$symbol'
+  fullPaths:
+    | '/'
+    | '/activity'
+    | '/agents'
+    | '/alerts'
+    | '/coins'
+    | '/docs'
+    | '/me'
+    | '/terminal'
+    | '/a/$handle'
+    | '/c/$symbol'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agents' | '/coins' | '/a/$handle' | '/c/$symbol'
-  id: '__root__' | '/' | '/agents' | '/coins' | '/a/$handle' | '/c/$symbol'
+  to:
+    | '/'
+    | '/activity'
+    | '/agents'
+    | '/alerts'
+    | '/coins'
+    | '/docs'
+    | '/me'
+    | '/terminal'
+    | '/a/$handle'
+    | '/c/$symbol'
+  id:
+    | '__root__'
+    | '/'
+    | '/activity'
+    | '/agents'
+    | '/alerts'
+    | '/coins'
+    | '/docs'
+    | '/me'
+    | '/terminal'
+    | '/a/$handle'
+    | '/c/$symbol'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ActivityRoute: typeof ActivityRoute
   AgentsRoute: typeof AgentsRoute
+  AlertsRoute: typeof AlertsRoute
   CoinsRoute: typeof CoinsRoute
+  DocsRoute: typeof DocsRoute
+  MeRoute: typeof MeRoute
+  TerminalRoute: typeof TerminalRoute
   AHandleRoute: typeof AHandleRoute
   CSymbolRoute: typeof CSymbolRoute
 }
@@ -88,6 +169,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/activity': {
+      id: '/activity'
+      path: '/activity'
+      fullPath: '/activity'
+      preLoaderRoute: typeof ActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agents': {
       id: '/agents'
       path: '/agents'
@@ -95,11 +183,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/alerts': {
+      id: '/alerts'
+      path: '/alerts'
+      fullPath: '/alerts'
+      preLoaderRoute: typeof AlertsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/coins': {
       id: '/coins'
       path: '/coins'
       fullPath: '/coins'
       preLoaderRoute: typeof CoinsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/me': {
+      id: '/me'
+      path: '/me'
+      fullPath: '/me'
+      preLoaderRoute: typeof MeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terminal': {
+      id: '/terminal'
+      path: '/terminal'
+      fullPath: '/terminal'
+      preLoaderRoute: typeof TerminalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/a/$handle': {
@@ -121,8 +237,13 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ActivityRoute: ActivityRoute,
   AgentsRoute: AgentsRoute,
+  AlertsRoute: AlertsRoute,
   CoinsRoute: CoinsRoute,
+  DocsRoute: DocsRoute,
+  MeRoute: MeRoute,
+  TerminalRoute: TerminalRoute,
   AHandleRoute: AHandleRoute,
   CSymbolRoute: CSymbolRoute,
 }

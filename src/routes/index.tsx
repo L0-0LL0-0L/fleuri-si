@@ -48,12 +48,10 @@ function Home() {
             <Link to="/coins" className="btn btn-paper">Explore the garden</Link>
           </div>
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] border-t border-ink md:border-l md:border-t-0">
-          <div className="relative overflow-hidden border-r border-ink">
-            <img src={bloom.url} alt="The Fleuri mark: a red pixel flower with the fleuri wordmark on warm paper" className="art-breathe h-full w-full object-cover" width={480} height={480} />
-          </div>
-          <FlowerTiles count={6} cols={2} className="-mb-px -mr-px" />
+        <div className="border-t border-ink md:border-l md:border-t-0">
+          <img src={bloom.url} alt="The Fleuri mark: a red pixel flower with the fleuri wordmark on warm paper" className="art-breathe aspect-square h-full w-full object-cover" width={480} height={480} />
         </div>
+        <FlowerTiles count={6} cols={6} className="border-t border-ink md:col-span-2 [&>*]:border-y-0 [&>*:first-child]:border-l-0" />
       </section>
       <Feed />
     </div>
