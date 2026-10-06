@@ -1,0 +1,84 @@
+// Real browser-wallet connection for Phantom / Solflare injected providers.
+// We never request or store seed phrases or private keys. A session is linked
+// only after the wallet signs a message and the ed25519 signature verifies.
+export type WalletKind = "phantom" | "solflare";
+
+interface InjectedProvider {
+  isPhantom?: boolean;
+  isSolflare?: boolean;
+  publicKey?: { toString(): string; toBytes?(): Uint8Array } | null;
+  connect(): Promise<{ publicKey: { toString(): string } } | void>;
+  disconnect?(): Promise<void>;
+  signMessage(msg: Uint8Array, display?: string): Promise<{ signature: Uint8Array } | Uint8Array>;
+}
+
+export function getProvider(kind: WalletKind): InjectedProvider | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as Record<string, any>;
+  if (kind === "phantom") {
+    const p = w.phantom?.solana ?? (w.solana?.isPhantom ? w.solana : null);
+    return p ?? null;
+  }
+  return w.solflare?.isSolflare ? w.solflare : null;
+}
+
+export const WALLET_URLS: Record<WalletKind, string> = {
+  phantom: "https://phantom.com/download",
+  solflare: "https://solflare.com/download",
+};
+
+const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+export function base58Decode(str: string): Uint8Array {
+  const bytes: number[] = [0];
+  for (const ch of str) {
+    const v = ALPHABET.indexOf(ch);
+    if (v < 0) throw new Error("invalid base58");
+    let carry = v;
+    for (let i = 0; i < bytes.length; i++) {
+      carry += bytes[i] * 58;
+      bytes[i] = carry & 0xff;
+      carry >>= 8;
+    }
+    while (carry) {
+      bytes.push(carry & 0xff);
+      carry >>= 8;
+    }
+  }
+  for (const ch of str) {
+    if (ch !== "1") break;
+    bytes.push(0);
+  }
+  return new Uint8Array(bytes.reverse());
+}
+
+export async function verifyEd25519(address: string, message: Uint8Array, signature: Uint8Array) {
+  try {
+    const key = await crypto.subtle.importKey("raw", base58Decode(address) as BufferSource, { name: "Ed25519" }, false, ["verify"]);
+    return await crypto.subtle.verify("Ed25519", key, signature as BufferSource, message as BufferSource);
+  } catch {
+    return false;
+  }
+}
+
+export async function connectAndSign(kind: WalletKind, ownerId: string) {
+  const p = getProvider(kind);
+  if (!p) throw new Error(`${kind === "phantom" ? "Phantom" : "Solflare"} is not installed in this browser.`);
+  const res = await p.connect();
+  const pk = (res && "publicKey" in res ? res.publicKey : p.publicKey)?.toString();
+  if (!pk) throw new Error("The wallet did not share a public key.");
+  const text = `Fleuri sandbox sign-in\nworkspace: ${ownerId}\nnonce: ${crypto.randomUUID()}\nThis signature links your wallet to a sandbox session. It costs nothing and moves no funds.`;
+  const msg = new TextEncoder().encode(text);
+  const out = await p.signMessage(msg, "utf8");
+  const sig = out instanceof Uint8Array ? out : out.signature;
+  const verified = await verifyEd25519(pk, msg, sig);
+  if (!verified) throw new Error("Signature could not be verified, wallet not linked.");
+  return { provider: kind, address: pk, verified, signedAt: Date.now() };
+}
+
+export async function disconnectWallet(kind: WalletKind) {
+  try {
+    await getProvider(kind)?.disconnect?.();
+  } catch {
+    /* ignore */
+  }
+}
