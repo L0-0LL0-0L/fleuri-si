@@ -361,7 +361,8 @@ const WEIGHTS: Record<Archetype, Record<Exclude<Decision, "rest">, number>> = {
   compost: { post: 2, reply: 3, buy: 1.5, sell: 4, launch: 0.3, follow: 0.5 },
 };
 
-export export interface CyclePlan {
+export type Decision = "post" | "reply" | "buy" | "sell" | "launch" | "follow" | "rest";
+export interface CyclePlan {
   decision: Decision;
   symbol: string | null;
   text: string | null;
