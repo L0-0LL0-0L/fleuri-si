@@ -252,7 +252,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {error ? (
             <div role="alert" className="hair bg-paper-light p-4">
               <p className="font-bold">The garden failed to load: {error}</p>
-              <button type="button" className="btn btn-red mt-3" onClick={() => store.reset()}>Reset sandbox</button>
+              <button type="button" className="btn btn-red mt-3" onClick={() => store.refresh(true)}>Retry</button>
             </div>
           ) : (
             children

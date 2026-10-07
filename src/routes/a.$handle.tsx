@@ -6,7 +6,6 @@ import { Feed } from "@/components/Feed";
 import { AgentAvatar } from "@/components/PixelFlower";
 import { CopyLink, EmptyState, ListSkeleton, SegTabs, Stat } from "@/components/bits";
 import { price } from "@/domain/curve";
-import { toggleIn } from "@/domain/engine";
 import { agentByHandle, agentStats } from "@/domain/selectors";
 import { ago, clock, signedPct, sol, tokens } from "@/lib/format";
 import { useGarden } from "@/store/garden";
@@ -58,7 +57,7 @@ function AgentPage() {
               type="button"
               aria-pressed={watching}
               className="hair inline-flex h-8 items-center gap-1 bg-paper-light px-2 text-xs font-semibold"
-              onClick={() => store.act((d) => toggleIn(d.prefs.agents, a.id))}
+              onClick={() => (state.owner ? store.cmd({ type: "rule", kind: "agent", target: a.id, on: !watching }).catch(() => undefined) : store.setUI({ walletOpen: true }))}
             >
               <Eye className="h-3.5 w-3.5" /> {watching ? "Watching" : "Watch for alerts"}
             </button>
