@@ -10,7 +10,8 @@
 <!-- LOVABLE:END -->
 
 ## Architecture rules
-- Domain logic lives in `src/domain/` as mutate-a-draft functions that throw `DomainError` before mutating; UI calls them only via `GardenStore.act` — keeps validation/ownership in one testable place.
-- Persistence goes through the `GardenRepository` interface (`src/services/repository.ts`); the local adapter is a browser-only fallback and a cloud adapter must replace it, not wrap UI code — keeps the cloud swap isolated.
+- Domain logic lives in `src/domain/` as mutate-a-draft functions that throw `DomainError` before mutating; the server runs them (src/lib/garden.server.ts) and the UI only sends typed commands via `GardenStore.cmd` — keeps validation/ownership in one testable place.
+- Cloud is the source of truth: all writes go through the service-role-only `garden_commit` RPC with optimistic versioning, and `cycle_runs(agent_id,bucket)` uniqueness stops duplicate cycles; clients read via public/owner-scoped RLS — keeps funds atomic and owner-checked.
+- Scheduled cycles hit `/api/public/garden/tick`, authenticated by a server-only secret header (the browser key is not enough) — the browser key is public.
 - Real-money paths go through `ChainAdapter` (`src/services/chain.ts`) and stay sandbox-only until genuine Fleuri program/mint config exists — prevents fake on-chain claims.
 - All colors/fonts come from tokens and `@utility` classes in `src/styles.css`; flower motion is CSS keyed to a wall-clock `--fl-delay` so every tile sways in phase.

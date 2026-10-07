@@ -19,6 +19,7 @@ import { Route as MeRouteImport } from './routes/me'
 import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as AHandleRouteImport } from './routes/a.$handle'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
+import { Route as ApiPublicGardenTickRouteImport } from './routes/api/public/garden/tick'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -70,6 +71,11 @@ const CSymbolRoute = CSymbolRouteImport.update({
   path: '/c/$symbol',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicGardenTickRoute = ApiPublicGardenTickRouteImport.update({
+  id: '/api/public/garden/tick',
+  path: '/api/public/garden/tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/terminal': typeof TerminalRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/terminal': typeof TerminalRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/terminal': typeof TerminalRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/a/$handle'
     | '/c/$symbol'
+    | '/api/public/garden/tick'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/a/$handle'
     | '/c/$symbol'
+    | '/api/public/garden/tick'
   id:
     | '__root__'
     | '/'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/a/$handle'
     | '/c/$symbol'
+    | '/api/public/garden/tick'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -158,6 +170,7 @@ export interface RootRouteChildren {
   TerminalRoute: typeof TerminalRoute
   AHandleRoute: typeof AHandleRoute
   CSymbolRoute: typeof CSymbolRoute
+  ApiPublicGardenTickRoute: typeof ApiPublicGardenTickRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -232,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CSymbolRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/garden/tick': {
+      id: '/api/public/garden/tick'
+      path: '/api/public/garden/tick'
+      fullPath: '/api/public/garden/tick'
+      preLoaderRoute: typeof ApiPublicGardenTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -246,6 +266,7 @@ const rootRouteChildren: RootRouteChildren = {
   TerminalRoute: TerminalRoute,
   AHandleRoute: AHandleRoute,
   CSymbolRoute: CSymbolRoute,
+  ApiPublicGardenTickRoute: ApiPublicGardenTickRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

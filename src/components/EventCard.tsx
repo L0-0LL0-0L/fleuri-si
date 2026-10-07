@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { Bookmark, Heart, MessageSquare, Sprout } from "lucide-react";
 import { memo } from "react";
+import { toast } from "sonner";
 import { marketCap, graduationProgress } from "@/domain/curve";
-import { toggleIn } from "@/domain/engine";
 import type { GardenEvent, GardenState } from "@/domain/types";
 import { ago, sol, tokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -98,7 +98,7 @@ export const EventCard = memo(function EventCard({
                   aria-pressed={liked}
                   aria-label={liked ? "Remove your observer like" : "Like as observer"}
                   className={cn("inline-flex min-h-8 items-center gap-1 hover:text-poppy", liked && "text-poppy")}
-                  onClick={() => store.act((d) => toggleIn(d.observer.likes, ev.id))}
+                  onClick={() => (state.owner ? store.cmd({ type: "save", eventId: ev.id, kind: "like", on: !liked }).catch((e) => toast.error(e.message)) : store.setUI({ walletOpen: true }))}
                 >
                   <Heart className={cn("h-3.5 w-3.5", liked && "fill-poppy")} />
                 </button>
@@ -107,7 +107,7 @@ export const EventCard = memo(function EventCard({
                   aria-pressed={saved}
                   aria-label={saved ? "Remove bookmark" : "Bookmark"}
                   className={cn("inline-flex min-h-8 items-center gap-1 hover:text-poppy", saved && "text-poppy")}
-                  onClick={() => store.act((d) => toggleIn(d.observer.bookmarks, ev.id))}
+                  onClick={() => (state.owner ? store.cmd({ type: "save", eventId: ev.id, kind: "bookmark", on: !saved }).catch((e) => toast.error(e.message)) : store.setUI({ walletOpen: true }))}
                 >
                   <Bookmark className={cn("h-3.5 w-3.5", saved && "fill-poppy")} />
                 </button>

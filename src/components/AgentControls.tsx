@@ -12,7 +12,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ARCHETYPES, buy, fundAgent, runCycle, sell, setStatus, updateAgent, withdrawAgent } from "@/domain/engine";
+import { ARCHETYPES } from "@/domain/engine";
+import type { GardenCommand } from "@/lib/garden.functions";
 import type { Agent, Archetype } from "@/domain/types";
 import { tokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -22,24 +23,28 @@ import { FlowerTile } from "./PixelFlower";
 function useRun() {
   const { store } = useGarden();
   const [error, setError] = useState<string | null>(null);
-  const run = async (fn: Parameters<typeof store.act>[0], ok: string) => {
+  const [busy, setBusy] = useState(false);
+  const run = async (c: GardenCommand, ok?: string) => {
     setError(null);
+    setBusy(true);
     try {
-      await store.act(fn);
-      toast.success(ok);
+      const r = await store.cmd(c);
+      toast.success(ok ?? r.message);
       return true;
     } catch (e) {
       const m = e instanceof Error ? e.message : "Something went wrong.";
       setError(m);
       return false;
+    } finally {
+      setBusy(false);
     }
   };
-  return { run, error, setError };
+  return { run, error, setError, busy };
 }
 
 export function OwnerControls({ agent }: { agent: Agent }) {
   const { state } = useGarden();
-  const { run, error } = useRun();
+  const { run, error, busy } = useRun();
   const [amount, setAmount] = useState("5");
   const id = useId();
   const owner = state!.owner!;
@@ -49,33 +54,27 @@ export function OwnerControls({ agent }: { agent: Agent }) {
     <section className="hair space-y-3 bg-paper-light p-3" aria-label="Owner controls">
       <div className="flex flex-wrap gap-2">
         {agent.status === "active" && (
-          <button className="btn btn-paper" type="button" onClick={() => run((d) => setStatus(d, owner.id, agent.id, "paused", Date.now()), `@${agent.handle} paused.`)}>
+          <button className="btn btn-paper" type="button" onClick={() => run({ type: "status", agentId: agent.id, status: "paused" }, `@${agent.handle} paused.`)}>
             Pause
           </button>
         )}
         {agent.status === "paused" && (
-          <button className="btn btn-ink" type="button" onClick={() => run((d) => setStatus(d, owner.id, agent.id, "active", Date.now()), `@${agent.handle} resumed.`)}>
+          <button className="btn btn-ink" type="button" onClick={() => run({ type: "status", agentId: agent.id, status: "active" }, `@${agent.handle} resumed.`)}>
             Resume
           </button>
         )}
         <button
           className="btn btn-red"
           type="button"
-          disabled={agent.status !== "active"}
-          title={agent.status !== "active" ? "Resume the agent to run a cycle" : undefined}
-          onClick={async () => {
-            let decision = "";
-            const ok = await run((d) => {
-              decision = runCycle(d, agent.id, Date.now()).decision;
-            }, "Cycle complete.");
-            if (ok) toast(`@${agent.handle} decided: ${decision}`);
-          }}
+          disabled={agent.status !== "active" || busy}
+          title={agent.status !== "active" ? "Resume the agent to run a cycle" : "Runs one server-side cycle using Lovable AI (falls back to rules-based simulation if AI is unavailable)"}
+          onClick={() => run({ type: "run", agentId: agent.id, useAi: true })}
         >
-          Run a cycle
+          {busy ? "Thinking…" : "Run a cycle"}
         </button>
         {!archived && <EditAgent agent={agent} />}
         {archived ? (
-          <button className="btn btn-paper" type="button" onClick={() => run((d) => setStatus(d, owner.id, agent.id, "paused", Date.now()), "Restored (paused).")}>
+          <button className="btn btn-paper" type="button" onClick={() => run({ type: "status", agentId: agent.id, status: "paused" }, "Restored (paused).")}>
             Restore
           </button>
         ) : (
@@ -90,7 +89,7 @@ export function OwnerControls({ agent }: { agent: Agent }) {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel className="btn btn-paper">Keep growing</AlertDialogCancel>
-                <AlertDialogAction className="btn btn-red" onClick={() => run((d) => setStatus(d, owner.id, agent.id, "archived", Date.now()), "Archived. Restore anytime.")}>
+                <AlertDialogAction className="btn btn-red" onClick={() => run({ type: "status", agentId: agent.id, status: "archived" }, "Archived. Restore anytime.")}>
                   Archive
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -106,10 +105,10 @@ export function OwnerControls({ agent }: { agent: Agent }) {
           <label htmlFor={`${id}-amt`} className="font-mono text-xs uppercase">amount (vSOL)</label>
           <input id={`${id}-amt`} type="number" inputMode="decimal" step="0.1" min="0" className="field num" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
-        <button type="button" className="btn btn-ink" disabled={archived} onClick={() => run((d) => fundAgent(d, owner.id, agent.id, amt, Date.now()), `Funded ${amt} vSOL.`)}>
+        <button type="button" className="btn btn-ink" disabled={archived} onClick={() => run({ type: "fund", agentId: agent.id, amount: amt })}>
           Fund
         </button>
-        <button type="button" className="btn btn-paper" onClick={() => run((d) => withdrawAgent(d, owner.id, agent.id, amt, Date.now()), `Withdrew ${amt} vSOL.`)}>
+        <button type="button" className="btn btn-paper" onClick={() => run({ type: "withdraw", agentId: agent.id, amount: amt })}>
           Withdraw
         </button>
       </form>
@@ -146,7 +145,7 @@ function ManualTrade({ agent }: { agent: Agent }) {
           <label htmlFor={`${id}-size`} className="font-mono text-xs uppercase">buy vSOL</label>
           <div className="flex">
             <input id={`${id}-size`} type="number" step="0.01" min="0" className="field num" value={size} onChange={(e) => setSize(e.target.value)} />
-            <button type="button" className="btn btn-ink ml-1" onClick={() => run((d) => buy(d, agent.id, sym, Number(size), Date.now(), `owner-directed buy of $${sym}.`), `Agent bought $${sym}.`)}>
+            <button type="button" className="btn btn-ink ml-1" onClick={() => run({ type: "buy", agentId: agent.id, symbol: sym, amount: Number(size) })}>
               Buy
             </button>
           </div>
@@ -155,7 +154,7 @@ function ManualTrade({ agent }: { agent: Agent }) {
           <label htmlFor={`${id}-frac`} className="font-mono text-xs uppercase">sell % (holds {tokens(held)})</label>
           <div className="flex">
             <input id={`${id}-frac`} type="number" min="1" max="100" className="field num" value={frac} onChange={(e) => setFrac(e.target.value)} />
-            <button type="button" className="btn btn-paper ml-1" onClick={() => run((d) => sell(d, agent.id, sym, Number(frac) / 100, Date.now(), `owner-directed trim of $${sym}.`), `Agent sold $${sym}.`)}>
+            <button type="button" className="btn btn-paper ml-1" onClick={() => run({ type: "sell", agentId: agent.id, symbol: sym, fraction: Number(frac) / 100 })}>
               Sell
             </button>
           </div>
@@ -192,7 +191,7 @@ function EditAgent({ agent }: { agent: Agent }) {
           className="space-y-3"
           onSubmit={async (e) => {
             e.preventDefault();
-            if (await run((d) => updateAgent(d, state!.owner!.id, agent.id, f, Date.now()), "Agent updated.")) setOpen(false);
+            if (await run({ type: "update", agentId: agent.id, patch: f })) setOpen(false);
           }}
         >
           <label className="block text-sm font-bold" htmlFor={`${id}-n`}>Name</label>

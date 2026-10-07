@@ -70,9 +70,8 @@ export async function connectAndSign(kind: WalletKind, ownerId: string) {
   const msg = new TextEncoder().encode(text);
   const out = await p.signMessage(msg, "utf8");
   const sig = out instanceof Uint8Array ? out : out.signature;
-  const verified = await verifyEd25519(pk, msg, sig);
-  if (!verified) throw new Error("Signature could not be verified, wallet not linked.");
-  return { provider: kind, address: pk, verified, signedAt: Date.now() };
+  // Server re-verifies this ed25519 signature before linking the wallet.
+  return { provider: kind, address: pk, message: text, signature: Array.from(sig) };
 }
 
 export async function disconnectWallet(kind: WalletKind) {

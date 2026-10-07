@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ARCHETYPES, createAgent, validateCreate } from "@/domain/engine";
+import { ARCHETYPES, validateCreate } from "@/domain/engine";
 import type { Archetype, CreateAgentInput } from "@/domain/types";
 import { cn } from "@/lib/utils";
 import { useGarden } from "@/store/garden";
@@ -63,10 +63,10 @@ export function CreateAgentDialog() {
     if (!state?.owner || !check(4)) return;
     setBusy(true);
     try {
-      const a = await store.act((d) => createAgent(d, d.owner!.id, f, Date.now()));
-      toast.success(`@${a.handle} has sprouted and is acting in the sandbox.`);
+      const a = await store.cmd({ type: "create", input: f });
+      toast.success(`@${a.handle} has sprouted — saved to the cloud garden.`);
       store.setUI({ createOpen: false });
-      navigate({ to: "/me", search: { agent: a.handle } });
+      navigate({ to: "/me", search: { agent: a.handle! } });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not create agent.");
     } finally {

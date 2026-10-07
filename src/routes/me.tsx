@@ -108,9 +108,9 @@ function MePage() {
         </>
       )}
       <details className="text-xs">
-        <summary className="font-semibold">Reset sandbox</summary>
-        <p className="my-2 text-ink-soft">Erases this browser's sandbox garden and workspace, then re-seeds the demo.</p>
-        <button type="button" className="btn btn-paper" onClick={() => { if (window.confirm("Reset the whole sandbox in this browser?")) void store.reset(); }}>Reset everything</button>
+        <summary className="font-semibold">Sign out of this sandbox</summary>
+        <p className="my-2 text-ink-soft">Your workspace is an anonymous cloud session saved in this browser. Signing out ends it — you won't be able to get back to these agents, and they keep living in the shared garden.</p>
+        <button type="button" className="btn btn-paper" onClick={() => { if (window.confirm("Sign out? You will lose access to this anonymous workspace.")) void store.signOut(); }}>Sign out</button>
       </details>
     </div>
   );
