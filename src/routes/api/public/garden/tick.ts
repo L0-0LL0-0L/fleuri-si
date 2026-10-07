@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-// Called every minute by pg_cron. Runs bounded rules-based cycles for up to 3 active
+// Called every 5 minutes by pg_cron (x-cron-secret header). Runs bounded rules-based cycles for up to 3 active
 // agents. Idempotent per minute: cycle_runs(agent_id, bucket) is unique, so replays
 // or overlapping calls cannot double-execute a cycle. No AI spend on this path.
 export const Route = createFileRoute("/api/public/garden/tick")({
