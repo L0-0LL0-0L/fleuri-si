@@ -172,7 +172,7 @@ function RightRail() {
 }
 
 function TopStrip({ onMenu }: { onMenu: () => void }) {
-  const { ui, state, store } = useGarden();
+  const { ui, state, store, error, lastSync, syncing } = useGarden();
   return (
     <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-ink bg-paper/95 px-3 py-2 backdrop-blur grain">
       <button type="button" className="hair grid h-10 w-10 place-items-center bg-paper-light lg:hidden" onClick={onMenu} aria-label="Open navigation">
@@ -182,13 +182,22 @@ function TopStrip({ onMenu }: { onMenu: () => void }) {
         <Link to="/" className="wordmark text-3xl" aria-label="fleuri home">fleuri</Link>
       </span>
       <SandboxBadge className="hidden sm:inline-flex" />
+      <span className={cn("hidden font-mono text-[0.65rem] md:inline", error && "text-poppy-deep")} role="status">
+        {error ? (
+          <button type="button" className="underline" onClick={() => store.refresh(true)}>cloud sync failed · retry</button>
+        ) : lastSync ? (
+          `cloud · ${syncing ? "syncing" : `synced ${Math.max(0, Math.round((ui.now - lastSync) / 1000))}s ago`}`
+        ) : (
+          "connecting to cloud…"
+        )}
+      </span>
       <div className="ml-auto flex items-center gap-1.5">
         <button
           type="button"
           className="hair inline-flex h-9 items-center gap-1.5 bg-paper-light px-2 text-xs font-semibold"
           aria-pressed={ui.livePaused}
           onClick={() => store.setUI({ livePaused: !ui.livePaused })}
-          title={ui.livePaused ? "Resume the live simulation" : "Pause the live simulation"}
+          title={ui.livePaused ? "Resume live updates from the cloud" : "Freeze live updates in this tab (the server garden keeps growing)"}
         >
           {ui.livePaused ? <Play className="h-3.5 w-3.5" /> : <span className="live-dot h-2 w-2 bg-poppy" aria-hidden />}
           <span>{ui.livePaused ? "Paused" : "Live"}</span>
@@ -237,21 +246,22 @@ function BottomNav() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { ui, error, store } = useGarden();
+  const { ui, error, store, state } = useGarden();
+  const wide = useRouterState({ select: (s) => s.location.pathname === "/terminal" });
   const [menu, setMenu] = useState(false);
   const create = useCreate();
   useEffect(() => {
     document.documentElement.classList.toggle("motion-paused", ui.motionPaused);
   }, [ui.motionPaused]);
   return (
-    <div className="mx-auto grid min-h-screen max-w-[1320px] grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)] xl:grid-cols-[250px_minmax(0,1fr)_330px]">
+    <div className={cn("mx-auto grid min-h-screen grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)]", wide ? "max-w-[1600px]" : "max-w-[1320px] xl:grid-cols-[250px_minmax(0,1fr)_330px]")}>
       <LeftNav />
       <div className="min-w-0 pb-20 lg:pb-0">
         <TopStrip onMenu={() => setMenu(true)} />
         <main id="main" className="px-3 py-4 sm:px-5">
-          {error ? (
+          {error && !state ? (
             <div role="alert" className="hair bg-paper-light p-4">
-              <p className="font-bold">The garden failed to load: {error}</p>
+              <p className="font-bold">The cloud garden failed to load: {error}</p>
               <button type="button" className="btn btn-red mt-3" onClick={() => store.refresh(true)}>Retry</button>
             </div>
           ) : (
@@ -259,7 +269,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         </main>
       </div>
-      <RightRail />
+      {!wide && <RightRail />}
       <BottomNav />
       <Sheet open={menu} onOpenChange={setMenu}>
         <SheetContent side="left" className="w-[280px] space-y-4 overflow-y-auto border-r border-ink bg-paper grain p-4">

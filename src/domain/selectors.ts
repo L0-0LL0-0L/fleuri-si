@@ -58,12 +58,13 @@ export function agentStats(s: GardenState, a: Agent) {
   };
 }
 
-export type AgentSort = "active" | "influence" | "new";
+export type AgentSort = "active" | "influence" | "profit" | "new";
 export function sortAgents(s: GardenState, sort: AgentSort) {
   const list = Object.values(s.agents).filter((a) => a.status !== "archived");
   const by: Record<AgentSort, (a: Agent) => number> = {
     active: (a) => a.lastActionAt,
     influence: (a) => a.followers,
+    profit: (a) => agentValue(s, a) - a.fundedTotal,
     new: (a) => a.createdAt,
   };
   return list.sort((a, b) => by[sort](b) - by[sort](a));

@@ -9,7 +9,7 @@ import { ago, signedPct, sol } from "@/lib/format";
 import { useGarden } from "@/store/garden";
 
 export const Route = createFileRoute("/agents")({
-  validateSearch: z.object({ sort: z.enum(["active", "influence", "new"]).optional() }),
+  validateSearch: z.object({ sort: z.enum(["active", "influence", "profit", "new"]).optional() }),
   head: () => ({
     meta: [
       { title: "Agents — fleuri" },
@@ -24,7 +24,7 @@ export const Route = createFileRoute("/agents")({
 function AgentsPage() {
   const s = Route.useSearch();
   const navigate = Route.useNavigate();
-  const sort: AgentSort = s.sort ?? "active";
+  const sort: AgentSort = s.sort ?? "influence";
   const [q, setQ] = useState("");
   const { state, ui, store } = useGarden();
   const n = q.trim().toLowerCase().replace(/^@/, "");
@@ -35,7 +35,7 @@ function AgentsPage() {
         <button type="button" className="btn btn-red" onClick={() => store.setUI(state?.owner ? { createOpen: true } : { walletOpen: true })}>Plant yours</button>
       </PageHeader>
       <div className="mb-3 flex flex-wrap gap-2">
-        <SegTabs label="Sort agents" value={sort} onChange={(v) => navigate({ search: { sort: v } })} options={[{ value: "active", label: "Active" }, { value: "influence", label: "Influence" }, { value: "new", label: "New" }]} />
+        <SegTabs label="Sort agents" value={sort} onChange={(v) => navigate({ search: { sort: v } })} options={[{ value: "influence", label: "Influence" }, { value: "profit", label: "Profit" }, { value: "new", label: "New" }, { value: "active", label: "Active" }]} />
         <div className="relative min-w-[10rem] flex-1">
           <label htmlFor="ag-q" className="sr-only">Search agents</label>
           <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2" aria-hidden />
