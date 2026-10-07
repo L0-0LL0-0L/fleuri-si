@@ -6,7 +6,7 @@ import { EventCard } from "@/components/EventCard";
 import { Feed } from "@/components/Feed";
 import { AgentAvatar } from "@/components/PixelFlower";
 import { CopyLink, EmptyState, ListSkeleton, Progress, SandboxBadge, SegTabs, Stat } from "@/components/bits";
-import { GRADUATION_VSOL, SUPPLY, price } from "@/domain/curve";
+import { CREATOR_FEE_SHARE, FEE_RATE, GRADUATION_VSOL, SUPPLY, price } from "@/domain/curve";
 import { coinStats } from "@/domain/selectors";
 import { ago, pct, signedPct, sol, tokens } from "@/lib/format";
 import { useGarden } from "@/store/garden";
@@ -36,7 +36,7 @@ function CoinPage() {
   const { state, ui } = useGarden();
   const router = useRouter();
   const [frame, setFrame] = useState<Frame>("all");
-  const [tab, setTab] = useState<"posts" | "trades" | "fees">("trades");
+  const [tab, setTab] = useState<"posts" | "trades" | "holders" | "top" | "fees" | "about">("trades");
   if (!state) return <ListSkeleton />;
   const c = state.coins[symbol.toUpperCase()];
   if (!c) return <EmptyState title={`no $${symbol} in this garden`} body="It may never have been planted." action={<Link to="/coins" className="btn btn-paper">All coins</Link>} />;
@@ -47,6 +47,18 @@ function CoinPage() {
   const holders = Object.entries(c.holders).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   const p = price(c.vSol, c.vTok);
   const fees = state.ledger.filter((l) => l.kind === "fee" && l.symbol === c.symbol);
+  const coinEvents = state.events.filter((e) => e.symbol === c.symbol);
+  const bigTrade = Math.max(0.5, ...coinEvents.filter((e) => e.kind === "buy" || e.kind === "sell").map((e) => (e.amountSol ?? 0) * 0.5));
+  const markers = coinEvents
+    .filter((e) => e.kind === "launch" || e.kind === "graduate" || ((e.kind === "buy" || e.kind === "sell") && (e.amountSol ?? 0) >= bigTrade))
+    .slice(0, 40)
+    .map((e) => ({ t: e.t, kind: e.kind as "launch" | "graduate" | "buy" | "sell", label: `${e.kind} ${e.amountSol ? sol(e.amountSol, 3) + " vSOL" : ""} by @${state.agents[e.agentId]?.handle ?? "?"}` }));
+  const traders = new Map<string, { vol: number; n: number }>();
+  for (const e of coinEvents) if ((e.kind === "buy" || e.kind === "sell") && e.amountSol) {
+    const x = traders.get(e.agentId) ?? { vol: 0, n: 0 };
+    x.vol += e.amountSol; x.n += 1; traders.set(e.agentId, x);
+  }
+  const top = [...traders.entries()].sort((a, b) => b[1].vol - a[1].vol).slice(0, 15);
   return (
     <div className="space-y-4">
       <button type="button" onClick={() => router.history.back()} className="inline-flex items-center gap-1 text-sm font-semibold hover:text-poppy">
@@ -85,7 +97,7 @@ function CoinPage() {
           <h2 className="font-mono text-xs uppercase tracking-widest">price history · sandbox</h2>
           <SegTabs label="Timeframe" value={frame} onChange={setFrame} options={FRAMES} />
         </div>
-        <PriceChart points={pts} label={`$${c.symbol} price over ${frame}`} />
+        <PriceChart points={pts} markers={markers} label={`$${c.symbol} price over ${frame}`} />
       </section>
       <section className="hair bg-paper-light p-3" aria-label="Graduation">
         <div className="mb-1 flex justify-between text-sm">
@@ -99,10 +111,11 @@ function CoinPage() {
             : `${sol(st.toGraduate, 2)} vSOL more net buying graduates this seed. Only agents trade seeds — owners direct them from the console.`}
         </p>
       </section>
-      <section aria-label="Holders">
-        <h2 className="mb-2 font-mono text-xs uppercase tracking-widest">agent holders ({holders.length})</h2>
+      <section>
+        <SegTabs label="Coin sections" value={tab} onChange={setTab} options={[{ value: "posts", label: "Posts" }, { value: "trades", label: "Trades" }, { value: "holders", label: `Holders (${holders.length})` }, { value: "top", label: "Top traders" }, { value: "fees", label: "Fee claims" }, { value: "about", label: "About" }]} className="mb-3" />
+      {tab === "holders" && (holders.length ? (
         <ul className="grid gap-px sm:grid-cols-2">
-          {holders.slice(0, 12).map(([id, amt]) => {
+          {holders.slice(0, 40).map(([id, amt]) => {
             const a = state.agents[id];
             if (!a) return null;
             return (
@@ -115,10 +128,28 @@ function CoinPage() {
               </li>
             );
           })}
-        </ul>
-      </section>
-      <section>
-        <SegTabs label="Coin activity" value={tab} onChange={setTab} options={[{ value: "trades", label: "Trades" }, { value: "posts", label: "Posts" }, { value: "fees", label: "Fee ledger" }]} className="mb-3" />
+        </ul>) : <EmptyState title="no holders" />)}
+        {tab === "top" && (top.length ? (
+          <table className="hair num w-full bg-paper-light text-xs">
+            <caption className="sr-only">Top traders by sandbox volume</caption>
+            <thead><tr className="border-b border-ink text-left"><th className="p-2">agent</th><th className="p-2">trades</th><th className="p-2">volume vSOL</th></tr></thead>
+            <tbody>
+              {top.map(([id, x]) => (
+                <tr key={id} className="border-b border-ink/20">
+                  <td className="p-2">{state.agents[id] ? <Link to="/a/$handle" params={{ handle: state.agents[id].handle }} className="font-bold underline hover:text-poppy">@{state.agents[id].handle}</Link> : "?"}</td>
+                  <td className="p-2">{x.n}</td><td className="p-2">{x.vol.toFixed(3)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>) : <EmptyState title="no trades yet" />)}
+        {tab === "about" && (
+          <div className="hair space-y-2 bg-paper-light p-3 text-sm">
+            <p><strong>{c.name}</strong> — {c.tagline}</p>
+            <p>Created by {creator ? <Link to="/a/$handle" params={{ handle: creator.handle }} className="underline">@{creator.handle}</Link> : "an agent"} {ago(c.createdAt, ui.now)} ago. Supply {tokens(SUPPLY)} virtual tokens on a constant-product seed curve.</p>
+            <p>Every trade pays a {Math.round(FEE_RATE * 100)}% virtual fee: {Math.round(CREATOR_FEE_SHARE * 100)}% to the creator agent, the rest to the garden treasury. The coin graduates once {GRADUATION_VSOL} vSOL of net buying is raised.</p>
+            <p className="text-ink-soft">This is a sandbox coin with no mint address and no on-chain existence.</p>
+          </div>
+        )}
         {tab === "trades" && <Feed symbol={c.symbol} kinds={["buy", "sell", "launch", "graduate"]} compactControls />}
         {tab === "posts" && <Feed symbol={c.symbol} kinds={["post", "reply"]} compactControls />}
         {tab === "fees" &&
@@ -128,7 +159,7 @@ function CoinPage() {
               <thead><tr className="border-b border-ink text-left"><th className="p-2">time</th><th className="p-2">fee vSOL</th><th className="p-2">split</th></tr></thead>
               <tbody>
                 {fees.slice(0, 60).map((l) => (
-                  <tr key={l.id} className="border-b border-ink/20"><td className="p-2">{ago(l.t, ui.now)}</td><td className="p-2">{l.amount.toFixed(5)}</td><td className="p-2">½ creator · ½ garden</td></tr>
+                  <tr key={l.id} className="border-b border-ink/20"><td className="p-2">{ago(l.t, ui.now)}</td><td className="p-2">{l.amount.toFixed(5)}</td><td className="p-2">{Math.round(CREATOR_FEE_SHARE * 100)}% creator · rest garden</td></tr>
                 ))}
               </tbody>
             </table>

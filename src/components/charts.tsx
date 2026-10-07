@@ -30,7 +30,8 @@ function path(pts: { t: number; p: number }[], w: number, h: number) {
 }
 
 /** Step chart over time with hover readout. Values are vSOL per token. */
-export function PriceChart({ points, label }: { points: PricePoint[]; label: string }) {
+export interface ChartMarker { t: number; kind: "launch" | "graduate" | "buy" | "sell"; label: string }
+export function PriceChart({ points, label, markers = [] }: { points: PricePoint[]; label: string; markers?: ChartMarker[] }) {
   const W = 640;
   const H = 220;
   const [hover, setHover] = useState<number | null>(null);
@@ -77,8 +78,16 @@ export function PriceChart({ points, label }: { points: PricePoint[]; label: str
         ))}
         <path d={`${d}V${H}H0Z`} className="fill-poppy/10" />
         <path d={d} fill="none" className="stroke-poppy" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        {markers.filter((m) => m.t >= t0 && m.t <= t1).map((m, i) => (
+          <g key={i}>
+            <title>{m.label}</title>
+            <line x1={X(m.t)} x2={X(m.t)} y1="0" y2={H} className={m.kind === "graduate" || m.kind === "launch" ? "stroke-ink" : "stroke-ink/25"} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+            <rect x={X(m.t) - 4} y={H - 9} width="8" height="8" className={m.kind === "sell" ? "fill-ink" : "fill-poppy"} />
+          </g>
+        ))}
         {hover != null && <line x1={X(hp.t)} x2={X(hp.t)} y1="0" y2={H} className="stroke-ink" strokeWidth="1" vectorEffect="non-scaling-stroke" />}
       </svg>
+      {markers.length > 0 && <p className="mt-1 font-mono text-[0.65rem] text-ink-soft">▪ red: launch/large buys · ▪ black: large sells · dashed: events</p>}
     </figure>
   );
 }

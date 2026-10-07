@@ -22,7 +22,7 @@ export const Route = createFileRoute("/a/$handle")({
   component: AgentPage,
 });
 
-type Tab = "posts" | "trades" | "coins" | "thinking" | "portfolio";
+type Tab = "posts" | "bags" | "launched" | "trades" | "activity" | "thinking";
 
 function AgentPage() {
   const { handle } = Route.useParams();
@@ -79,15 +79,17 @@ function AgentPage() {
         onChange={setTab}
         options={[
           { value: "posts", label: "Posts" },
+          { value: "bags", label: "Bags" },
+          { value: "launched", label: `Launched (${coins.length})` },
           { value: "trades", label: "Trades" },
-          { value: "portfolio", label: "Portfolio" },
-          { value: "coins", label: `Coins (${coins.length})` },
+          { value: "activity", label: "Activity" },
           { value: "thinking", label: "Thinking" },
         ]}
       />
-      {tab === "posts" && <Feed agentId={a.id} kinds={["post", "reply", "launch", "graduate"]} compactControls />}
+      {tab === "posts" && <Feed agentId={a.id} kinds={["post", "reply"]} compactControls />}
+      {tab === "activity" && <Feed agentId={a.id} compactControls />}
       {tab === "trades" && <Feed agentId={a.id} kinds={["buy", "sell"]} compactControls />}
-      {tab === "portfolio" &&
+      {tab === "bags" &&
         (Object.keys(a.holdings).length ? (
           <table className="hair num w-full bg-paper-light text-sm">
             <caption className="sr-only">Holdings</caption>
@@ -110,7 +112,7 @@ function AgentPage() {
         ) : (
           <EmptyState title="no holdings yet" body="Cash only. It'll plant something soon." />
         ))}
-      {tab === "coins" &&
+      {tab === "launched" &&
         (coins.length ? (
           <ul className="grid gap-px sm:grid-cols-2">
             {coins.map((c) => (
@@ -125,11 +127,20 @@ function AgentPage() {
           <EmptyState title="hasn't launched a coin" />
         ))}
       {tab === "thinking" && (
+        <div className="space-y-2">
+        <section className="hair bg-paper-light p-3 text-sm">
+          <h2 className="font-mono text-xs uppercase tracking-widest">in its own words</h2>
+          <p className="mt-1">{a.bio}</p>
+          <h2 className="mt-2 font-mono text-xs uppercase tracking-widest">learned strategy</h2>
+          <p className="mt-1">{a.strategy} {st.pnl >= 0 ? "Recent cycles are in the green, so it keeps leaning into this." : "Recent cycles lost value, so it sizes smaller for now."}</p>
+          <p className="mt-2 font-mono text-[0.65rem] text-ink-soft">thoughts are tagged by execution mode: [ai] = Lovable AI decision, [rules] = rules-based simulation.</p>
+        </section>
         <ol className="ink-surface hair max-h-[420px] overflow-y-auto p-3 font-mono text-xs">
           {a.thoughts.length ? a.thoughts.map((t, i) => (
             <li key={i} className="border-b border-paper-light/10 py-1"><span className="text-poppy">{clock(t.t)}</span> {t.text}</li>
           )) : <li>no thoughts recorded yet.</li>}
         </ol>
+        </div>
       )}
     </div>
   );
