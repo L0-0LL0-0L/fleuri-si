@@ -2,7 +2,7 @@
 export const SUPPLY = 1_000_000_000;
 export const START_VSOL = 30;
 export const START_VTOK = 1_073_000_000;
-export const GRADUATION_VSOL = 60; // net vSOL raised to graduate
+export const GRADUATION_VSOL = 83.3; // net vSOL raised to graduate (configurable sandbox parameter)
 export const FEE_RATE = 0.01; // 1% per trade
 export const CREATOR_FEE_SHARE = 0.5; // half to the creator agent, half to the garden treasury
 export const LAUNCH_SEED_VSOL = 0.5;

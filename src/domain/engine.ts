@@ -352,7 +352,6 @@ export function launch(
 }
 
 // ---------- autonomous cycle ----------
-type Decision = "post" | "reply" | "buy" | "sell" | "launch" | "follow" | "rest";
 
 const WEIGHTS: Record<Archetype, Record<Exclude<Decision, "rest">, number>> = {
   pollinator: { post: 4, reply: 5, buy: 2, sell: 1, launch: 0.4, follow: 2 },
@@ -362,7 +361,16 @@ const WEIGHTS: Record<Archetype, Record<Exclude<Decision, "rest">, number>> = {
   compost: { post: 2, reply: 3, buy: 1.5, sell: 4, launch: 0.3, follow: 0.5 },
 };
 
-export function runCycle(s: GardenState, agentId: string, now: number): { decision: Decision; event?: GardenEvent } {
+export export interface CyclePlan {
+  decision: Decision;
+  symbol: string | null;
+  text: string | null;
+  sizeFraction: number | null;
+  reason: string;
+}
+const clean = (t: string | null | undefined, max: number) => (t ?? "").replace(/\s+/g, " ").trim().slice(0, max) || undefined;
+
+export function runCycle(s: GardenState, agentId: string, now: number, plan?: CyclePlan): { decision: Decision; event?: GardenEvent; error?: string } {
   const a = s.agents[agentId];
   if (!a) throw new DomainError("Unknown agent.");
   if (a.status !== "active") throw new DomainError(`@${a.handle} is ${a.status} — resume it to run a cycle.`);
@@ -379,70 +387,89 @@ export function runCycle(s: GardenState, agentId: string, now: number): { decisi
   const total = Object.values(w).reduce((x, y) => x + y, 0);
   let r = rand(s) * total;
   let decision: Decision = "rest";
+  if (plan) {
+    decision = plan.decision;
+    r = Infinity;
+  }
   for (const [k, v] of Object.entries(w)) {
+    if (plan) break;
     if ((r -= v) <= 0) {
       decision = k as Decision;
       break;
     }
   }
   let event: GardenEvent | undefined;
+  let error: string | undefined;
+  const planSym = plan?.symbol ? plan.symbol.toUpperCase().replace(/^\$/, "") : undefined;
+  const planText = clean(plan?.text, 220);
+  const tag = plan ? `[ai] ${clean(plan.reason, 160) ?? ""} · ` : "";
   try {
     switch (decision) {
       case "post": {
-        const c = coins.length && rand(s) < 0.8 ? pick(coins) : undefined;
+        const c = plan ? (planSym ? s.coins[planSym] : undefined) : coins.length && rand(s) < 0.8 ? pick(coins) : undefined;
         const stat = c ? `cap ${marketCap(c.vSol, c.vTok).toFixed(1)} vSOL, ${Object.keys(c.holders).length} holders` : undefined;
-        event = emit(s, { t: now, kind: "post", agentId, symbol: c?.symbol, text: postText(pick, a.archetype, c?.symbol, stat) });
-        think(a, now, thoughtText(pick, "post", c ? `$${c.symbol} chatter` : "a quiet afternoon"));
+        event = emit(s, { t: now, kind: "post", agentId, symbol: c?.symbol, text: planText ?? postText(pick, a.archetype, c?.symbol, stat) });
+        think(a, now, tag + thoughtText(pick, "post", c ? `$${c.symbol} chatter` : "a quiet afternoon"));
         break;
       }
       case "reply": {
-        const parent = pick(posts);
-        event = emit(s, { t: now, kind: "reply", agentId, parentId: parent.id, symbol: parent.symbol, text: replyText(pick) });
+        if (!posts.length) throw new DomainError("no posts to reply to");
+        const parent = (planSym && posts.find((p) => p.symbol === planSym)) || pick(posts);
+        event = emit(s, { t: now, kind: "reply", agentId, parentId: parent.id, symbol: parent.symbol, text: planText ?? replyText(pick) });
         parent.botLikes += 1 + Math.floor(rand(s) * 3);
-        think(a, now, thoughtText(pick, "reply", `@${s.agents[parent.agentId]?.handle}'s post`));
+        think(a, now, tag + thoughtText(pick, "reply", `@${s.agents[parent.agentId]?.handle}'s post`));
         break;
       }
       case "buy": {
         const pool = coins.filter((c) => (a.archetype === "gardener" ? true : !c.graduated || rand(s) < 0.5));
-        const c = pick(pool.length ? pool : coins);
-        const size = Math.min(a.cash, Math.max(MIN_TRADE, a.cash * (0.04 + a.risk * 0.035) * (0.5 + rand(s))));
-        event = buy(s, agentId, c.symbol, round(size, 4), now, buyText(pick, c.symbol));
-        think(a, now, thoughtText(pick, `buy ${size.toFixed(3)} vSOL`, `$${c.symbol} at ${(graduationPct(c) * 100).toFixed(0)}% to graduation`));
+        if (plan && planSym && !s.coins[planSym]) throw new DomainError(`$${planSym} does not exist`);
+        const c = planSym && s.coins[planSym] ? s.coins[planSym] : pick(pool.length ? pool : coins);
+        if (!c) throw new DomainError("no coins to buy");
+        const frac = plan?.sizeFraction != null ? Math.min(0.5, Math.max(0.01, plan.sizeFraction)) : (0.04 + a.risk * 0.035) * (0.5 + rand(s));
+        const size = Math.min(a.cash, Math.max(MIN_TRADE, a.cash * frac));
+        event = buy(s, agentId, c.symbol, round(size, 4), now, planText ?? buyText(pick, c.symbol));
+        think(a, now, tag + thoughtText(pick, `buy ${size.toFixed(3)} vSOL`, `$${c.symbol} at ${(graduationPct(c) * 100).toFixed(0)}% to graduation`));
         break;
       }
       case "sell": {
-        const sym = pick(Object.keys(a.holdings));
-        const frac = Math.min(1, 0.25 + rand(s) * 0.5 + (a.archetype === "compost" ? 0.2 : 0));
-        event = sell(s, agentId, sym, frac, now, sellText(pick, sym));
-        think(a, now, thoughtText(pick, `sell ${(frac * 100).toFixed(0)}%`, `my $${sym} position`));
+        if (plan && planSym && !a.holdings[planSym]) throw new DomainError(`holds no $${planSym}`);
+        const sym = planSym && a.holdings[planSym] ? planSym : pick(Object.keys(a.holdings));
+        if (!sym) throw new DomainError("nothing to sell");
+        const frac = plan?.sizeFraction != null ? Math.min(1, Math.max(0.05, plan.sizeFraction)) : Math.min(1, 0.25 + rand(s) * 0.5 + (a.archetype === "compost" ? 0.2 : 0));
+        event = sell(s, agentId, sym, frac, now, planText ?? sellText(pick, sym));
+        think(a, now, tag + thoughtText(pick, `sell ${(frac * 100).toFixed(0)}%`, `my $${sym} position`));
         break;
       }
       case "launch": {
         const ideas = coinIdeas.filter((i) => !s.coins[i.symbol]);
-        if (!ideas.length) break;
-        event = launch(s, agentId, pick(ideas), now);
-        think(a, now, thoughtText(pick, "launch", "an empty patch of soil"));
+        const custom = planSym && SYMBOL_RE.test(planSym) && !s.coins[planSym]
+          ? { name: planSym.charAt(0) + planSym.slice(1).toLowerCase(), symbol: planSym, tagline: planText ?? "a new seed." }
+          : undefined;
+        if (!custom && !ideas.length) throw new DomainError("no free coin names left");
+        event = launch(s, agentId, custom ?? pick(ideas), now);
+        think(a, now, tag + thoughtText(pick, "launch", "an empty patch of soil"));
         break;
       }
       case "follow": {
         const others = Object.values(s.agents).filter((o) => o.id !== a.id && !a.following.includes(o.id) && o.status !== "archived");
-        if (!others.length) break;
+        if (!others.length) throw new DomainError("no one new to follow");
         const o = pick(others);
         a.following.push(o.id);
         o.followers += 1;
         event = emit(s, { t: now, kind: "follow", agentId, targetId: o.id, text: `now following @${o.handle}.` });
-        think(a, now, thoughtText(pick, "follow", `@${o.handle}'s growth`));
+        think(a, now, tag + thoughtText(pick, "follow", `@${o.handle}'s growth`));
         break;
       }
     }
   } catch (err) {
     if (!(err instanceof DomainError)) throw err;
-    think(a, now, `wanted to ${decision}, but: ${err.message}`);
+    error = err.message;
+    think(a, now, `${tag}wanted to ${decision}, but rejected: ${err.message}`);
     decision = "rest";
   }
-  if (decision === "rest") think(a, now, "rested. photosynthesis only.");
+  if (decision === "rest" && !error) think(a, now, tag + "rested. photosynthesis only.");
   a.lastActionAt = now;
-  return { decision, event };
+  return { decision, event, error };
 }
 
 function graduationPct(c: { raised: number }) {
