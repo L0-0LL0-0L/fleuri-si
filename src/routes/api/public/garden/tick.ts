@@ -7,8 +7,13 @@ export const Route = createFileRoute("/api/public/garden/tick")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-        if (!token) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        // Server-only shared secret (never shipped to browsers) — not the publishable key.
+        const secret = process.env["LOVABLE_CRON_SECRET"];
+        const got = request.headers.get("x-cron-secret") ?? "";
+        if (!secret || got.length !== secret.length) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        let diff = 0;
+        for (let i = 0; i < secret.length; i++) diff |= secret.charCodeAt(i) ^ got.charCodeAt(i);
+        if (diff !== 0) return Response.json({ error: "Unauthorized" }, { status: 401 });
         const { mutateGarden, DuplicateCycleError } = await import("@/lib/garden.server");
         const { runCycle, rand } = await import("@/domain/engine");
         const now = Date.now();
