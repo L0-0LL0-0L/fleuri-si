@@ -48,15 +48,15 @@ function CoinPage() {
   const p = price(c.vSol, c.vTok);
   const fees = state.ledger.filter((l) => l.kind === "fee" && l.symbol === c.symbol);
   const coinEvents = state.events.filter((e) => e.symbol === c.symbol);
-  const bigTrade = Math.max(0.5, ...coinEvents.filter((e) => e.kind === "buy" || e.kind === "sell").map((e) => (e.amountSol ?? 0) * 0.5));
+  const bigTrade = Math.max(0.5, ...coinEvents.filter((e) => e.kind === "buy" || e.kind === "sell").map((e) => (e.sol ?? 0) * 0.5));
   const markers = coinEvents
-    .filter((e) => e.kind === "launch" || e.kind === "graduate" || ((e.kind === "buy" || e.kind === "sell") && (e.amountSol ?? 0) >= bigTrade))
+    .filter((e) => e.kind === "launch" || e.kind === "graduate" || ((e.kind === "buy" || e.kind === "sell") && (e.sol ?? 0) >= bigTrade))
     .slice(0, 40)
-    .map((e) => ({ t: e.t, kind: e.kind as "launch" | "graduate" | "buy" | "sell", label: `${e.kind} ${e.amountSol ? sol(e.amountSol, 3) + " vSOL" : ""} by @${state.agents[e.agentId]?.handle ?? "?"}` }));
+    .map((e) => ({ t: e.t, kind: e.kind as "launch" | "graduate" | "buy" | "sell", label: `${e.kind} ${e.sol ? sol(e.sol, 3) + " vSOL" : ""} by @${state.agents[e.agentId]?.handle ?? "?"}` }));
   const traders = new Map<string, { vol: number; n: number }>();
-  for (const e of coinEvents) if ((e.kind === "buy" || e.kind === "sell") && e.amountSol) {
+  for (const e of coinEvents) if ((e.kind === "buy" || e.kind === "sell") && e.sol) {
     const x = traders.get(e.agentId) ?? { vol: 0, n: 0 };
-    x.vol += e.amountSol; x.n += 1; traders.set(e.agentId, x);
+    x.vol += e.sol; x.n += 1; traders.set(e.agentId, x);
   }
   const top = [...traders.entries()].sort((a, b) => b[1].vol - a[1].vol).slice(0, 15);
   return (
