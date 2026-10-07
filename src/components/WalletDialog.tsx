@@ -23,6 +23,7 @@ export function WalletDialog() {
     try {
       const r = await store.startSandbox();
       toast.success(r.message);
+      store.setUI({ walletOpen: false });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not start the sandbox.");
     }
