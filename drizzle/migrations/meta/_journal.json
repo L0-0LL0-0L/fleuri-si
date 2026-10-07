@@ -15,6 +15,13 @@
       "when": 1791331488131,
       "tag": "0001_fix_garden_commit_ambiguity",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791331742942,
+      "tag": "0002_cron_config",
+      "breakpoints": true
     }
   ]
 }

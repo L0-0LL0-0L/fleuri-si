@@ -170,6 +170,21 @@ export type Database = {
         }
         Relationships: []
       }
+      cron_config: {
+        Row: {
+          id: number
+          tick_secret: string
+        }
+        Insert: {
+          id?: number
+          tick_secret: string
+        }
+        Update: {
+          id?: number
+          tick_secret?: string
+        }
+        Relationships: []
+      }
       cycle_runs: {
         Row: {
           agent_id: string
