@@ -6,7 +6,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 const id = z.string().uuid();
 const b64s = (max: number) => z.string().max(max).regex(/^[A-Za-z0-9+/]*={0,2}$/);
 const addr = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
-const safe = async <T,>(fn: () => Promise<T>): Promise<{ ok: true; data: T } | { ok: false; error: string }> => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const safe = async (fn: () => Promise<any>): Promise<{ ok: true; data: any } | { ok: false; error: string }> => {
   try {
     return { ok: true, data: await fn() };
   } catch (e) {

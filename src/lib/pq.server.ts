@@ -16,7 +16,7 @@ async function db() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin as any;
 }
-function must<T>(r: { data: T; error: any }, msg = "Database error") {
+function must(r: { data: any; error: any }, msg = "Database error"): any {
   if (r.error) throw new Error(`${msg}: ${r.error.message}`);
   return r.data;
 }
