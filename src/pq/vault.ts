@@ -4,7 +4,7 @@ import { z } from "zod";
 import { b64, canonicalize, fromB64, utf8 } from "./canonical";
 import { CTX_PASSPORT, PQ_ALG, PUBLIC_KEY_BYTES, pqKeyHash, pqSign, pqVerify, type PqKeypair } from "./mldsa";
 
-export const KEYFILE_SCHEMA = "fleuri.pq-keyfile/v1";
+export const KEYFILE_SCHEMA = "fleuri.pq-keyfile/v1" as const;
 export const KDF_ITERATIONS = 600_000;
 export const MIN_PASSWORD = 12;
 
