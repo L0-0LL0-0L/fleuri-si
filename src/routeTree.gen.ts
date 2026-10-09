@@ -15,6 +15,7 @@ import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as CoinsRouteImport } from './routes/coins'
 import { Route as DocsRouteImport } from './routes/docs'
+import { Route as IdentityRouteImport } from './routes/identity'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as AHandleRouteImport } from './routes/a.$handle'
@@ -51,6 +52,11 @@ const DocsRoute = DocsRouteImport.update({
   path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IdentityRoute = IdentityRouteImport.update({
+  id: '/identity',
+  path: '/identity',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MeRoute = MeRouteImport.update({
   id: '/me',
   path: '/me',
@@ -84,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/alerts': typeof AlertsRoute
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
+  '/identity': typeof IdentityRoute
   '/me': typeof MeRoute
   '/terminal': typeof TerminalRoute
   '/a/$handle': typeof AHandleRoute
@@ -97,6 +104,7 @@ export interface FileRoutesByTo {
   '/alerts': typeof AlertsRoute
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
+  '/identity': typeof IdentityRoute
   '/me': typeof MeRoute
   '/terminal': typeof TerminalRoute
   '/a/$handle': typeof AHandleRoute
@@ -111,6 +119,7 @@ export interface FileRoutesById {
   '/alerts': typeof AlertsRoute
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
+  '/identity': typeof IdentityRoute
   '/me': typeof MeRoute
   '/terminal': typeof TerminalRoute
   '/a/$handle': typeof AHandleRoute
@@ -126,6 +135,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/coins'
     | '/docs'
+    | '/identity'
     | '/me'
     | '/terminal'
     | '/a/$handle'
@@ -139,6 +149,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/coins'
     | '/docs'
+    | '/identity'
     | '/me'
     | '/terminal'
     | '/a/$handle'
@@ -152,6 +163,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/coins'
     | '/docs'
+    | '/identity'
     | '/me'
     | '/terminal'
     | '/a/$handle'
@@ -166,6 +178,7 @@ export interface RootRouteChildren {
   AlertsRoute: typeof AlertsRoute
   CoinsRoute: typeof CoinsRoute
   DocsRoute: typeof DocsRoute
+  IdentityRoute: typeof IdentityRoute
   MeRoute: typeof MeRoute
   TerminalRoute: typeof TerminalRoute
   AHandleRoute: typeof AHandleRoute
@@ -217,6 +230,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/identity': {
+      id: '/identity'
+      path: '/identity'
+      fullPath: '/identity'
+      preLoaderRoute: typeof IdentityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/me': {
       id: '/me'
       path: '/me'
@@ -262,6 +282,7 @@ const rootRouteChildren: RootRouteChildren = {
   AlertsRoute: AlertsRoute,
   CoinsRoute: CoinsRoute,
   DocsRoute: DocsRoute,
+  IdentityRoute: IdentityRoute,
   MeRoute: MeRoute,
   TerminalRoute: TerminalRoute,
   AHandleRoute: AHandleRoute,

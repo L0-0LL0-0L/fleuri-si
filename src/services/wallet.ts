@@ -81,3 +81,28 @@ export async function disconnectWallet(kind: WalletKind) {
     /* ignore */
   }
 }
+
+/** Connects and returns the wallet's base58 address (no signature yet). */
+export async function connectWallet(kind: WalletKind) {
+  const p = getProvider(kind);
+  if (!p) throw new Error(`${kind === "phantom" ? "Phantom" : "Solflare"} is not installed in this browser.`);
+  const res = await p.connect();
+  const pk = (res && "publicKey" in res ? res.publicKey : p.publicKey)?.toString();
+  if (!pk) throw new Error("The wallet did not share a public key.");
+  return pk;
+}
+
+/** Asks the wallet to sign exact message bytes (Ed25519). */
+export async function walletSignMessage(kind: WalletKind, msg: Uint8Array) {
+  const p = getProvider(kind);
+  if (!p) throw new Error("Wallet not available.");
+  const out = await p.signMessage(msg, "utf8");
+  return out instanceof Uint8Array ? out : out.signature;
+}
+
+/** Asks the wallet to sign a legacy transaction prepared by the server. */
+export async function walletSignTransaction<T>(kind: WalletKind, tx: T): Promise<T> {
+  const p = getProvider(kind) as unknown as { signTransaction?: (t: T) => Promise<T> } | null;
+  if (!p?.signTransaction) throw new Error("This wallet cannot sign transactions.");
+  return p.signTransaction(tx);
+}
