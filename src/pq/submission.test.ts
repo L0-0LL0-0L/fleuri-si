@@ -28,6 +28,9 @@ vi.mock("@/lib/solana.server",async(importOriginal)=>{
 });
 import { confirmPrepared, retryPrepared, submitPrepared } from "@/lib/pq.server";
 
+// Pin the server cluster so this suite never inherits a deployment's SOLANA_CLUSTER secret.
+process.env.SOLANA_CLUSTER = "devnet";
+
 const owner=crypto.randomUUID(),id=crypto.randomUUID();
 let signed:string,signature:string;
 beforeEach(async()=>{
@@ -46,6 +49,11 @@ describe("server submission recovery",()=>{
   it("denies cross-owner retries without a database mutation or broadcast",async()=>{
     await expect(submitPrepared(crypto.randomUUID(),id,signed)).rejects.toThrow("not found");expect(mock.events).toEqual([]);
     await expect(retryPrepared(crypto.randomUUID(),id)).rejects.toThrow("No signed");
+  });
+  it("refuses a preparation built for another cluster without broadcasting it",async()=>{
+    process.env.SOLANA_CLUSTER="mainnet-beta";
+    try { await expect(submitPrepared(owner,id,signed)).rejects.toThrow("not this server's current cluster"); expect(mock.events).toEqual([]); }
+    finally { process.env.SOLANA_CLUSTER="devnet"; }
   });
   it("rejects expired blockhashes and expired unsigned preparations before consuming them",async()=>{
     mock.height=101;await expect(submitPrepared(owner,id,signed)).rejects.toThrow("expired");expect(mock.events).toEqual([]);
