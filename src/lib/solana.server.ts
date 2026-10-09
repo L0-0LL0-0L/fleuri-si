@@ -88,6 +88,10 @@ export async function readDbcConfig(conn: Connection, address: string) {
   if (n(cfg.tokenDecimal) < 6 || n(cfg.tokenDecimal) > 9) problems.push("token decimals must be 6–9");
   if (s(cfg.preMigrationTokenSupply) !== s(cfg.postMigrationTokenSupply)) problems.push("first release requires the same supply cap before and after migration");
   if (BigInt(s(cfg.preMigrationTokenSupply)) <= 0n) problems.push("fixed token supply must be positive");
+  const feeOption = n(cfg.migrationFeeOption);
+  if (!Number.isInteger(feeOption) || feeOption < 0 || feeOption > 6) problems.push("unsupported DAMM v2 migration fee option");
+  const lpTotal = n(cfg.creatorLiquidityPercentage) + n(cfg.creatorPermanentLockedLiquidityPercentage) + n(cfg.partnerLiquidityPercentage) + n(cfg.partnerPermanentLockedLiquidityPercentage);
+  if (lpTotal !== 100) problems.push("first release requires claimable and permanently locked LP shares totaling 100%; LP vesting configs are not eligible");
   const terms = {
     fees: {
       baseFeeBps: Math.round(n(cfg.poolFees?.baseFee?.cliffFeeNumerator) / 100_000),
@@ -109,7 +113,8 @@ export async function readDbcConfig(conn: Connection, address: string) {
       migrationFeeOption: n(cfg.migrationFeeOption),
       migrationFeePercent: n(cfg.migrationFeePercentage),
       creatorMigrationFeePercent: n(cfg.creatorMigrationFeePercentage),
-      migratedPoolFeeBps: n(cfg.migratedPoolFeeBps),
+      // Fixed fee presets leave the custom migratedPoolFeeBps field at zero.
+      migratedPoolFeeBps: feeOption === 6 ? n(cfg.migratedPoolFeeBps) : ([25, 30, 100, 200, 400, 600][feeOption] ?? 0),
     },
     authority: {
       tokenUpdateAuthority: "immutable" as const,
