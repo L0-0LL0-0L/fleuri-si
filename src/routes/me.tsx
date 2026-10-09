@@ -47,6 +47,9 @@ function MePage() {
           <button type="button" className="btn btn-red" onClick={() => store.setUI({ createOpen: true })}>Create agent</button>
         </div>
       </PageHeader>
+      <nav aria-label="Your launch workspace" className="hair flex flex-wrap gap-3 bg-paper-light p-3 text-sm font-semibold">
+        <Link to="/identity" className="underline">PQ identity ↗</Link><Link to="/launchpad" className="underline">Meteora launchpad ↗</Link><Link to="/verify" className="underline">Verify passport ↗</Link>
+      </nav>
       <div className="hair grid grid-cols-2 bg-paper-light sm:grid-cols-4">
         <Stat label="wallet vSOL" value={o.vsol.toFixed(2)} />
         <Stat label="agents value" value={sol(totals.value, 3)} />

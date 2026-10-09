@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import bloom from "@/assets/fleuri-bloom.png.asset.json";
 import crop from "@/assets/fleuri-crop.png.asset.json";
 import { FlowerTiles } from "@/components/PixelFlower";
@@ -47,10 +47,18 @@ function Docs() {
         ))}
       </div>
       <section className="hair ink-surface p-4">
-        <h2 className="display text-xl text-poppy">real-money status</h2>
+        <h2 className="display text-xl text-poppy">garden sandbox</h2>
         <p className="mt-2 text-sm">{chain.describe()}</p>
-        <p className="mt-2 text-sm">Fleuri has no deployed contract, token mint or audited program yet. Every balance, trade and fee shown is virtual SOL in a sandbox. Nothing here is an on-chain transaction, and nothing is investment advice.</p>
-        <p className="mt-2 text-sm">The garden lives in Lovable Cloud and everyone shares it. Anyone can read it. Only you can change your own agents, alert rules and saves, and every balance change is written to an append-only virtual ledger. Your sandbox is an anonymous sign-in kept in this browser. Real SOL stays off until genuine Fleuri program, mint, RPC and signing-service configuration exist.</p>
+        <p className="mt-2 text-sm">The feed, agent trades and garden balances use virtual SOL. Automated agents do not custody or trade real funds in this release.</p>
+        <p className="mt-2 text-sm">The garden lives in Lovable Cloud. Only you can change your own agents, alert rules and saves. Your anonymous workspace sign-in is kept in this browser; the encrypted PQ backup restores your key, not this account session.</p>
+      </section>
+      <section className="hair space-y-3 bg-paper-light p-4">
+        <h2 className="display text-xl">launch provenance. on Meteora.</h2>
+        <p className="text-sm">The <Link to="/launchpad" className="underline">launchpad</Link> prepares genuine Meteora DBC transactions on the configured Solana network. Your wallet signs and pays network/rent and pool creation costs. The network readiness checks must pass before launch; devnet uses test SOL.</p>
+        <p className="text-sm">Create an independent ML-DSA-65 key at <Link to="/identity" className="underline">PQ identity</Link>. Its encrypted backup uses AES-256-GCM and PBKDF2-SHA256 with 600,000 iterations. Register it with both a wallet signature and a PQ possession signature, then anchor the registration hash in a confirmed SPL Memo transaction.</p>
+        <p className="text-sm">A launch passport signs the token, image CID, supply, complete DBC config, creator, fees, LP shares, immutable metadata policy and DAMM v2 migration terms. The signed JSON is pinned before its final metadata URI is committed in the launch transaction. A new token uses SPL Token with revoked mint and freeze authorities; dev buy is disabled.</p>
+        <p className="text-sm">Anyone can <Link to="/verify" className="underline">verify a passport</Link> without signing in. Offline signature checks, identity anchoring, chain terms and graduation have separate results. DAMM v2 is shown as live only when its derived pool account exists. A valid PQ signature proves launch provenance; wallet custody still uses Ed25519. PQ-controlled fee vaults and automated real-fund trading are outside this release.</p>
+        <p className="text-sm">After a network error, use Pending transactions to check confirmation or retry the exact signed bytes. Keep the encrypted backup and its password somewhere safe. A restored key can verify and sign offline; cloud owner controls also require the original workspace account.</p>
       </section>
       <FlowerTiles count={8} cols={4} />
     </article>
