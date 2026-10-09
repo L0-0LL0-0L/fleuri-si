@@ -9,6 +9,8 @@ import { pqKeyHash } from "@/pq/mldsa";
 import { DBC_PROGRAM_ID, SOL_MINT, verifyPassportOffline, type Check, type PassportManifest, PASSPORT_SCHEMA } from "@/pq/passport";
 import { CHALLENGE_TTL_MS, GENESIS, anchorMemo, buildStatement, isSolanaAddress, validateRegistration, validateIdentityProof, registrationHash } from "@/pq/registration";
 import * as sol from "./solana.server";
+import { compareConfig, expectedTerms, parseDraft } from "@/pq/config-draft";
+import { buildConfigParams } from "@/pq/config-build";
 
 const PREP_TTL_MS = 90_000;
 const NONCE_TTL_MS = 15 * 60_000;
@@ -174,7 +176,34 @@ export async function confirmPrepared(ownerId: string, preparationId: string): P
     must(await d.from("chain_preparations").update({confirmed_at: new Date().toISOString()}).eq("id",preparationId));
     return { status: "confirmed", detail: `Migration confirmed in slot ${tx.slot}.`, id: launch.passport_id };
   }
+  if (prep.kind === "config") {
+    if (!tx.ixs.some((x) => x.program === DBC_PROGRAM_ID)) throw new Error("Confirmed config transaction did not call Meteora DBC.");
+    if (!tx.signers.includes(prep.subject)) throw new Error("The prepared config key did not sign the confirmed transaction.");
+    const r = await sol.readDbcConfig(conn, prep.subject);
+    const issues = [...r.problems, ...compareConfig(r.terms as any, prep.payload.expected)];
+    if (issues.length) throw new Error(`Confirmed config differs from the reviewed terms: ${issues.join("; ")}`);
+    must(await d.from("chain_preparations").update({ confirmed_at: new Date().toISOString(), payload: { ...prep.payload, verifiedSlot: tx.slot, snapshotHash: r.snapshotHash } }).eq("id", preparationId).eq("owner_id", ownerId));
+    return { status: "confirmed", detail: `Config ${prep.subject} confirmed in slot ${tx.slot} and matches every reviewed term.`, id: prep.subject };
+  }
   throw new Error("Unknown preparation kind.");
+}
+
+// ---------- DBC config creation ----------
+/** Prepares an SDK createConfig. Recipients come only from the owner's reviewed draft. */
+export async function prepareConfig(ownerId: string, input: { wallet: string; config: string; draft: unknown }) {
+  if (!isSolanaAddress(input.wallet) || !isSolanaAddress(input.config)) throw new Error("Invalid wallet or config address.");
+  if (input.wallet === input.config) throw new Error("The config key must be a fresh key, not your wallet.");
+  const draft = parseDraft(input.draft);
+  const e = env();
+  const conn = sol.connection();
+  await sol.assertGenesis(conn, e.cluster);
+  if (await conn.getAccountInfo(new PublicKey(input.config))) throw new Error("That config address already exists. Generate a fresh key.");
+  const params = buildConfigParams(draft);
+  const expected = expectedTerms(draft, params);
+  const built = await sol.buildCreateConfigTx(conn, { config: input.config, wallet: input.wallet, feeClaimer: draft.feeClaimer, leftoverReceiver: draft.leftoverReceiver, params });
+  const cost = await sol.estimateWalletCost(conn, built.message, input.wallet);
+  const prep = await savePrep(ownerId, "config", input.wallet, input.config, built, { draft, expected });
+  return { preparationId: prep.id, expiresAt: prep.expires_at, transaction: sol.unsignedB64(built.tx), cluster: e.cluster, config: input.config, expected, cost };
 }
 
 // ---------- launch ----------

@@ -139,6 +139,30 @@ export async function buildCreatePoolTx(conn: Connection, p: { config: string; b
   return finalizeUnsigned(tx, creator, bh, [creator.toBase58(), baseMint.toBase58()]);
 }
 
+/** Unsigned SDK createConfig. The wallet pays; the fresh config key (held only in the browser) co-signs. */
+export async function buildCreateConfigTx(conn: Connection, p: { config: string; wallet: string; feeClaimer: string; leftoverReceiver: string; params: Record<string, unknown> }) {
+  const payer = new PublicKey(p.wallet);
+  const client = new DynamicBondingCurveClient(conn, "confirmed");
+  const tx = await client.partner.createConfig({ ...(p.params as any), config: new PublicKey(p.config), feeClaimer: new PublicKey(p.feeClaimer), leftoverReceiver: new PublicKey(p.leftoverReceiver), quoteMint: new PublicKey(SOL_MINT), payer });
+  return finalizeUnsigned(tx, payer, await conn.getLatestBlockhash("confirmed"), [p.wallet, p.config]);
+}
+
+/** Simulates without signatures to report the exact lamports the wallet would spend (rent + fee). */
+export async function estimateWalletCost(conn: Connection, message: Uint8Array, wallet: string) {
+  const { VersionedTransaction, VersionedMessage } = await import("@solana/web3.js");
+  const vtx = new VersionedTransaction(VersionedMessage.deserialize(message));
+  const [pre, fee, sim] = await Promise.all([
+    conn.getBalance(new PublicKey(wallet), "confirmed"),
+    conn.getFeeForMessage(VersionedMessage.deserialize(message), "confirmed"),
+    conn.simulateTransaction(vtx, { sigVerify: false, replaceRecentBlockhash: false, commitment: "confirmed", accounts: { encoding: "base64", addresses: [wallet] } }),
+  ]);
+  if (sim.value.err) return { ok: false as const, balanceLamports: pre, error: `Simulation failed: ${JSON.stringify(sim.value.err)}. ${(sim.value.logs ?? []).slice(-3).join(" | ")}`.slice(0, 400) };
+  const post = sim.value.accounts?.[0]?.lamports ?? pre;
+  const networkFee = fee.value ?? 0;
+  // Simulated post-balance of the payer: account rent plus whatever the RPC deducts for fees.
+  return { ok: true as const, balanceLamports: pre, simulatedChangeLamports: Math.max(0, pre - post), networkFeeLamports: networkFee };
+}
+
 export async function buildMigrationLockerTx(conn: Connection, pool: string, wallet: string) {
   const payer = new PublicKey(wallet);
   const client = new DynamicBondingCurveClient(conn, "confirmed");
