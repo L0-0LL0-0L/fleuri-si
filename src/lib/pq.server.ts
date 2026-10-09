@@ -124,9 +124,12 @@ export async function confirmPrepared(ownerId: string, preparationId: string): P
   await sol.assertGenesis(conn, prep.cluster);
   const tx = await sol.readConfirmedTx(conn, prep.signature);
   if (!tx) return { status: "pending", detail: "Waiting for confirmation…" };
-  if (tx.err) throw new Error(`Transaction failed on chain: ${JSON.stringify(tx.err)}`);
   if (messageHash(tx.serialized) !== prep.message_hash) throw new Error("Confirmed transaction differs from the prepared message.");
   if (!tx.signers.includes(prep.wallet)) throw new Error("Wallet did not sign the confirmed transaction.");
+  if (tx.err) {
+    must(await d.from("chain_preparations").update({confirmed_at:new Date().toISOString(),payload:{...prep.payload,confirmationError:tx.err}}).eq("id",preparationId).eq("owner_id",ownerId));
+    throw new Error(`Transaction failed on chain: ${JSON.stringify(tx.err)}`);
+  }
 
   if (prep.kind === "anchor") {
     const memoIx = tx.ixs.find((x) => x.program === sol.MEMO_PROGRAM_ID.toBase58());

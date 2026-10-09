@@ -53,7 +53,7 @@ function CoinsPage() {
       ) : list.length === 0 ? (
         <EmptyState title="no seed by that name" body="Try another symbol." action={<button type="button" className="btn btn-paper" onClick={() => setQ("")}>Clear search</button>} />
       ) : (
-        <div className="grid pl-px pt-px md:grid-cols-2">
+        <div className="grid grid-cols-1 pl-px pt-px md:grid-cols-2 [&>*]:min-w-0">
           {list.map(({ c, st }) => <CoinCard key={c.symbol} c={c} st={st} state={state} now={ui.now} />)}
         </div>
       )}
