@@ -1,6 +1,6 @@
 // Server-only Solana + Meteora DBC adapter. Never holds user keys; builds unsigned SDK transactions
 // and reads confirmed chain state. Env is read inside functions (Workers inject at request time).
-import { Connection, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
+import { ComputeBudgetProgram, Connection, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { DynamicBondingCurveClient, deriveDbcPoolAddress, deriveMintMetadata, METAPLEX_PROGRAM_ID, DAMM_V2_MIGRATION_FEE_ADDRESS, DAMM_V2_PROGRAM_ID, deriveDammV2PoolAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { getMint, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { domainHash, b64, utf8, sha256Hex } from "@/pq/canonical";
@@ -132,6 +132,14 @@ export async function buildCreatePoolTx(conn: Connection, p: { config: string; b
   const tx = await client.creator.createPool({ name: p.name, symbol: p.symbol, uri: p.uri, payer: creator, poolCreator: creator, config, baseMint });
   const bh = await conn.getLatestBlockhash("confirmed");
   return finalizeUnsigned(tx, creator, bh, [creator.toBase58(), baseMint.toBase58()]);
+}
+
+export async function buildMigrationLockerTx(conn: Connection, pool: string, wallet: string) {
+  const payer = new PublicKey(wallet);
+  const client = new DynamicBondingCurveClient(conn, "confirmed");
+  const tx = await client.migration.createLocker({ pool: new PublicKey(pool), payer });
+  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }));
+  return finalizeUnsigned(tx, payer, await conn.getLatestBlockhash("confirmed"), [wallet]);
 }
 
 export function finalizeUnsigned(tx: Transaction, feePayer: PublicKey, bh: { blockhash: string; lastValidBlockHeight: number }, allowedSigners: string[]) {

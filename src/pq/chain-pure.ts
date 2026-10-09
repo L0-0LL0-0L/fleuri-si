@@ -14,6 +14,12 @@ export function mapLifecycle(p: { isMigrated: number; migrationProgress: number;
 
 export const messageHash = (message: Uint8Array) => sha256Hex(message);
 
+/** Vesting escrow is a separate confirmed wallet transaction before DAMM v2 creation. */
+export function needsMigrationLocker(config: { lockedVestingConfig?: { amountPerPeriod: { toString(): string }; numberOfPeriod: { toString(): string }; cliffUnlockAmount: { toString(): string } } }, progress: number) {
+  const v = config.lockedVestingConfig;
+  return progress < 2 && !!v && BigInt(v.cliffUnlockAmount.toString()) + BigInt(v.amountPerPeriod.toString()) * BigInt(v.numberOfPeriod.toString()) > 0n;
+}
+
 /**
  * Accept only the exact prepared message with every required signature present and valid.
  * Returns the raw signed transaction bytes to broadcast.

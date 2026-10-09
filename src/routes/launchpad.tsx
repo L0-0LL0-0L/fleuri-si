@@ -67,6 +67,7 @@ function Launchpad() {
   }
   async function migrate(kind:WalletKind,id:string) {
     const p=await pqPrepareMigration({data:{launchId:id}}); if(!p.ok) throw new Error(p.error);
+    if(p.data.stage==="locker") toast.info("This config requires vesting escrow first. Confirm this setup, then select Migrate again for the DAMM v2 pool.");
     const r=await signSubmitConfirm(kind,p.data,{onStatus:setBusy}); toast.success(r.detail); await refresh();
   }
   async function rebuildDraft() {
