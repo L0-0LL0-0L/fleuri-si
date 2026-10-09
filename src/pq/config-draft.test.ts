@@ -20,6 +20,7 @@ describe("DBC config draft", () => {
 
   it("builds a real SDK createConfig needing only the wallet and fresh config key", async () => {
     const d = parseDraft(base), params = buildConfigParams(d), config = Keypair.generate().publicKey.toBase58();
+    expect(params.tokenType).toBe(0); expect(params.migrationOption).toBe(1); expect(params.tokenUpdateAuthority).toBe(1);
     const conn = new Connection("https://api.devnet.solana.com");
     (conn as any).getLatestBlockhash = async () => ({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 100 });
     const built = await buildCreateConfigTx(conn, { config, wallet: w, feeClaimer: d.feeClaimer, leftoverReceiver: d.leftoverReceiver, params });

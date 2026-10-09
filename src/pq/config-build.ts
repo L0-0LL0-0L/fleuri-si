@@ -8,7 +8,7 @@ import type { ConfigDraftT } from "./config-draft";
 /** Exact SDK ConfigParameters for the draft (built by the pinned Meteora SDK). */
 export function buildConfigParams(d: ConfigDraftT) {
   return buildCurve({
-    token: { tokenType: TokenType.SPL, tokenBaseDecimal: d.decimals, tokenQuoteDecimal: 9, tokenAuthorityOption: TokenAuthorityOption.Immutable, totalTokenSupply: d.totalSupply, leftover: 0 },
+    token: { tokenType: TokenType.SPLToken, tokenBaseDecimal: d.decimals, tokenQuoteDecimal: 9, tokenAuthorityOption: TokenAuthorityOption.Immutable, totalTokenSupply: d.totalSupply, leftover: 0 },
     fee: {
       baseFeeParams: { baseFeeMode: BaseFeeMode.FeeSchedulerLinear, feeSchedulerParam: { startingFeeBps: d.baseFeeBps, endingFeeBps: d.baseFeeBps, numberOfPeriod: 0, totalDuration: 0 } },
       dynamicFeeEnabled: false, collectFeeMode: CollectFeeMode.QuoteToken, creatorTradingFeePercentage: d.creatorTradingFeePercent, poolCreationFee: 0, enableFirstSwapWithMinFee: false,

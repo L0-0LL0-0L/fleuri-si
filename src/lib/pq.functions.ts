@@ -119,7 +119,7 @@ export const pqPrepareConfig = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ wallet: addr, config: addr, draft: z.unknown() }).strict().refine(v => JSON.stringify(v).length <= 4000, "Draft too large").parse(d))
   .handler(async ({ data, context }) => {
     const s = await import("./pq.server");
-    return safe(() => s.prepareConfig(context.userId, data));
+    return safe(() => s.prepareConfig(context.userId, { wallet: data.wallet, config: data.config, draft: data.draft }));
   });
 
 export const pqRefreshLifecycle = createServerFn({ method: "POST" })
