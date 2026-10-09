@@ -13,14 +13,25 @@ All of these are read inside server code (`src/lib/solana.server.ts`), never in 
 | --- | --- | --- |
 | `SOLANA_CLUSTER` | `mainnet-beta` | Must be `devnet` or `mainnet-beta`. Selects the expected genesis hash and the explorer links. |
 | `SOLANA_RPC_URL` | configured | Read at request time and verified against the cluster genesis. A mainnet URL under `devnet` (or the reverse) fails readiness instead of silently launching on the wrong network. |
-| `METEORA_DBC_CONFIG` | **not set — launch blocked** | Address of a DBC pool config: SOL quote, DAMM v2 migration, immutable metadata, fixed supply, revoked mint/freeze authorities, LP shares totalling 100%. Its full snapshot is hashed and signed into every passport. |
+| `METEORA_DBC_CONFIG` | **not set — launch blocked** (create one at `/launch-config`) | Address of a DBC pool config: SOL quote, DAMM v2 migration, immutable metadata, fixed supply, revoked mint/freeze authorities, LP shares totalling 100%. Its full snapshot is hashed and signed into every passport. |
 | `PINATA_JWT` | **not set — launch blocked** | Pins the signed passport and token image so the metadata URI committed on chain is immutable. |
-| `FLEURI_ORIGIN` | preview origin by default | The origin written into registration challenges and passports. Set this to the real public domain before any launch. |
+| `FLEURI_ORIGIN` | `https://fleuri.si` | The origin written into registration challenges and passports. Set this to the real public domain before any launch. |
 | `METEORA_DAMM_V2_CONFIG`, `IPFS_GATEWAY` | optional | Graduation config override; read gateway (default `https://gateway.pinata.cloud/ipfs/`). |
 
 Current readiness: cluster, RPC genesis and the DBC program all pass on mainnet-beta; the pool
 config and pinning checks fail, so launch review stays disabled. That is a truthful block, not a
 placeholder.
+
+## Creating the pool config (`/launch-config`)
+
+Connect Phantom or Solflare, choose decimals, supply, trading fee and creator share, graduation
+threshold, DAMM v2 fee preset, LP split (100%, at least 10% locked) and both recipient addresses.
+"Use my wallet" only fills a field you can see. The server builds the SDK `createConfig`
+transaction (SOL quote, SPL, immutable, fixed supply, DAMM v2, no vesting or creation fee) and
+simulates it to show your balance and cost. A fresh config key is generated in the browser and
+co-signs; your wallet signs and pays. Confirmation re-reads the account and rejects any term that
+differs from what you reviewed. Then save the shown address as `METEORA_DBC_CONFIG` through the
+secure settings form and recheck readiness.
 
 ## Flows
 

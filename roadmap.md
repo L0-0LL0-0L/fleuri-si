@@ -1,7 +1,9 @@
 # Roadmap
 
-- [x] Switch launchpad to mainnet; verify SOLANA_CLUSTER matches saved RPC genesis
+- [x] Switch launchpad to mainnet; SOLANA_CLUSTER matches saved RPC genesis
+- [x] FLEURI_ORIGIN set to https://fleuri.si
+- [x] Wallet-assisted, reviewable Meteora config creation at /launch-config
+- [x] Tests, typecheck, Worker build
 - [ ] PINATA_JWT — waits on owner entering it in the secure form
-- [ ] FLEURI_ORIGIN set to the existing Fleuri URL
-- [ ] METEORA_DBC_CONFIG — reuse the "Stock Orb Rewards" config if found and valid; otherwise wallet-assisted, reviewable config creation flow (browser-held config key, explicit recipient review, exact-message signing, durable retry, confirmed on-chain validation)
-- [ ] Regression tests, typecheck, Worker build; devnet tests isolated from mainnet config
+- [ ] Sign the config at /launch-config — waits on owner's wallet with mainnet SOL
+- [ ] Save the confirmed address as METEORA_DBC_CONFIG — waits on the config above
