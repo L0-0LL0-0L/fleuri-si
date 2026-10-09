@@ -122,7 +122,7 @@ export async function buildCreatePoolTx(conn: Connection, p: { config: string; b
   const creator = new PublicKey(p.creator);
   const baseMint = new PublicKey(p.baseMint);
   const config = new PublicKey(p.config);
-  const tx = await client.pool.createPool({ name: p.name, symbol: p.symbol, uri: p.uri, payer: creator, poolCreator: creator, config, baseMint });
+  const tx = await client.creator.createPool({ name: p.name, symbol: p.symbol, uri: p.uri, payer: creator, poolCreator: creator, config, baseMint });
   const bh = await conn.getLatestBlockhash("confirmed");
   return finalizeUnsigned(tx, creator, bh, [creator.toBase58(), baseMint.toBase58()]);
 }
