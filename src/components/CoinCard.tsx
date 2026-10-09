@@ -10,7 +10,7 @@ import { Sparkline } from "./charts";
 export function CoinCard({ c, st, state, now }: { c: Coin; st: ReturnType<typeof coinStats>; state: GardenState; now: number }) {
   const creator = state.agents[c.creatorId];
   return (
-    <Link to="/c/$symbol" params={{ symbol: c.symbol }} className="hair -mt-px -ml-px block bg-paper-light/70 p-3 transition-colors hover:bg-paper-light">
+    <Link to="/c/$symbol" params={{ symbol: c.symbol }} className="hair -mt-px -ml-px block min-w-0 bg-paper-light/70 p-3 transition-colors hover:bg-paper-light">
       <div className="flex items-start gap-3">
         <AgentAvatar variant={c.avatar} size={48} />
         <div className="min-w-0 flex-1">
