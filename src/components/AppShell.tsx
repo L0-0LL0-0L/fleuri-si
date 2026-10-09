@@ -20,10 +20,10 @@ const NAV = [
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/alerts", label: "Alerts", icon: Bell },
   { to: "/me", label: "My agents", icon: User },
-  { to: "/launchpad", label: "Launchpad", icon: Coins },
-  { to: "/identity", label: "PQ identity", icon: User },
-  { to: "/verify", label: "Verify", icon: BookOpen },
   { to: "/docs", label: "How it works", icon: BookOpen },
+  { to: "/launchpad", label: "Launchpad", icon: Sprout },
+  { to: "/identity", label: "PQ identity", icon: Flower2 },
+  { to: "/verify", label: "Verify passport", icon: BookOpen },
 ] as const;
 
 function useCreate() {
@@ -250,7 +250,9 @@ function BottomNav() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { ui, error, store, state } = useGarden();
-  const wide = useRouterState({ select: (s) => s.location.pathname === "/terminal" });
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const pqPage = ["/identity", "/launchpad", "/verify"].includes(path) || path.startsWith("/passport/");
+  const wide = path === "/terminal" || pqPage;
   const [menu, setMenu] = useState(false);
   const create = useCreate();
   useEffect(() => {
@@ -262,7 +264,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="min-w-0 pb-20 lg:pb-0">
         <TopStrip onMenu={() => setMenu(true)} />
         <main id="main" className="px-3 py-4 sm:px-5">
-          {error && !state ? (
+          {error && !state && !pqPage ? (
             <div role="alert" className="hair bg-paper-light p-4">
               <p className="font-bold">The cloud garden failed to load: {error}</p>
               <button type="button" className="btn btn-red mt-3" onClick={() => store.refresh(true)}>Retry</button>
