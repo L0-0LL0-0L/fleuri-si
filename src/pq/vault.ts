@@ -52,6 +52,7 @@ export function parseEnvelope(raw: unknown): KeyEnvelope {
   if (!r.success) throw new Error("This is not a valid Fleuri key file.");
   const pk = fromB64(r.data.publicKey);
   if (pk.length !== PUBLIC_KEY_BYTES || pqKeyHash(pk) !== r.data.keyHash) throw new Error("Key file public key does not match its fingerprint.");
+  if (fromB64(r.data.kdf.salt).length !== 16 || fromB64(r.data.cipher.iv).length !== 12 || fromB64(r.data.ciphertext).length !== 4048) throw new Error("Invalid key file encryption parameters.");
   return r.data;
 }
 
@@ -67,7 +68,9 @@ export async function decryptEnvelope(env: KeyEnvelope, password: string): Promi
   }
   const publicKey = fromB64(header.publicKey);
   const probe = utf8("fleuri key-file possession check");
-  if (!pqVerify(publicKey, probe, pqSign(sk, probe, CTX_PASSPORT), CTX_PASSPORT)) {
+  let matches = false;
+  try { matches = pqVerify(publicKey, probe, pqSign(sk, probe, CTX_PASSPORT), CTX_PASSPORT); } catch { /* rejected below */ }
+  if (!matches) {
     sk.fill(0);
     throw new Error("Decrypted key does not match this key file's public key.");
   }

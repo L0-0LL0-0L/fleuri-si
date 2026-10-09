@@ -5,10 +5,10 @@ import { fromB64, sha256Hex } from "./canonical";
 export type Lifecycle = "curve_active" | "curve_completed" | "migration_pending" | "damm_v2_live";
 
 /** DBC MigrationProgress: 0 PreBondingCurve, 1 PostBondingCurve, 2 LockedVesting, 3 CreatedPool. */
-export function mapLifecycle(p: { isMigrated: number; migrationProgress: number; quoteReserve: bigint; migrationQuoteThreshold: bigint }): Lifecycle {
-  if (p.isMigrated === 1) return "damm_v2_live";
-  if (p.migrationProgress >= 1) return "migration_pending";
-  if (p.quoteReserve >= p.migrationQuoteThreshold) return "curve_completed";
+export function mapLifecycle(p: { isMigrated: number; migrationProgress: number; quoteReserve: bigint; migrationQuoteThreshold: bigint; dammV2Confirmed?: boolean }): Lifecycle {
+  if (p.isMigrated === 1) return p.dammV2Confirmed ? "damm_v2_live" : "migration_pending";
+  if (p.migrationProgress >= 2) return "migration_pending";
+  if (p.migrationProgress === 1 || (p.migrationQuoteThreshold > 0n && p.quoteReserve >= p.migrationQuoteThreshold)) return "curve_completed";
   return "curve_active";
 }
 

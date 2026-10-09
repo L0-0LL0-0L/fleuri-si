@@ -61,15 +61,25 @@ export const pqConfirm = createServerFn({ method: "POST" })
     return safe(() => s.confirmPrepared(context.userId, data.preparationId));
   });
 
+export const pqRetry = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ preparationId: id }).strict().parse(d))
+  .handler(async ({ data, context }) => {
+    const s = await import("./pq.server");
+    return safe(() => s.retryPrepared(context.userId, data.preparationId));
+  });
+
 export const pqMine = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const [identities, launches] = await Promise.all([
+    const [identities, launches, preparations] = await Promise.all([
       context.supabase.from("pq_identities").select("id,wallet,cluster,key_hash,registration_hash,status,anchor_signature,anchor_slot,created_at").eq("owner_id", context.userId).order("created_at", { ascending: false }),
       context.supabase.from("launches").select("id,passport_id,pool,base_mint,lifecycle,signature,cluster,created_at,passports(manifest_hash,manifest)").eq("owner_id", context.userId).order("created_at", { ascending: false }),
+      (context.supabase as any).from("chain_preparations").select("id,kind,cluster,subject,signature,submitted_at,expires_at,confirmed_at").eq("owner_id", context.userId).not("submitted_at", "is", null).is("confirmed_at", null).order("created_at", { ascending: false }).limit(20),
     ]);
     if (identities.error) return { ok: false as const, error: identities.error.message };
-    return { ok: true as const, data: { identities: identities.data ?? [], launches: (launches.data ?? []) as any[] } };
+    if (launches.error || preparations.error) return {ok: false as const, error: (launches.error || preparations.error)!.message};
+    return { ok: true as const, data: { identities: identities.data ?? [], launches: (launches.data ?? []) as any[], preparations: preparations.data ?? [] } };
   });
 
 export const pqStartLaunch = createServerFn({ method: "POST" })
@@ -90,7 +100,7 @@ export const pqPinImage = createServerFn({ method: "POST" })
 
 export const pqPrepareLaunch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ passport: z.unknown() }).strict().parse(d))
+  .inputValidator((d: unknown) => z.object({ passport: z.unknown() }).strict().refine(v => JSON.stringify(v).length <= 40_000, "Passport too large").parse(d))
   .handler(async ({ data, context }) => {
     const s = await import("./pq.server");
     return safe(() => s.prepareLaunch(context.userId, data.passport));
@@ -112,7 +122,7 @@ export const pqRefreshLifecycle = createServerFn({ method: "POST" })
   });
 
 export const pqVerify = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ passport: z.unknown().optional(), hash: z.string().regex(/^[0-9a-f]{64}$/).optional() }).strict().parse(d))
+  .inputValidator((d: unknown) => z.object({ passport: z.unknown().optional(), hash: z.string().regex(/^[0-9a-f]{64}$/).optional() }).strict().refine(v => (v.passport !== undefined) !== (v.hash !== undefined), "Provide a passport or hash").parse(d))
   .handler(async ({ data }) => {
     if (data.passport && JSON.stringify(data.passport).length > 40_000) return { ok: false as const, error: "Passport too large." };
     const s = await import("./pq.server");

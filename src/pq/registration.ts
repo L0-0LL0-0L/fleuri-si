@@ -49,7 +49,7 @@ export function isSolanaAddress(s: string) {
 export function verifyWalletSignature(wallet: string, message: Uint8Array, sig: Uint8Array) {
   if (sig.length !== 64 || !isSolanaAddress(wallet)) return false;
   try {
-    return ed25519.verify(sig, message, bs58.decode(wallet));
+    return ed25519.verify(sig, message, bs58.decode(wallet), { zip215: false });
   } catch {
     return false;
   }
@@ -78,7 +78,7 @@ export function validateRegistration(input: {
   if (!c) throw new Error("Unknown challenge.");
   if (c.owner_id !== input.ownerId) throw new Error("This challenge belongs to a different account.");
   if (c.used_at) throw new Error("This challenge was already used.");
-  if (Date.parse(c.expires_at) <= input.now) throw new Error("This challenge has expired. Request a new one.");
+  if (!Number.isFinite(Date.parse(c.expires_at)) || Date.parse(c.expires_at) <= input.now) throw new Error("This challenge has expired. Request a new one.");
   if (input.publicKeyB64.length > 4096 || input.walletSignatureB64.length > 200 || input.pqSignatureB64.length > 6000) throw new Error("Signature or key has an invalid length.");
   const pk = fromB64(input.publicKeyB64);
   if (pk.length !== PUBLIC_KEY_BYTES) throw new Error("ML-DSA-65 public key has the wrong length.");
@@ -87,4 +87,20 @@ export function validateRegistration(input: {
   if (!verifyWalletSignature(c.wallet, msg, fromB64(input.walletSignatureB64))) throw new Error("Wallet signature is invalid for this statement.");
   if (!pqVerify(pk, msg, fromB64(input.pqSignatureB64), CTX_REGISTRATION)) throw new Error("ML-DSA-65 possession signature is invalid.");
   return { publicKey: pk, registrationHash: registrationHash(c.statement) };
+}
+
+/** Re-check a stored registration proof without trusting database status or an embedded key. */
+export function validateIdentityProof(i: {owner_id: string; wallet: string; cluster: string; genesis_hash: string; public_key: string; key_hash: string; statement: string; registration_hash: string; wallet_signature: string; pq_signature: string}, domain?: string) {
+  const prefix = "Fleuri PQ identity registration\n";
+  if (!i.statement.startsWith(prefix) || i.statement.length > 16384) throw new Error("Invalid registration statement.");
+  const f = JSON.parse(i.statement.slice(prefix.length));
+  const fields = {domain:f.domain,cluster:f.cluster,genesisHash:f.genesisHash,ownerId:f.ownerId,wallet:f.wallet,pqKeyHash:f.pqKeyHash,challengeId:f.challengeId,nonce:f.nonce,issuedAt:f.issuedAt,expiresAt:f.expiresAt};
+  if(buildStatement(fields)!==i.statement) throw new Error("Registration statement is not canonical or has unexpected fields.");
+  if (f.schema !== REGISTRATION_SCHEMA || f.alg !== PQ_ALG || f.ownerId !== i.owner_id || f.wallet !== i.wallet || f.pqKeyHash !== i.key_hash || f.cluster !== i.cluster || f.genesisHash !== i.genesis_hash || (domain && f.domain !== domain)) throw new Error("Registered identity fields do not match its signed statement.");
+  if (!(i.cluster in GENESIS) || i.genesis_hash !== GENESIS[i.cluster as Cluster] || registrationHash(i.statement) !== i.registration_hash) throw new Error("Invalid identity cluster or registration hash.");
+  const expiry = Date.parse(f.expiresAt);
+  const issued = Date.parse(f.issuedAt);
+  if (!Number.isFinite(issued) || !Number.isFinite(expiry) || expiry - issued !== CHALLENGE_TTL_MS) throw new Error("Invalid registration challenge lifetime.");
+  validateRegistration({challenge: {id: f.challengeId, owner_id: i.owner_id, wallet: i.wallet, pq_key_hash: i.key_hash, statement: i.statement, expires_at: f.expiresAt, used_at: null}, ownerId: i.owner_id, now: issued, publicKeyB64: i.public_key, walletSignatureB64: i.wallet_signature, pqSignatureB64: i.pq_signature});
+  return f as RegistrationFields;
 }

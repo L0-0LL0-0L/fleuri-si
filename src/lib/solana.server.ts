@@ -1,8 +1,9 @@
 // Server-only Solana + Meteora DBC adapter. Never holds user keys; builds unsigned SDK transactions
 // and reads confirmed chain state. Env is read inside functions (Workers inject at request time).
 import { Connection, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
-import { DynamicBondingCurveClient, deriveDbcPoolAddress, deriveMintMetadata } from "@meteora-ag/dynamic-bonding-curve-sdk";
-import { domainHash, b64, utf8 } from "@/pq/canonical";
+import { DynamicBondingCurveClient, deriveDbcPoolAddress, deriveMintMetadata, METAPLEX_PROGRAM_ID, DAMM_V2_MIGRATION_FEE_ADDRESS, DAMM_V2_PROGRAM_ID, deriveDammV2PoolAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import { getMint, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { domainHash, b64, utf8, sha256Hex } from "@/pq/canonical";
 import { DBC_PROGRAM_ID, SOL_MINT } from "@/pq/passport";
 import { GENESIS, type Cluster } from "@/pq/registration";
 import type { Check } from "@/pq/passport";
@@ -22,7 +23,7 @@ export function solEnv() {
     dammV2Config: process.env["METEORA_DAMM_V2_CONFIG"] || null,
     pinataJwt: process.env["PINATA_JWT"] || null,
     gateway: (process.env["IPFS_GATEWAY"] || "https://gateway.pinata.cloud/ipfs/").replace(/\/?$/, "/"),
-    origin: process.env["FLEURI_ORIGIN"] || "fleuri-digital-garden.lovable.app",
+    origin: new URL(process.env["FLEURI_ORIGIN"] || "https://id-preview--bf8617bb-d302-4646-b8c0-e4bb493471e2.lovable.app").origin,
   };
 }
 
@@ -30,7 +31,7 @@ export function connection() {
   const e = solEnv();
   if (!e.cluster) throw new Error(`SOLANA_CLUSTER must be "devnet" or "mainnet-beta".`);
   if (!e.rpcUrl) throw new Error("SOLANA_RPC_URL is required for mainnet-beta.");
-  return new Connection(e.rpcUrl, "confirmed");
+  return new Connection(e.rpcUrl, {commitment: "confirmed", disableRetryOnRateLimit: true, fetch: (url, init) => fetch(url, {...init, signal: AbortSignal.timeout(15_000)})});
 }
 
 export async function assertGenesis(conn: Connection, cluster: Cluster) {
@@ -54,14 +55,14 @@ export function snapshotConfig(cfg: Record<string, any>) {
     const p = plain(v);
     if (p !== v || p === null || typeof p !== "object") {
       if (/padding/i.test(path)) return;
-      out[path] = typeof p === "number" && !Number.isSafeInteger(p) ? String(p) : typeof p === "string" && p.length > 200 ? p.slice(0, 200) : p;
+      if (path.length > 64 || (typeof p === "string" && p.length > 200) || (typeof p === "number" && !Number.isSafeInteger(p))) throw new Error("Unsupported config field: " + path);
+      out[path] = p;
       return;
     }
     if (Array.isArray(p)) p.forEach((x, i) => walk(x, `${path}.${i}`));
     else for (const k of Object.keys(p).sort()) walk(p[k], path ? `${path}.${k}` : k);
   };
   walk(cfg, "");
-  for (const k of Object.keys(out)) if (k.length > 64) delete out[k];
   return { snapshot: out, snapshotHash: domainHash("fleuri:config-snapshot:v1", out) };
 }
 
@@ -83,6 +84,10 @@ export async function readDbcConfig(conn: Connection, address: string) {
   if (n(cfg.tokenUpdateAuthority) !== 1) problems.push("token update authority must be Immutable");
   if (n(cfg.fixedTokenSupplyFlag) !== 1) problems.push("config must use a fixed token supply so supply can be bound");
   if (n(cfg.tokenType) !== 0) problems.push("first release supports SPL Token base mints only");
+  if (n(cfg.poolFees?.baseFee?.baseFeeMode) === 2) problems.push("rate limiter configs are deprecated for new pools");
+  if (n(cfg.tokenDecimal) < 6 || n(cfg.tokenDecimal) > 9) problems.push("token decimals must be 6–9");
+  if (s(cfg.preMigrationTokenSupply) !== s(cfg.postMigrationTokenSupply)) problems.push("first release requires the same supply cap before and after migration");
+  if (BigInt(s(cfg.preMigrationTokenSupply)) <= 0n) problems.push("fixed token supply must be positive");
   const terms = {
     fees: {
       baseFeeBps: Math.round(n(cfg.poolFees?.baseFee?.cliffFeeNumerator) / 100_000),
@@ -108,13 +113,15 @@ export async function readDbcConfig(conn: Connection, address: string) {
     },
     authority: {
       tokenUpdateAuthority: "immutable" as const,
+      mintAuthority: "revoked" as const,
+      freezeAuthority: "revoked" as const,
       leftoverReceiver: s(cfg.leftoverReceiver),
-      policy: "Metadata is immutable at creation. Mint authority is held by the DBC pool and the transfer-hook program/authority, if any, is revoked at curve completion. No Fleuri-controlled authority exists.",
+      policy: "SPL mint and freeze authorities are revoked. Metaplex metadata is immutable with the system-program update authority. This release uses no transfer hook. Fees and LP ownership follow the signed DBC config.",
     },
     decimals: n(cfg.tokenDecimal),
     totalSupply: s(cfg.preMigrationTokenSupply),
   };
-  return { cfg, problems, terms, ...snapshotConfig(cfg) };
+  return { cfg, problems, terms, ...snapshotConfig({...cfg, accountDataSha256: sha256Hex(info.data)}) };
 }
 
 export async function buildCreatePoolTx(conn: Connection, p: { config: string; baseMint: string; creator: string; name: string; symbol: string; uri: string }) {
@@ -133,9 +140,10 @@ export function finalizeUnsigned(tx: Transaction, feePayer: PublicKey, bh: { blo
   const msg = tx.compileMessage();
   const signers = msg.accountKeys.slice(0, msg.header.numRequiredSignatures).map((k) => k.toBase58());
   const extra = signers.filter((x) => !allowedSigners.includes(x));
-  if (extra.length) throw new Error(`Transaction requires unexpected signers: ${extra.join(", ")}`);
+  if (extra.length || signers.length !== new Set(allowedSigners).size) throw new Error(`Transaction requires unexpected signers: ${signers.join(", ")}`);
   if (!tx.instructions.some((i) => i.programId.toBase58() === DBC_PROGRAM_ID || i.programId.equals(MEMO_PROGRAM_ID))) throw new Error("Transaction does not call the expected program.");
   const message = tx.serializeMessage();
+  if (tx.serialize({requireAllSignatures: false, verifySignatures: false}).length > 1232) throw new Error("Prepared legacy transaction exceeds the wallet transaction size limit.");
   return { tx, message, lastValidBlockHeight: bh.lastValidBlockHeight, signers };
 }
 
@@ -153,7 +161,7 @@ export const unsignedB64 = (tx: Transaction) => b64(tx.serialize({ requireAllSig
 /** Reads a confirmed transaction. Returns null when not yet visible. */
 export async function readConfirmedTx(conn: Connection, signature: string) {
   const t = await conn.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
-  if (!t) return null;
+  if (!t || !t.meta) return null;
   const message = t.transaction.message;
   const keys = message.getAccountKeys().staticAccountKeys.map((k) => k.toBase58());
   const ixs = message.compiledInstructions.map((ix) => ({ program: keys[ix.programIdIndex], data: ix.data, accounts: ix.accountKeyIndexes.map((i) => keys[i]) }));
@@ -162,18 +170,30 @@ export async function readConfirmedTx(conn: Connection, signature: string) {
 }
 
 export async function readPool(conn: Connection, pool: string) {
+  const info = await conn.getAccountInfo(new PublicKey(pool));
+  if (!info) return null;
+  if (info.owner.toBase58() !== DBC_PROGRAM_ID) throw new Error("Pool is not owned by Meteora DBC.");
   const client = new DynamicBondingCurveClient(conn, "confirmed");
   const p: any = await client.state.getPool(new PublicKey(pool));
   if (!p) return null;
-  const cfg: any = await client.state.getPoolConfig(p.config);
+  const state = p.poolState;
+  if (!state) throw new Error("Unsupported DBC pool layout.");
+  const cfg: any = await client.state.getPoolConfig(state.config);
+  if (!cfg) throw new Error("Pool config is not readable.");
+  const dammConfig = DAMM_V2_MIGRATION_FEE_ADDRESS[n(cfg.migrationFeeOption)];
+  const dammV2Pool = dammConfig ? deriveDammV2PoolAddress(dammConfig, state.baseMint, cfg.quoteMint) : null;
+  const dammAccount = n(state.isMigrated) === 1 && dammV2Pool ? await conn.getAccountInfo(dammV2Pool) : null;
   return {
-    baseMint: s(p.baseMint),
-    config: s(p.config),
-    creator: s(p.creator),
-    isMigrated: n(p.isMigrated),
-    migrationProgress: n(p.migrationProgress),
-    quoteReserve: BigInt(s(p.quoteReserve)),
+    baseMint: s(state.baseMint),
+    config: s(state.config),
+    creator: s(state.creator),
+    isMigrated: n(state.isMigrated),
+    migrationProgress: n(state.migrationProgress),
+    quoteReserve: BigInt(s(state.quoteReserve)),
     migrationQuoteThreshold: BigInt(s(cfg?.migrationQuoteThreshold)),
+    dammV2Pool: dammV2Pool?.toBase58() ?? null,
+    dammConfig: dammConfig?.toBase58() ?? null,
+    dammV2Confirmed: !!dammAccount && dammAccount.owner.equals(DAMM_V2_PROGRAM_ID),
   };
 }
 
@@ -181,11 +201,18 @@ export async function readPool(conn: Connection, pool: string) {
 export async function readTokenMetadata(conn: Connection, mint: string) {
   const info = await conn.getAccountInfo(deriveMintMetadata(new PublicKey(mint)));
   if (!info) return null;
-  const d = info.data;
+  if (!info.owner.equals(METAPLEX_PROGRAM_ID)) throw new Error("Metadata account has the wrong program owner.");
+  return decodeTokenMetadata(info.data, mint);
+}
+
+export function decodeTokenMetadata(d: Buffer, mint: string) {
+  if (d.length < 83 || d.length > 10000 || d[0] !== 4 || new PublicKey(d.subarray(33,65)).toBase58() !== mint) throw new Error("Invalid Metaplex metadata account.");
   let o = 1 + 32 + 32;
   const str = () => {
+    if (o + 4 > d.length) throw new Error("Truncated metadata.");
     const len = d.readUInt32LE(o);
     o += 4;
+    if (len > 200 || o + len > d.length) throw new Error("Invalid metadata string length.");
     const v = d.subarray(o, o + len).toString("utf8").replace(/\0+$/, "");
     o += len;
     return v;
@@ -194,10 +221,29 @@ export async function readTokenMetadata(conn: Connection, mint: string) {
   const symbol = str();
   const uri = str();
   o += 2;
-  if (d[o++] === 1) o += 4 + d.readUInt32LE(o) * 34;
+  const hasCreators = d[o++];
+  if (hasCreators === 1) { if (o + 4 > d.length) throw new Error("Truncated creators."); const count = d.readUInt32LE(o); if (count > 5) throw new Error("Invalid creators."); o += 4 + count * 34; }
+  else if (hasCreators !== 0) throw new Error("Invalid creator option.");
   o += 1;
+  if (o >= d.length || (d[o] !== 0 && d[o] !== 1)) throw new Error("Truncated metadata flags.");
   const isMutable = d[o] === 1;
   return { name, symbol, uri, isMutable, updateAuthority: new PublicKey(d.subarray(1, 33)).toBase58() };
+}
+
+export async function readTokenMint(conn: Connection, mint: string) {
+  const m = await getMint(conn, new PublicKey(mint), "confirmed", TOKEN_PROGRAM_ID);
+  return {decimals: m.decimals, supply: m.supply, mintAuthority: m.mintAuthority?.toBase58() ?? null, freezeAuthority: m.freezeAuthority?.toBase58() ?? null};
+}
+
+export async function fetchIpfsBytes(uri: string, maxBytes: number) {
+  const cid = uri.match(/(?:^ipfs:\/\/|\/ipfs\/)([A-Za-z0-9]{46,100})$/)?.[1];
+  if (!cid) throw new Error("Not an immutable IPFS content URI.");
+  const r = await fetch(solEnv().gateway + cid, {signal: AbortSignal.timeout(15_000)});
+  if (!r.ok || !r.body) throw new Error("IPFS content is unavailable.");
+  const reader = r.body.getReader(); const chunks: Uint8Array[] = []; let size=0;
+  try { for (;;) { const v=await reader.read(); if (v.done) break; size+=v.value.length; if(size>maxBytes) throw new Error("IPFS document too large."); chunks.push(v.value); } }
+  finally { await reader.cancel(); }
+  const bytes=new Uint8Array(size); let off=0; for(const c of chunks){bytes.set(c,off);off+=c.length;} return bytes;
 }
 
 export async function pinBytes(bytes: Uint8Array, filename: string, mime: string) {
@@ -206,9 +252,10 @@ export async function pinBytes(bytes: Uint8Array, filename: string, mime: string
   const form = new FormData();
   form.append("file", new Blob([bytes as BlobPart], { type: mime }), filename);
   form.append("pinataOptions", JSON.stringify({ cidVersion: 1 }));
-  const r = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", { method: "POST", headers: { Authorization: `Bearer ${pinataJwt}` }, body: form });
+  const r = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", { method: "POST", headers: { Authorization: `Bearer ${pinataJwt}` }, body: form, signal: AbortSignal.timeout(30_000) });
   if (!r.ok) throw new Error(`IPFS pinning failed (${r.status}).`);
   const j = (await r.json()) as { IpfsHash: string };
+  if (!/^[A-Za-z0-9]{46,100}$/.test(j.IpfsHash)) throw new Error("Pinning provider returned an invalid content ID.");
   return j.IpfsHash;
 }
 
@@ -221,7 +268,7 @@ export async function readiness(): Promise<{ cluster: string; rpcSource: string;
   let conn: Connection | null = null;
   if (e.cluster && e.rpcUrl) {
     try {
-      conn = new Connection(e.rpcUrl, "confirmed");
+      conn = connection();
       await assertGenesis(conn, e.cluster);
       push("rpc", "RPC + genesis", "pass", `genesis matches ${e.cluster}`);
     } catch (err) {
@@ -248,7 +295,7 @@ export async function readiness(): Promise<{ cluster: string; rpcSource: string;
     }
   }
   push("ipfs", "Immutable metadata pinning", e.pinataJwt ? "pass" : "fail", e.pinataJwt ? `Pinata · gateway ${e.gateway}` : "PINATA_JWT is not set.");
-  push("damm", "Manual DAMM v2 migration", e.dammV2Config ? "pass" : "unavailable", e.dammV2Config ? "METEORA_DAMM_V2_CONFIG set" : "Optional: set METEORA_DAMM_V2_CONFIG to allow manual migrateToDammV2. Meteora keepers migrate many configs automatically.");
+  push("damm", "DAMM v2 graduation", "pass", "The migration config is derived from the signed DBC fee option. The actual DAMM v2 pool must exist before graduation is shown as live.");
   const ready = checks.filter((c) => c.id !== "damm").every((c) => c.status === "pass");
   return { cluster: e.cluster ?? e.clusterRaw, rpcSource: e.rpcSource, ready, checks, dbcConfig: e.dbcConfig };
 }

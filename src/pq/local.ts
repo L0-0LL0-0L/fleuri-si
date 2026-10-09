@@ -10,6 +10,7 @@ const IDLE_MS = 15 * 60_000;
 
 interface Snap { envelope: KeyEnvelope | null; unlocked: boolean; backupAck: boolean; ready: boolean }
 let snap: Snap = { envelope: null, unlocked: false, backupAck: false, ready: false };
+const serverSnap: Snap = { envelope: null, unlocked: false, backupAck: false, ready: false };
 let secret: PqKeypair | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const subs = new Set<() => void>();
@@ -44,8 +45,10 @@ export function lock() {
 
 export async function createIdentity(password: string) {
   const kp = generatePqKeypair();
-  const env = await encryptKeypair(kp, password);
-  localStorage.setItem(KEY, JSON.stringify(env));
+  let env: KeyEnvelope;
+  try { env = await encryptKeypair(kp, password); localStorage.setItem(KEY, JSON.stringify(env)); }
+  catch (e) { kp.secretKey.fill(0); throw e; }
+  secret?.secretKey.fill(0);
   localStorage.removeItem(ACK);
   secret = kp;
   arm();
@@ -55,7 +58,9 @@ export async function createIdentity(password: string) {
 
 export async function unlock(password: string) {
   if (!snap.envelope) throw new Error("No key file on this device.");
-  secret = await decryptEnvelope(snap.envelope, password);
+  const kp = await decryptEnvelope(snap.envelope, password);
+  secret?.secretKey.fill(0);
+  secret = kp;
   arm();
   emit({ unlocked: true });
 }
@@ -64,7 +69,7 @@ export async function unlock(password: string) {
 export async function restoreBackup(fileText: string, password: string) {
   const env = parseEnvelope(fileText);
   const kp = await decryptEnvelope(env, password);
-  localStorage.setItem(KEY, JSON.stringify(env));
+  try { localStorage.setItem(KEY, JSON.stringify(env)); } catch (e) { kp.secretKey.fill(0); throw e; }
   secret?.secretKey.fill(0);
   secret = kp;
   arm();
@@ -100,6 +105,6 @@ export function usePqLocal() {
   return useSyncExternalStore(
     (f) => (subs.add(f), () => subs.delete(f)),
     () => snap,
-    () => snap,
+    () => serverSnap,
   );
 }
