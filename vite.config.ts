@@ -8,7 +8,8 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   vite: {
-    resolve: { alias: { "rpc-websockets": "/dev-server/node_modules/rpc-websockets/dist/index.browser.mjs" } },
+    resolve: { conditions: ["workerd", "worker", "browser", "module", "import", "default"] },
+    ssr: { resolve: { conditions: ["workerd", "worker", "browser", "module", "import", "default"] } },
   },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
