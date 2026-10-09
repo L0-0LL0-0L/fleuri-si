@@ -1,52 +1,23 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/bits";
-import { CheckList, Panel, downloadBlob } from "@/components/pq/ui";
-import { pqVerify } from "@/lib/pq.functions";
-import type { Check } from "@/pq/passport";
+import { CopyLink, PageHeader } from "@/components/bits";
+import { Panel, explorerAddr, explorerTx, lifecycleLabel } from "@/components/pq/ui";
+import { pqRefreshLifecycle, pqVerify } from "@/lib/pq.functions";
+import { VerificationView } from "./verify";
 
-export const Route = createFileRoute("/passport/$hash")({
-  head: ({ params }) => ({
-    meta: [
-      { title: `Passport ${params.hash.slice(0, 10)}… — fleuri` },
-      { name: "description", content: "Launch passport detail with independent verification checks." },
-      { property: "og:title", content: "Launch passport — fleuri" },
-      { property: "og:description", content: "Signed ML-DSA-65 launch terms and verification status." },
-      { property: "og:type", content: "article" },
-      { name: "twitter:card", content: "summary" },
-    ],
-  }),
-  component: PassportPage,
-});
-
+export const Route=createFileRoute("/passport/$hash")({head:()=>({meta:[{title:"Launch passport — fleuri"},{name:"description",content:"Inspect a signed Fleuri launch passport and independently verify its Meteora launch and graduation."}]}),component:PassportPage});
 function PassportPage() {
-  const { hash } = Route.useParams();
-  const valid = /^[0-9a-f]{64}$/.test(hash);
-  const [res, setRes] = useState<{ ok: true; data: any } | { ok: false; error: string } | null>(null);
-  useEffect(() => {
-    if (!valid) return;
-    pqVerify({ data: { hash } }).then(setRes, (e) => setRes({ ok: false, error: String(e?.message ?? e) }));
-  }, [hash, valid]);
-
-  const passport = res?.ok ? res.data?.passport : null;
-  return (
-    <div className="space-y-4">
-      <PageHeader title="passport" kicker="launch provenance" />
-      <p className="break-all font-mono text-xs">{hash}</p>
-      {!valid ? <p role="alert" className="text-sm text-poppy-deep">That is not a valid passport hash.</p> : !res ? <p className="text-sm">Checking…</p> : !res.ok ? (
-        <p role="alert" className="text-sm text-poppy-deep">{res.error}</p>
-      ) : (
-        <>
-          <CheckList label="Verification checks" checks={(res.data?.checks ?? []) as Check[]} />
-          {passport && (
-            <Panel title="signed terms">
-              <pre className="max-h-96 overflow-auto bg-paper p-2 font-mono text-xs">{JSON.stringify(passport.manifest ?? passport, null, 2)}</pre>
-              <button type="button" className="btn btn-paper" onClick={() => downloadBlob(new Blob([JSON.stringify(passport, null, 2)], { type: "application/json" }), `passport-${hash.slice(0, 12)}.json`)}>Export passport</button>
-            </Panel>
-          )}
-        </>
-      )}
-      <p className="text-sm"><Link to="/verify" className="underline">Verify another</Link> · <Link to="/launchpad" className="underline">launchpad</Link></p>
-    </div>
-  );
+  const {hash}=Route.useParams();const [result,setResult]=useState<any>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState("");
+  async function load(refresh=false) {
+    setBusy(true);setError("");
+    try {if(!/^[0-9a-f]{64}$/.test(hash))throw new Error("Invalid passport hash.");if(refresh&&result?.launch){const r=await pqRefreshLifecycle({data:{launchId:result.launch.id}});if(!r.ok)throw new Error(r.error);}const r=await pqVerify({data:{hash}});if(!r.ok)throw new Error(r.error);setResult(r.data);}
+    catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  }
+  useEffect(()=>{setResult(null);void load();},[hash]);
+  const l=result?.launch;const m=result?.passport?.manifest;
+  return <div className="space-y-4"><PageHeader title={m?`${m.token.name}. in writing.`:"the launch passport."} kicker="permanent provenance"><CopyLink path={`/passport/${hash}`}/></PageHeader><p className="break-all font-mono text-xs">{hash}</p><p className="text-sm">Every fee, share and authority policy is signed. Every chain claim is checked separately.</p>
+    {busy&&<p role="status" className="hair bg-paper-light p-3 text-sm">Reading identity, chain state and pinned metadata…</p>}{error&&<p role="alert" className="hair break-words bg-paper-light p-3 text-sm text-poppy-deep">{error}</p>}
+    {result&&<VerificationView result={result}/>}
+    {l&&<Panel title="On-chain records"><p className="font-semibold">{lifecycleLabel[l.lifecycle]??l.lifecycle} · last recorded state</p><div className="flex flex-wrap gap-3 text-sm underline"><a href={explorerTx(l.signature,l.cluster)} target="_blank" rel="noreferrer">Launch transaction ↗</a><a href={explorerAddr(l.pool,l.cluster)} target="_blank" rel="noreferrer">DBC pool ↗</a><a href={explorerAddr(l.base_mint,l.cluster)} target="_blank" rel="noreferrer">Token mint ↗</a>{l.damm_v2_pool&&<a href={explorerAddr(l.damm_v2_pool,l.cluster)} target="_blank" rel="noreferrer">DAMM v2 pool ↗</a>}{result.metadataUri&&<a href={result.metadataUri} target="_blank" rel="noreferrer">Immutable metadata ↗</a>}</div></Panel>}
+    <div className="flex flex-wrap gap-3"><button type="button" className="btn btn-paper" disabled={busy} onClick={()=>void load(true)}>Recheck full proof</button><Link to="/verify" className="btn btn-paper">Verify another passport</Link><Link to="/launchpad" className="btn btn-red">Open launchpad</Link></div></div>;
 }

@@ -1,77 +1,115 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Keypair } from "@solana/web3.js";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/bits";
-import { Panel, RealBadge } from "@/components/pq/ui";
-import { getPqReadiness, pqPublicLaunches } from "@/lib/pq.functions";
+import { FlowerTiles } from "@/components/PixelFlower";
+import { CheckList, Panel, PassportTerms, PendingTransactions, RealBadge, WalletButtons, downloadPassport, explorerTx, lifecycleLabel, signSubmitConfirm, useWallets, type PqMine } from "@/components/pq/ui";
+import { getPqReadiness, pqMine, pqPinImage, pqPrepareLaunch, pqPrepareMigration, pqPublicLaunches, pqRefreshLifecycle, pqStartLaunch } from "@/lib/pq.functions";
+import { b64 } from "@/pq/canonical";
+import { loadLocal, usePqLocal, withSecret } from "@/pq/local";
+import { parseManifest, signPassport, type PassportManifest, type SignedPassportT } from "@/pq/passport";
+import { useGarden } from "@/store/garden";
+import type { WalletKind } from "@/services/wallet";
 
 export const Route = createFileRoute("/launchpad")({
-  head: () => ({
-    meta: [
-      { title: "Launchpad — fleuri" },
-      { name: "description", content: "Real Meteora DBC launches with ML-DSA-65 launch passports. Shows live readiness and confirmed launches." },
-      { property: "og:title", content: "Launchpad — fleuri" },
-      { property: "og:description", content: "Post-quantum launch provenance on Meteora, separate from the vSOL sandbox." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-    ],
-  }),
-  component: LaunchpadPage,
+  head: () => ({meta:[{title:"Launchpad — fleuri"},{name:"description",content:"Grow a token on Meteora with an independent post-quantum identity and a signed launch passport."}]}),
+  component: Launchpad,
 });
 
-type Res = { ok: true; data: any } | { ok: false; error: string };
-
-function LaunchpadPage() {
-  const [ready, setReady] = useState<Res | null>(null);
-  const [launches, setLaunches] = useState<Res | null>(null);
-  useEffect(() => {
-    getPqReadiness().then(setReady, (e) => setReady({ ok: false, error: String(e?.message ?? e) }));
-    pqPublicLaunches().then(setLaunches, (e) => setLaunches({ ok: false, error: String(e?.message ?? e) }));
-  }, []);
-  const rd = ready?.ok ? ready.data : null;
-  const problems: string[] = rd?.problems ?? rd?.missing ?? [];
-  const isReady = !!rd && (rd.ready === true || rd.ok === true) && problems.length === 0;
-
-  return (
-    <div className="space-y-4">
-      <PageHeader title="launchpad" kicker="real launches">
-        <RealBadge cluster={rd?.cluster} />
-      </PageHeader>
-      <p className="max-w-prose text-sm">
-        Real Meteora launches, separate from the vSOL garden. Each launch carries a passport signed by your PQ identity. This proves who launched and on what terms. It does not make Solana custody quantum-safe.
-      </p>
-      <Panel title="readiness">
-        {!ready ? <p className="text-sm">Checking configuration…</p> : !ready.ok ? (
-          <p role="alert" className="text-sm text-poppy-deep">Not ready: {ready.error}</p>
-        ) : isReady ? (
-          <p className="text-sm">Configuration validated. Launching starts from your <Link to="/identity" className="underline">PQ identity</Link>.</p>
-        ) : (
-          <>
-            <p className="text-sm font-semibold">Real launches are not available yet.</p>
-            {problems.length > 0 && <ul className="list-disc pl-5 text-sm">{problems.map((p) => <li key={p}>{p}</li>)}</ul>}
-          </>
-        )}
-      </Panel>
-      <Panel title="confirmed launches">
-        {!launches ? <p className="text-sm">Loading…</p> : !launches.ok ? (
-          <p role="alert" className="text-sm text-poppy-deep">{launches.error}</p>
-        ) : launches.data.length === 0 ? (
-          <p className="text-sm text-ink-soft">No confirmed launches yet.</p>
-        ) : (
-          <ul className="divide-y divide-ink/20">
-            {launches.data.map((l: any) => {
-              const p = Array.isArray(l.passports) ? l.passports[0] : l.passports;
-              const hash: string | undefined = p?.manifest_hash;
-              return (
-                <li key={l.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                  <span className="min-w-0 truncate"><strong>${p?.manifest?.token?.symbol ?? "?"}</strong> · {l.lifecycle} · {l.cluster}</span>
-                  {hash && <Link to="/passport/$hash" params={{ hash }} className="underline">passport</Link>}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Panel>
-      <p className="text-sm"><Link to="/verify" className="underline">Verify any passport</Link></p>
+function Launchpad() {
+  const local=usePqLocal(); const {userId,store}=useGarden(); const wallets=useWallets();
+  const mint=useRef<Keypair|null>(null);
+  const [readiness,setReadiness]=useState<any>(null); const [readError,setReadError]=useState("");
+  const [mine,setMine]=useState<PqMine|null>(null); const [launches,setLaunches]=useState<any[]>([]);
+  const [busy,setBusy]=useState<string|null>(null); const [error,setError]=useState("");
+  const [name,setName]=useState(""); const [symbol,setSymbol]=useState("");
+  const [imageUri,setImageUri]=useState(""); const [imageHash,setImageHash]=useState<string|null>(null); const [file,setFile]=useState<File|null>(null);
+  const [manifest,setManifest]=useState<PassportManifest|null>(null); const [signed,setSigned]=useState<SignedPassportT|null>(null);
+  const [reviewAck,setReviewAck]=useState(false); const [done,setDone]=useState<{signature:string;hash:string}|null>(null);
+  const identity=mine?.identities.find(i=>i.key_hash===local.envelope?.keyHash && i.cluster===readiness?.cluster && i.status==="anchored");
+  async function refresh() {
+    if(store.get().userId) {const r=await pqMine(); if(r.ok) setMine(r.data); else setError(r.error);}
+    const r=await pqPublicLaunches(); if(r.ok) setLaunches(r.data); else setReadError(r.error);
+  }
+  async function checkReadiness() {
+    setReadError("");
+    try {const r=await getPqReadiness(); if(r.ok) setReadiness(r.data); else setReadError(r.error);}
+    catch(e) {setReadError((e as Error).message);}
+  }
+  useEffect(()=>{loadLocal(); void checkReadiness();},[]);
+  useEffect(()=>{void refresh().catch(e=>setReadError(e.message));},[userId]);
+  async function run(label:string,fn:()=>Promise<void>) {
+    setBusy(label); setError("");
+    try {await fn();} catch(e) {setError((e as Error).message); await refresh().catch(()=>{});} finally {setBusy(null);}
+  }
+  async function review() {
+    if(!identity || !local.unlocked || !local.backupAck || !readiness?.ready) throw new Error("Back up, unlock and anchor your identity, then resolve the readiness checks.");
+    let uri=imageUri, hash=imageHash;
+    if(file) {
+      if(file.size>1_000_000) throw new Error("Token image must be 1 MB or smaller.");
+      setBusy("Pinning your image…"); const r=await pqPinImage({data:{data:b64(new Uint8Array(await file.arrayBuffer())),mime:file.type}});
+      if(!r.ok) throw new Error(r.error); uri=r.data.imageUri; hash=r.data.imageSha256; setImageUri(uri); setImageHash(hash);
+    }
+    mint.current ??= Keypair.generate();
+    const r=await pqStartLaunch({data:{identityId:identity.id,baseMint:mint.current.publicKey.toBase58()}});
+    if(!r.ok) throw new Error(r.error);
+    const m=parseManifest({...r.data.template,token:{...r.data.template.token,name:name.trim(),symbol:symbol.trim().toUpperCase(),imageUri:uri.trim(),imageSha256:hash}});
+    setManifest(m); setReviewAck(false);
+  }
+  async function launch(kind:WalletKind) {
+    if(!signed || !mint.current) throw new Error("Sign this draft before launching.");
+    setBusy("Preparing immutable metadata and the Meteora transaction…");
+    const p=await pqPrepareLaunch({data:{passport:signed}}); if(!p.ok) throw new Error(p.error);
+    const r=await signSubmitConfirm(kind,p.data,{coSign:[mint.current],onStatus:setBusy});
+    setDone({signature:r.signature,hash:signed.manifestHash}); mint.current=null;
+    toast.success(r.detail); await refresh();
+  }
+  async function migrate(kind:WalletKind,id:string) {
+    const p=await pqPrepareMigration({data:{launchId:id}}); if(!p.ok) throw new Error(p.error);
+    const r=await signSubmitConfirm(kind,p.data,{onStatus:setBusy}); toast.success(r.detail); await refresh();
+  }
+  async function rebuildDraft() {
+    const r=await pqMine(); if(!r.ok) throw new Error(r.error);
+    setMine(r.data);
+    if(r.data.preparations.some((p:any)=>p.kind==="launch"&&p.subject===manifest?.token.baseMint)) throw new Error("This draft has a submitted transaction. Check its confirmation in Pending transactions first.");
+    mint.current=null; setManifest(null); setSigned(null); setReviewAck(false);
+  }
+  const canReview=!!identity && local.unlocked && local.backupAck && !!readiness?.ready;
+  return <div className="space-y-5">
+    <PageHeader title="plant. prove. bloom." kicker="fleuri · meteora launchpad"><RealBadge cluster={readiness?.cluster}/></PageHeader>
+    <div className="hair grid overflow-hidden bg-paper-light sm:grid-cols-[minmax(0,1fr)_200px]">
+      <div className="space-y-3 p-4 sm:p-6"><p className="display text-2xl sm:text-3xl">a little chaos.<br/>a permanent paper trail.</p><p className="max-w-prose text-sm">Launch a token on Meteora’s bonding curve. Sign its exact terms with an independent ML-DSA-65 key. Let anyone verify the passport as it grows into a DAMM v2 pool.</p><div className="flex flex-wrap gap-3 text-sm font-semibold"><Link to="/identity" className="underline">Your PQ identity ↗</Link><Link to="/verify" className="underline">Verify a passport ↗</Link></div><p className="text-xs text-ink-soft">Post-quantum provenance. Solana wallets and funds still use Ed25519. Devnet uses test SOL; the garden’s vSOL balances do not fund these launches.</p></div>
+      <div className="hidden self-center p-4 sm:block"><FlowerTiles count={9} cols={3}/></div>
     </div>
-  );
+    <div className="grid gap-2 sm:grid-cols-4">{["01 · back up your key","02 · anchor your identity","03 · sign exact terms","04 · launch on Meteora"].map((s,i)=><div key={s} className={`hair p-3 font-mono text-xs ${i===2?"bg-poppy text-paper-light":"bg-paper-light"}`}>{s}</div>)}</div>
+    <Panel title="Network readiness">
+      {readiness?<CheckList label="Launch network readiness" checks={readiness.checks}/>:<p className="text-sm">{readError||"Reading network configuration…"}</p>}
+      {readError && readiness && <p role="alert" className="break-words text-sm text-poppy-deep">{readError}</p>}
+      <button type="button" className="btn btn-paper" onClick={()=>void checkReadiness()}>Recheck readiness</button>
+    </Panel>
+    {!userId && <Panel title="Your workspace"><p className="text-sm">Use your existing workspace session to register an identity and view your launches.</p><button type="button" className="btn btn-ink" disabled={!!busy} onClick={()=>void run("Opening workspace…",async()=>{await store.startSandbox();await refresh();})}>{busy??"Open workspace"}</button></Panel>}
+    {!canReview && !manifest && <p className="hair bg-paper-light p-3 text-sm">Before launching: <Link to="/identity" className="font-semibold underline">create or restore your key, download its backup, unlock it and anchor it</Link>. Launching also requires every network readiness check to pass.</p>}
+    {done?<Panel title="Your bloom is on chain"><p className="display text-2xl">planted. signed. yours.</p><a className="block break-all text-xs underline" href={explorerTx(done.signature,readiness.cluster)} target="_blank" rel="noreferrer">View confirmed launch transaction</a><Link to="/passport/$hash" params={{hash:done.hash}} className="btn btn-red">Open the public passport</Link><button type="button" className="btn btn-paper" onClick={()=>{setDone(null);setManifest(null);setSigned(null);setName("");setSymbol("");setFile(null);setImageUri("");setImageHash(null);}}>Plant another token</button></Panel>
+    :!manifest?<Panel title="Your next bloom">
+      <form className="grid gap-3 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();void run("Reading exact chain terms…",review);}}>
+        <label className="text-sm font-semibold">Token name<input required maxLength={32} value={name} onChange={e=>setName(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="a strange little bloom"/></label>
+        <label className="text-sm font-semibold">Ticker<input required pattern="[A-Z0-9]{1,10}" maxLength={10} value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="BLOOM"/></label>
+        <label className="text-sm font-semibold sm:col-span-2">Token image · PNG, JPEG, GIF or WebP, up to 1 MB<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="mt-2 block w-full text-xs" onChange={e=>setFile(e.target.files?.[0]??null)}/></label>
+        <label className="text-sm sm:col-span-2">Or an existing immutable image CID<input value={imageUri} disabled={!!file} onChange={e=>{setImageUri(e.target.value);setImageHash(null);}} className="hair mt-1 h-11 w-full bg-paper-light px-3 font-mono text-xs" placeholder="ipfs://bafy…"/></label>
+        <p className="text-xs text-ink-soft sm:col-span-2">Supply, fees, LP shares and graduation are read from the configured Meteora pool config. The mint key is generated on your device; its private key stays here.</p>
+        <button type="submit" className="btn btn-red sm:col-span-2" disabled={!!busy||!canReview}>{busy??"Review exact launch terms"}</button>
+      </form>
+    </Panel>:<Panel title={signed?"Signed passport · ready for your wallet":"Review before signing"}>
+      <PassportTerms manifest={manifest}/>
+      {!signed?<><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={reviewAck} onChange={e=>setReviewAck(e.target.checked)}/><span>I have reviewed the exact fees, LP shares, authority policy and graduation terms above.</span></label><button type="button" className="btn btn-red" disabled={!reviewAck||!local.unlocked||!!busy} onClick={()=>void run("Signing with ML-DSA-65…",async()=>{setSigned(withSecret(kp=>signPassport(manifest,kp)));})}>Sign launch passport</button><button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>setManifest(null)}>Edit draft</button></>
+      :<><p className="break-all font-mono text-xs">{signed.manifestHash}</p><button type="button" className="btn btn-paper" onClick={()=>downloadPassport(signed)}>Download signed passport</button><p className="text-xs text-ink-soft">Your wallet pays the signed pool creation fee, account rent and network fees. It must match the creator address above. Nothing is sent until you approve the transaction in your wallet.</p><WalletButtons avail={wallets} busy={busy} action="Launch with" onPick={k=>void run("Preparing launch…",()=>launch(k))}/><button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>void run("Checking for submitted transactions…",rebuildDraft)}>Rebuild an expired unsigned draft</button></>}
+    </Panel>}
+    {error && <div role="alert" className="hair space-y-2 bg-paper-light p-3"><p className="break-words text-sm text-poppy-deep">{error}</p><p className="text-xs">If you signed a transaction, check pending transactions below before starting a new launch.</p><button className="btn btn-paper" type="button" onClick={()=>void refresh().catch(e=>setError(e.message))}>Refresh my transactions</button></div>}
+    {mine && <PendingTransactions rows={mine.preparations} onRefresh={refresh}/>}
+    {!!mine?.launches.length && <Panel title="Your blooms · owner controls">{mine.launches.map(l=><div key={l.id} className="hair space-y-2 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{l.passports?.manifest?.token?.name??l.base_mint.slice(0,12)} · {lifecycleLabel[l.lifecycle]??l.lifecycle}</p><RealBadge cluster={l.cluster}/></div><Link to="/passport/$hash" params={{hash:l.passports.manifest_hash}} className="text-sm underline">Open passport ↗</Link><button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>void run("Reading pool lifecycle…",async()=>{const r=await pqRefreshLifecycle({data:{launchId:l.id}});if(!r.ok)throw new Error(r.error);await refresh();})}>Refresh graduation</button>{l.lifecycle!=="curve_active"&&l.lifecycle!=="damm_v2_live"&&<WalletButtons avail={wallets} busy={busy} action="Migrate with" onPick={k=>void run("Preparing DAMM v2 migration…",()=>migrate(k,l.id))}/>}</div>)}</Panel>}
+    <Panel title="The passport garden · confirmed launches">
+      {launches.length?<div className="grid gap-3 sm:grid-cols-2">{launches.map(l=><Link key={l.id} to="/passport/$hash" params={{hash:l.passports.manifest_hash}} className="hair space-y-2 bg-paper p-3 hover:bg-paper-deep"><RealBadge cluster={l.cluster}/><p className="display text-xl">{l.passports.manifest.token.name} <span className="text-poppy">${l.passports.manifest.token.symbol}</span></p><p className="text-xs">{lifecycleLabel[l.lifecycle]??l.lifecycle} · last recorded state</p><span className="font-mono text-xs underline">inspect the passport ↗</span></Link>)}</div>:<p className="text-sm">{readError?"Could not read the launch registry. Recheck readiness or refresh.":"No confirmed launches yet. The first bloom starts here."}</p>}
+    </Panel>
+  </div>;
 }
