@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { CheckList, Panel, RealBadge, downloadBlob, explorerTx, signSubmitConfirm, useWallets } from "@/components/pq/ui";
+import { CheckList, Panel, RealBadge, downloadBlob, explorerTx, signSubmitConfirm, useWallets, WalletButtons, PendingTransactions, type PqMine } from "@/components/pq/ui";
 import { PageHeader } from "@/components/bits";
 import { b64, utf8 } from "@/pq/canonical";
 import { acknowledgeBackup, backupBlob, createIdentity, forgetLocal, loadLocal, lock, restoreBackup, unlock, usePqLocal, withSecret } from "@/pq/local";
@@ -25,7 +25,7 @@ export const Route = createFileRoute("/identity")({
   component: IdentityPage,
 });
 
-type Mine = { identities: any[]; launches: any[] };
+type Mine = PqMine;
 
 function IdentityPage() {
   const local = usePqLocal();
@@ -40,7 +40,8 @@ function IdentityPage() {
 
   useEffect(() => loadLocal(), []);
   const refresh = async () => {
-    if (!userId) return setMine(null);
+    const currentUser = store.get().userId;
+    if (!currentUser) return setMine(null);
     const r = await pqMine();
     if (r.ok) setMine(r.data);
   };
@@ -155,7 +156,7 @@ function IdentityPage() {
             </label>
             <label className="sr-only" htmlFor="restore-pw">Backup password</label>
             <input id="restore-pw" type="password" placeholder="backup password" value={pw2} onChange={(e) => setPw2(e.target.value)} className="hair h-10 bg-paper-light px-2" />
-            <button type="button" className="btn btn-paper" disabled={!restoreFile || !!busy} onClick={() => run("Restoring…", async () => { await restoreBackup(restoreFile!, pw2); setPw2(""); toast.success("Backup restored and unlocked."); })}>Restore</button>
+            <button type="button" className="btn btn-paper" disabled={!restoreFile || !!busy} onClick={() => void run("Restoring…", async () => { await restoreBackup(restoreFile!, pw2); setPw2(""); toast.success("Backup restored and unlocked."); })}>Restore</button>
           </div>
         </details>
       </Panel>
@@ -192,6 +193,8 @@ function IdentityPage() {
         )}
       </Panel>
 
+      {mine && <PendingTransactions rows={mine.preparations} onRefresh={refresh} />}
+
       <Panel title="limits">
         <ul className="list-disc space-y-1 pl-5 text-sm">
           <li>Lose the backup file or its password and the key is gone. Register a new identity; old passports stay verifiable.</li>
@@ -201,20 +204,6 @@ function IdentityPage() {
         <p className="text-sm">Next: <Link to="/launchpad" className="underline">open the launchpad</Link> · <Link to="/verify" className="underline">verify a passport</Link></p>
       </Panel>
       {mine && mine.identities.length > 1 && <CheckList label="Your identities" checks={mine.identities.map((i) => ({ id: i.id, label: i.key_hash.slice(0, 16) + "…", status: i.status === "anchored" ? "pass" : "pending", detail: `${i.wallet} · ${i.cluster}` }))} />}
-    </div>
-  );
-}
-
-export function WalletButtons({ avail, busy, disabled, action, onPick }: { avail: Record<WalletKind, boolean>; busy: string | null; disabled?: boolean; action: string; onPick: (k: WalletKind) => void }) {
-  const none = !avail.phantom && !avail.solflare;
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {(["phantom", "solflare"] as const).map((k) => (
-        <button key={k} type="button" className="btn btn-red" disabled={!avail[k] || !!busy || disabled} onClick={() => onPick(k)}>
-          {busy ?? `${action} ${k === "phantom" ? "Phantom" : "Solflare"}`}
-        </button>
-      ))}
-      {none && <p className="text-xs text-ink-soft">No Solana wallet detected. Install Phantom or Solflare, then reload. Fleuri never asks for a seed phrase.</p>}
     </div>
   );
 }

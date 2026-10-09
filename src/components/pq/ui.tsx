@@ -1,15 +1,15 @@
 import { Transaction } from "@solana/web3.js";
 import { useEffect, useState, type ReactNode } from "react";
 import { b64, fromB64 } from "@/pq/canonical";
-import type { Check } from "@/pq/passport";
-import { pqConfirm, pqSubmit } from "@/lib/pq.functions";
-import { getProvider, walletSignTransaction, type WalletKind } from "@/services/wallet";
+import type { Check, PassportManifest, SignedPassportT } from "@/pq/passport";
+import { pqConfirm, pqSubmit, pqRetry } from "@/lib/pq.functions";
+import { connectWallet, getProvider, walletSignTransaction, type WalletKind } from "@/services/wallet";
 import { cn } from "@/lib/utils";
 
 export function RealBadge({ cluster, className }: { cluster?: string; className?: string }) {
   return (
     <span className={cn("hair inline-flex items-center gap-1 bg-ink px-1.5 py-0.5 font-mono text-[0.65rem] uppercase tracking-widest text-paper-light", className)}>
-      <span aria-hidden className="h-1.5 w-1.5 bg-poppy" /> real · {cluster ?? "solana"}
+      <span aria-hidden className="h-1.5 w-1.5 bg-poppy" /> Solana · {cluster === "devnet" ? "devnet test SOL" : cluster ?? "network"}
     </span>
   );
 }
@@ -71,6 +71,8 @@ export async function signSubmitConfirm(
   opts: { coSign?: { publicKey: unknown; secretKey: Uint8Array }[]; onStatus?: (s: string) => void } = {},
 ) {
   const tx = Transaction.from(fromB64(prep.transaction));
+  const wallet = await connectWallet(kind);
+  if (wallet !== tx.feePayer?.toBase58()) throw new Error("Switch to the wallet named in this prepared transaction.");
   if (opts.coSign?.length) tx.partialSign(...(opts.coSign as any));
   opts.onStatus?.("Waiting for your wallet to sign…");
   const signed = await walletSignTransaction(kind, tx);
@@ -85,4 +87,68 @@ export async function signSubmitConfirm(
     await new Promise((r) => setTimeout(r, 2500));
   }
   throw new Error(`Submitted ${sub.data.signature} but confirmation timed out. Re-check later — confirmation is idempotent.`);
+}
+
+export function WalletButtons({ avail, busy, disabled, action, onPick }: { avail: Record<WalletKind, boolean>; busy: string | null; disabled?: boolean; action: string; onPick: (k: WalletKind) => void }) {
+  return <div className="flex flex-wrap items-center gap-2">
+    {(["phantom", "solflare"] as const).map(k => <button key={k} type="button" className="btn btn-red" disabled={!avail[k] || !!busy || disabled} onClick={() => onPick(k)}>{busy ?? `${action} ${k === "phantom" ? "Phantom" : "Solflare"}`}</button>)}
+    {!avail.phantom && !avail.solflare && <p className="text-xs text-ink-soft">No Solana wallet detected. Install Phantom or Solflare, then reload. Fleuri never asks for a seed phrase.</p>}
+  </div>;
+}
+
+export interface PendingPreparation { id:string; kind:string; cluster:string; signature:string; subject:string; expires_at:string; }
+export interface PqMine {identities:any[]; launches:any[]; preparations:PendingPreparation[];}
+export function PendingTransactions({rows,onRefresh}:{rows:PendingPreparation[];onRefresh:()=>Promise<void>}) {
+  const [busy,setBusy]=useState<string|null>(null);
+  const [result,setResult]=useState<string|null>(null);
+  async function recover(row:PendingPreparation, rebroadcast:boolean) {
+    setBusy(row.id); setResult(null);
+    try {
+      if(rebroadcast) {const r=await pqRetry({data:{preparationId:row.id}}); if(!r.ok) throw new Error(r.error);}
+      const c=await pqConfirm({data:{preparationId:row.id}});
+      if(!c.ok) throw new Error(c.error);
+      setResult(c.data.detail); await onRefresh();
+    } catch(e) {setResult((e as Error).message); await onRefresh();}
+    finally {setBusy(null);}
+  }
+  if(!rows.length) return null;
+  return <Panel title="Pending transactions · recover safely">
+    <p className="text-xs text-ink-soft">Check confirmation after a network error. Retry sends the same signed bytes and signature; it does not create a second launch. An expired blockhash cannot be rebroadcast.</p>
+    {rows.map(row=><div key={row.id} className="hair space-y-2 p-3">
+      <p className="text-sm font-semibold">{row.kind} · {row.cluster}</p>
+      <a className="block break-all font-mono text-xs underline" href={explorerTx(row.signature,row.cluster)} target="_blank" rel="noreferrer">{row.signature}</a>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>void recover(row,false)}>Check confirmation</button>
+        <button type="button" className="btn btn-ink" disabled={!!busy} onClick={()=>void recover(row,true)}>{busy===row.id?"Checking…":"Retry exact transaction"}</button>
+      </div>
+    </div>)}
+    {result && <p role="status" className="break-words text-sm">{result}</p>}
+  </Panel>;
+}
+
+export function downloadPassport(p:SignedPassportT) {
+  downloadBlob(new Blob([JSON.stringify(p,null,2)],{type:"application/json"}),`fleuri-passport-${p.manifestHash}.json`);
+}
+
+export const lifecycleLabel:Record<string,string> = {curve_active:"Curve growing",curve_completed:"Curve completed",migration_pending:"Migration pending",damm_v2_live:"Live on DAMM v2"};
+function units(raw:string,decimals:number) { const padded=raw.padStart(decimals+1,"0"); const whole=padded.slice(0,-decimals).replace(/\B(?=(\d{3})+(?!\d))/g,","); const fraction=padded.slice(-decimals).replace(/0+$/,""); return `${whole}${fraction?"."+fraction:""}`; }
+export function PassportTerms({manifest:m}:{manifest:PassportManifest}) {
+  const values:[string,string][]=[
+    ["Token",`${m.token.name} · $${m.token.symbol}`], ["Supply cap",`${units(m.token.totalSupply,m.token.decimals)} · ${m.token.decimals} decimals`],
+    ["Initial base trading fee",`${m.fees.baseFeeBps} bps · dynamic fees ${m.fees.dynamicFeeEnabled?"enabled":"off"}`],
+    ["Trading fee split",`creator ${m.fees.creatorTradingFeePercent}% · partner ${m.fees.partnerTradingFeePercent}%`],
+    ["Pool creation fee",`${units(m.fees.poolCreationFeeLamports,9)} SOL + network/rent costs`],
+    ["Creator LP",`${m.lp.creatorLiquidityPercent}% withdrawable · ${m.lp.creatorPermanentLockedPercent}% permanently locked`],
+    ["Partner LP",`${m.lp.partnerLiquidityPercent}% withdrawable · ${m.lp.partnerPermanentLockedPercent}% permanently locked`],
+    ["Graduation",`DAMM v2 at ${units(m.migration.quoteThresholdLamports,9)} SOL quote reserve`],
+    ["Migration fee",`${m.migration.migrationFeePercent}% · creator share ${m.migration.creatorMigrationFeePercent}% · option ${m.migration.migrationFeeOption}`],
+    ["Migrated pool fee",`${m.migration.migratedPoolFeeBps} bps`], ["Authorities","Immutable metadata · mint and freeze authorities revoked"],
+    ["Dev buy","Disabled"], ["Creator wallet",m.creatorWallet], ["Fee claimer",m.fees.feeClaimer], ["Leftover receiver",m.authority.leftoverReceiver],
+    ["Mint",m.token.baseMint], ["DBC config",m.config.address], ["DBC pool",m.pool.address], ["Image",m.token.imageUri],
+  ];
+  return <div className="space-y-3">
+    <dl className="hair divide-y divide-ink/20">{values.map(([label,value])=><div key={label} className="grid gap-1 p-2 sm:grid-cols-[10rem_minmax(0,1fr)]"><dt className="font-mono text-[0.65rem] uppercase text-ink-soft">{label}</dt><dd className="min-w-0 break-all text-sm">{value}</dd></div>)}</dl>
+    <p className="text-xs text-ink-soft">{m.authority.policy}</p>
+    <details className="hair p-2"><summary className="cursor-pointer font-mono text-xs">Complete signed config snapshot</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all text-[0.65rem]">{JSON.stringify(m.config.snapshot,null,2)}</pre></details>
+  </div>;
 }
