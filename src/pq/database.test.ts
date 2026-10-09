@@ -11,7 +11,7 @@ beforeAll(async()=>{
   await db.exec(await readFile(new URL("../../drizzle/migrations/0003_pq_launchpad.sql",import.meta.url),"utf8"));
   // Reproduce Supabase's broad default grants so TRUNCATE bypass is actually exercised.
   await db.exec("grant all on all tables in schema public to anon,authenticated;");
-  await db.exec(await readFile(new URL("../../drizzle/migrations/0004_pq_atomic_and_permissions.sql",import.meta.url),"utf8"));
+  await db.exec(await readFile(new URL("./sql/0004_pq_atomic_and_permissions.sql",import.meta.url),"utf8"));
 },30_000);
 beforeEach(async()=>{
   await db.exec("reset role; truncate pq_challenges,pq_identities,chain_preparations,launch_nonces,passports,launches cascade;");
