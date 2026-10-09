@@ -119,7 +119,12 @@ export const pqVerify = createServerFn({ method: "POST" })
   });
 
 export const pqPublicLaunches = createServerFn({ method: "GET" }).handler(async () => {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const r = await (supabaseAdmin as any).from("launches").select("id,pool,base_mint,lifecycle,cluster,created_at,passports(manifest_hash,manifest)").order("created_at", { ascending: false }).limit(30);
+  const { createClient } = await import("@supabase/supabase-js");
+  const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
+  const pub = createClient(process.env["SUPABASE_URL"]!, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: (input, init) => { const h = new Headers(init?.headers); if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`) h.delete("Authorization"); h.set("apikey", key); return fetch(input, { ...init, headers: h }); } },
+  });
+  const r = await (pub as any).from("launches").select("id,pool,base_mint,lifecycle,cluster,created_at,passports(manifest_hash,manifest)").order("created_at", { ascending: false }).limit(30);
   return r.error ? { ok: false as const, error: r.error.message } : { ok: true as const, data: r.data as any[] };
 });
