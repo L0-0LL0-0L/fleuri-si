@@ -16,6 +16,7 @@ import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as CoinsRouteImport } from './routes/coins'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as IdentityRouteImport } from './routes/identity'
+import { Route as LaunchConfigRouteImport } from './routes/launch-config'
 import { Route as LaunchpadRouteImport } from './routes/launchpad'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as TerminalRouteImport } from './routes/terminal'
@@ -58,6 +59,11 @@ const DocsRoute = DocsRouteImport.update({
 const IdentityRoute = IdentityRouteImport.update({
   id: '/identity',
   path: '/identity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaunchConfigRoute = LaunchConfigRouteImport.update({
+  id: '/launch-config',
+  path: '/launch-config',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LaunchpadRoute = LaunchpadRouteImport.update({
@@ -109,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
   '/identity': typeof IdentityRoute
+  '/launch-config': typeof LaunchConfigRoute
   '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
   '/terminal': typeof TerminalRoute
@@ -126,6 +133,7 @@ export interface FileRoutesByTo {
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
   '/identity': typeof IdentityRoute
+  '/launch-config': typeof LaunchConfigRoute
   '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
   '/terminal': typeof TerminalRoute
@@ -144,6 +152,7 @@ export interface FileRoutesById {
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
   '/identity': typeof IdentityRoute
+  '/launch-config': typeof LaunchConfigRoute
   '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
   '/terminal': typeof TerminalRoute
@@ -163,6 +172,7 @@ export interface FileRouteTypes {
     | '/coins'
     | '/docs'
     | '/identity'
+    | '/launch-config'
     | '/launchpad'
     | '/me'
     | '/terminal'
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
     | '/coins'
     | '/docs'
     | '/identity'
+    | '/launch-config'
     | '/launchpad'
     | '/me'
     | '/terminal'
@@ -197,6 +208,7 @@ export interface FileRouteTypes {
     | '/coins'
     | '/docs'
     | '/identity'
+    | '/launch-config'
     | '/launchpad'
     | '/me'
     | '/terminal'
@@ -215,6 +227,7 @@ export interface RootRouteChildren {
   CoinsRoute: typeof CoinsRoute
   DocsRoute: typeof DocsRoute
   IdentityRoute: typeof IdentityRoute
+  LaunchConfigRoute: typeof LaunchConfigRoute
   LaunchpadRoute: typeof LaunchpadRoute
   MeRoute: typeof MeRoute
   TerminalRoute: typeof TerminalRoute
@@ -274,6 +287,13 @@ declare module '@tanstack/react-router' {
       path: '/identity'
       fullPath: '/identity'
       preLoaderRoute: typeof IdentityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/launch-config': {
+      id: '/launch-config'
+      path: '/launch-config'
+      fullPath: '/launch-config'
+      preLoaderRoute: typeof LaunchConfigRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/launchpad': {
@@ -343,6 +363,7 @@ const rootRouteChildren: RootRouteChildren = {
   CoinsRoute: CoinsRoute,
   DocsRoute: DocsRoute,
   IdentityRoute: IdentityRoute,
+  LaunchConfigRoute: LaunchConfigRoute,
   LaunchpadRoute: LaunchpadRoute,
   MeRoute: MeRoute,
   TerminalRoute: TerminalRoute,
