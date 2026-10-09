@@ -114,6 +114,14 @@ export const pqPrepareMigration = createServerFn({ method: "POST" })
     return safe(() => s.prepareMigration(context.userId, data.launchId));
   });
 
+export const pqPrepareConfig = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ wallet: addr, config: addr, draft: z.unknown() }).strict().refine(v => JSON.stringify(v).length <= 4000, "Draft too large").parse(d))
+  .handler(async ({ data, context }) => {
+    const s = await import("./pq.server");
+    return safe(() => s.prepareConfig(context.userId, data));
+  });
+
 export const pqRefreshLifecycle = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ launchId: id }).strict().parse(d))
   .handler(async ({ data }) => {
