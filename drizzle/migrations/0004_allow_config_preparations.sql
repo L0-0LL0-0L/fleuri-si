@@ -1,0 +1,2 @@
+ALTER TABLE public.chain_preparations DROP CONSTRAINT IF EXISTS chain_preparations_kind_check;
+ALTER TABLE public.chain_preparations ADD CONSTRAINT chain_preparations_kind_check CHECK (kind = ANY (ARRAY['anchor'::text, 'launch'::text, 'migrate'::text, 'config'::text]));
