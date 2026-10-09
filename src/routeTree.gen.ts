@@ -16,10 +16,13 @@ import { Route as AlertsRouteImport } from './routes/alerts'
 import { Route as CoinsRouteImport } from './routes/coins'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as IdentityRouteImport } from './routes/identity'
+import { Route as LaunchpadRouteImport } from './routes/launchpad'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as TerminalRouteImport } from './routes/terminal'
+import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as AHandleRouteImport } from './routes/a.$handle'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
+import { Route as PassportHashRouteImport } from './routes/passport.$hash'
 import { Route as ApiPublicGardenTickRouteImport } from './routes/api/public/garden/tick'
 
 const IndexRoute = IndexRouteImport.update({
@@ -57,6 +60,11 @@ const IdentityRoute = IdentityRouteImport.update({
   path: '/identity',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LaunchpadRoute = LaunchpadRouteImport.update({
+  id: '/launchpad',
+  path: '/launchpad',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MeRoute = MeRouteImport.update({
   id: '/me',
   path: '/me',
@@ -67,6 +75,11 @@ const TerminalRoute = TerminalRouteImport.update({
   path: '/terminal',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VerifyRoute = VerifyRouteImport.update({
+  id: '/verify',
+  path: '/verify',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AHandleRoute = AHandleRouteImport.update({
   id: '/a/$handle',
   path: '/a/$handle',
@@ -75,6 +88,11 @@ const AHandleRoute = AHandleRouteImport.update({
 const CSymbolRoute = CSymbolRouteImport.update({
   id: '/c/$symbol',
   path: '/c/$symbol',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PassportHashRoute = PassportHashRouteImport.update({
+  id: '/passport/$hash',
+  path: '/passport/$hash',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicGardenTickRoute = ApiPublicGardenTickRouteImport.update({
@@ -91,10 +109,13 @@ export interface FileRoutesByFullPath {
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
   '/identity': typeof IdentityRoute
+  '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
   '/terminal': typeof TerminalRoute
+  '/verify': typeof VerifyRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/passport/$hash': typeof PassportHashRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRoutesByTo {
@@ -105,10 +126,13 @@ export interface FileRoutesByTo {
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
   '/identity': typeof IdentityRoute
+  '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
   '/terminal': typeof TerminalRoute
+  '/verify': typeof VerifyRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/passport/$hash': typeof PassportHashRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRoutesById {
@@ -120,10 +144,13 @@ export interface FileRoutesById {
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
   '/identity': typeof IdentityRoute
+  '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
   '/terminal': typeof TerminalRoute
+  '/verify': typeof VerifyRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/passport/$hash': typeof PassportHashRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRouteTypes {
@@ -136,10 +163,13 @@ export interface FileRouteTypes {
     | '/coins'
     | '/docs'
     | '/identity'
+    | '/launchpad'
     | '/me'
     | '/terminal'
+    | '/verify'
     | '/a/$handle'
     | '/c/$symbol'
+    | '/passport/$hash'
     | '/api/public/garden/tick'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -150,10 +180,13 @@ export interface FileRouteTypes {
     | '/coins'
     | '/docs'
     | '/identity'
+    | '/launchpad'
     | '/me'
     | '/terminal'
+    | '/verify'
     | '/a/$handle'
     | '/c/$symbol'
+    | '/passport/$hash'
     | '/api/public/garden/tick'
   id:
     | '__root__'
@@ -164,10 +197,13 @@ export interface FileRouteTypes {
     | '/coins'
     | '/docs'
     | '/identity'
+    | '/launchpad'
     | '/me'
     | '/terminal'
+    | '/verify'
     | '/a/$handle'
     | '/c/$symbol'
+    | '/passport/$hash'
     | '/api/public/garden/tick'
   fileRoutesById: FileRoutesById
 }
@@ -179,10 +215,13 @@ export interface RootRouteChildren {
   CoinsRoute: typeof CoinsRoute
   DocsRoute: typeof DocsRoute
   IdentityRoute: typeof IdentityRoute
+  LaunchpadRoute: typeof LaunchpadRoute
   MeRoute: typeof MeRoute
   TerminalRoute: typeof TerminalRoute
+  VerifyRoute: typeof VerifyRoute
   AHandleRoute: typeof AHandleRoute
   CSymbolRoute: typeof CSymbolRoute
+  PassportHashRoute: typeof PassportHashRoute
   ApiPublicGardenTickRoute: typeof ApiPublicGardenTickRoute
 }
 
@@ -237,6 +276,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IdentityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/launchpad': {
+      id: '/launchpad'
+      path: '/launchpad'
+      fullPath: '/launchpad'
+      preLoaderRoute: typeof LaunchpadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/me': {
       id: '/me'
       path: '/me'
@@ -251,6 +297,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TerminalRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/verify': {
+      id: '/verify'
+      path: '/verify'
+      fullPath: '/verify'
+      preLoaderRoute: typeof VerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/a/$handle': {
       id: '/a/$handle'
       path: '/a/$handle'
@@ -263,6 +316,13 @@ declare module '@tanstack/react-router' {
       path: '/c/$symbol'
       fullPath: '/c/$symbol'
       preLoaderRoute: typeof CSymbolRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/passport/$hash': {
+      id: '/passport/$hash'
+      path: '/passport/$hash'
+      fullPath: '/passport/$hash'
+      preLoaderRoute: typeof PassportHashRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/garden/tick': {
@@ -283,10 +343,13 @@ const rootRouteChildren: RootRouteChildren = {
   CoinsRoute: CoinsRoute,
   DocsRoute: DocsRoute,
   IdentityRoute: IdentityRoute,
+  LaunchpadRoute: LaunchpadRoute,
   MeRoute: MeRoute,
   TerminalRoute: TerminalRoute,
+  VerifyRoute: VerifyRoute,
   AHandleRoute: AHandleRoute,
   CSymbolRoute: CSymbolRoute,
+  PassportHashRoute: PassportHashRoute,
   ApiPublicGardenTickRoute: ApiPublicGardenTickRoute,
 }
 export const routeTree = rootRouteImport
