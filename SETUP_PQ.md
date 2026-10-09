@@ -14,7 +14,7 @@ All of these are read inside server code (`src/lib/solana.server.ts`), never in 
 | `SOLANA_CLUSTER` | `mainnet-beta` | Must be `devnet` or `mainnet-beta`. Selects the expected genesis hash and the explorer links. |
 | `SOLANA_RPC_URL` | configured | Read at request time and verified against the cluster genesis. A mainnet URL under `devnet` (or the reverse) fails readiness instead of silently launching on the wrong network. |
 | `METEORA_DBC_CONFIG` | **not set — launch blocked** (create one at `/launch-config`) | Address of a DBC pool config: SOL quote, DAMM v2 migration, immutable metadata, fixed supply, revoked mint/freeze authorities, LP shares totalling 100%. Its full snapshot is hashed and signed into every passport. |
-| `PINATA_JWT` | **not set — launch blocked** | Pins the signed passport and token image so the metadata URI committed on chain is immutable. |
+| `PINATA_JWT` | set and accepted by Pinata | Pins the signed passport and token image so the metadata URI committed on chain is immutable. |
 | `FLEURI_ORIGIN` | `https://fleuri.si` | The origin written into registration challenges and passports. Set this to the real public domain before any launch. |
 | `METEORA_DAMM_V2_CONFIG`, `IPFS_GATEWAY` | optional | Graduation config override; read gateway (default `https://gateway.pinata.cloud/ipfs/`). |
 
