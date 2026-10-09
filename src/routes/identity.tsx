@@ -102,8 +102,8 @@ function IdentityPage() {
             className="grid gap-2 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (pw.length < MIN_PASSWORD) return toast.error(`Use at least ${MIN_PASSWORD} characters.`);
-              if (pw !== pw2) return toast.error("Passwords do not match.");
+              if (pw.length < MIN_PASSWORD) { toast.error(`Use at least ${MIN_PASSWORD} characters.`); return; }
+              if (pw !== pw2) { toast.error("Passwords do not match."); return; }
               void run("Generating key…", async () => {
                 await createIdentity(pw);
                 setPw("");
