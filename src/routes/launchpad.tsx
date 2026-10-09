@@ -87,7 +87,7 @@ function Launchpad() {
     <Panel title="Network readiness">
       {readiness?<CheckList label="Launch network readiness" checks={readiness.checks}/>:<p className="text-sm">{readError||"Reading network configuration…"}</p>}
       {readError && readiness && <p role="alert" className="break-words text-sm text-poppy-deep">{readError}</p>}
-      <button type="button" className="btn btn-paper" onClick={()=>void checkReadiness()}>Recheck readiness</button>
+      <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-paper" onClick={()=>void checkReadiness()}>Recheck readiness</button>{readiness && !readiness.dbcConfig && <Link to="/launch-config" className="btn btn-red">Create the pool config</Link>}</div>
     </Panel>
     {!userId && <Panel title="Your workspace"><p className="text-sm">Use your existing workspace session to register an identity and view your launches.</p><button type="button" className="btn btn-ink" disabled={!!busy} onClick={()=>void run("Opening workspace…",async()=>{await store.startSandbox();await refresh();})}>{busy??"Open workspace"}</button></Panel>}
     {!canReview && !manifest && <p className="hair bg-paper-light p-3 text-sm">Before launching: <Link to="/identity" className="font-semibold underline">create or restore your key, download its backup, unlock it and anchor it</Link>. Launching also requires every network readiness check to pass.</p>}
