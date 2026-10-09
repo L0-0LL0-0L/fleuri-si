@@ -5,8 +5,8 @@ import { NATIVE_MINT, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { DynamicBondingCurveClient, StateService, MigrationOption } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { vi } from "vitest";
 import { b64 } from "./canonical";
-import { checkSubmission, mapLifecycle, messageHash } from "./chain-pure";
-import { buildCreatePoolTx, buildMemoTx, decodeTokenMetadata, derivePool, finalizeUnsigned, MEMO_PROGRAM_ID, unsignedB64 } from "@/lib/solana.server";
+import { checkSubmission, mapLifecycle, messageHash, needsMigrationLocker } from "./chain-pure";
+import { buildCreatePoolTx, buildMemoTx, buildMigrationLockerTx, decodeTokenMetadata, derivePool, finalizeUnsigned, MEMO_PROGRAM_ID, unsignedB64 } from "@/lib/solana.server";
 import { DBC_PROGRAM_ID } from "./passport";
 
 describe("prepared chain transactions",()=>{
@@ -53,6 +53,26 @@ describe("prepared chain transactions",()=>{
     expect(()=>finalizeUnsigned(tx,wallet.publicKey,bh,[wallet.publicKey.toBase58()])).toThrow("unexpected signers");
     const large=new Transaction().add(new TransactionInstruction({programId:MEMO_PROGRAM_ID,keys:[],data:Buffer.alloc(1200)}));
     expect(()=>finalizeUnsigned(large,wallet.publicKey,bh,[wallet.publicKey.toBase58()])).toThrow();
+  });
+  it("constructs the actual SDK vesting escrow transaction with only the payer signature",async()=>{
+    const conn=new Connection("https://api.devnet.solana.com","confirmed"),wallet=Keypair.generate(),mint=Keypair.generate(),config=Keypair.generate(),pool=Keypair.generate();
+    conn.getLatestBlockhash=async()=>({blockhash:Keypair.generate().publicKey.toBase58(),lastValidBlockHeight:1000});
+    const poolSpy=vi.spyOn(StateService.prototype,"getPool").mockResolvedValue({poolState:{config:config.publicKey,creator:wallet.publicKey,baseMint:mint.publicKey,baseVault:Keypair.generate().publicKey}} as any);
+    const configSpy=vi.spyOn(StateService.prototype,"getPoolConfig").mockResolvedValue({tokenType:0,quoteMint:NATIVE_MINT} as any);
+    try {
+      const built=await buildMigrationLockerTx(conn,pool.publicKey.toBase58(),wallet.publicKey.toBase58());
+      expect(built.signers).toEqual([wallet.publicKey.toBase58()]);
+      const ix=built.tx.instructions.find(x=>x.programId.toBase58()===DBC_PROGRAM_ID)!;
+      expect(ix.keys.some(k=>k.pubkey.equals(pool.publicKey))).toBe(true);
+      built.tx.sign(wallet);expect(built.tx.verifySignatures()).toBe(true);expect(built.tx.serialize().length).toBeLessThanOrEqual(1232);
+    } finally {poolSpy.mockRestore();configSpy.mockRestore();}
+  });
+  it("requires vesting setup only for a positive signed allocation before LockedVesting",()=>{
+    const config={lockedVestingConfig:{amountPerPeriod:10n,numberOfPeriod:2n,cliffUnlockAmount:0n}};
+    expect(needsMigrationLocker(config,1)).toBe(true);expect(needsMigrationLocker(config,2)).toBe(false);
+    expect(needsMigrationLocker({lockedVestingConfig:{amountPerPeriod:0n,numberOfPeriod:0n,cliffUnlockAmount:0n}},1)).toBe(false);
+    expect(needsMigrationLocker({lockedVestingConfig:{amountPerPeriod:0n,numberOfPeriod:0n,cliffUnlockAmount:1n}},1)).toBe(true);
+    expect(needsMigrationLocker({},1)).toBe(false);
   });
   it("requires an actual confirmed DAMM v2 pool before calling graduation live",()=>{
     const p={isMigrated:0,migrationProgress:0,quoteReserve:0n,migrationQuoteThreshold:100n};
