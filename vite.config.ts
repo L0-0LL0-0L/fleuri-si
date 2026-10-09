@@ -7,22 +7,16 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { fileURLToPath } from "node:url";
 
-const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
-
 export default defineConfig({
   vite: {
-    // Worker build: these packages only export browser/node conditions; use the browser (fetch-based) build.
-    resolve: {
-      alias: [
-        { find: /^rpc\-websockets$/, replacement: r("node_modules/rpc-websockets/dist/index.browser.mjs") },
-        { find: /^@solana\/codecs\-numbers$/, replacement: r("node_modules/@solana/codecs-numbers/dist/index.browser.mjs") },
-        { find: /^@solana\/codecs$/, replacement: r("node_modules/@solana/codecs/dist/index.browser.mjs") },
-        { find: /^@solana\/errors$/, replacement: r("node_modules/@solana/errors/dist/index.browser.mjs") },
-        { find: /^@solana\/codecs\-core$/, replacement: r("node_modules/@solana/codecs-core/dist/index.browser.mjs") },
-        { find: /^@solana\/options$/, replacement: r("node_modules/@solana/options/dist/index.browser.mjs") },
-        { find: /^@solana\/codecs\-strings$/, replacement: r("node_modules/@solana/codecs-strings/dist/index.browser.mjs") },
-        { find: /^@solana\/codecs\-data\-structures$/, replacement: r("node_modules/@solana/codecs-data-structures/dist/index.browser.mjs") },
-      ],
+    resolve: { alias: [
+      { find: "node:buffer", replacement: fileURLToPath(new URL("./node_modules/buffer/index.js", import.meta.url)) },
+      { find: /^@coral-xyz\/anchor$/, replacement: fileURLToPath(new URL("./node_modules/@coral-xyz/anchor/dist/browser/index.js", import.meta.url)) },
+    ] },
+    environments: {
+      // Solana's packages expose browser and Node entries. Workers use the browser
+      // implementations for HTTP/WebSocket reads; no Node socket server is needed.
+      nitro: { resolve: { conditions: ["workerd", "worker", "browser", "module", "production"] } },
     },
   },
   tanstackStart: {
