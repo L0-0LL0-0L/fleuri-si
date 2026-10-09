@@ -3,10 +3,6 @@
 // (SOL quote, SPL, immutable, fixed equal supply, DAMM v2, LP 100% claimable/locked, no vesting)
 // can be expressed, so a confirmed config always passes readDbcConfig's policy too.
 import { z } from "zod";
-import {
-  ActivationType, BaseFeeMode, CollectFeeMode, MigrationFeeOption, MigrationOption, TokenAuthorityOption, TokenType,
-  buildCurve,
-} from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { isSolanaAddress } from "./registration";
 
 export const FEE_PRESET_BPS = [25, 30, 100, 200, 400, 600] as const;
@@ -40,26 +36,6 @@ export function parseDraft(v: unknown): ConfigDraftT {
   const r = ConfigDraft.safeParse(v);
   if (!r.success) throw new Error(r.error.issues.map((i) => `${i.path.join(".") || "draft"}: ${i.message}`).join("; "));
   return r.data;
-}
-
-/** Exact SDK ConfigParameters for the draft (built by the pinned Meteora SDK). */
-export function buildConfigParams(d: ConfigDraftT) {
-  return buildCurve({
-    token: { tokenType: TokenType.SPL, tokenBaseDecimal: d.decimals, tokenQuoteDecimal: 9, tokenAuthorityOption: TokenAuthorityOption.Immutable, totalTokenSupply: d.totalSupply, leftover: 0 },
-    fee: {
-      baseFeeParams: { baseFeeMode: BaseFeeMode.FeeSchedulerLinear, feeSchedulerParam: { startingFeeBps: d.baseFeeBps, endingFeeBps: d.baseFeeBps, numberOfPeriod: 0, totalDuration: 0 } },
-      dynamicFeeEnabled: false, collectFeeMode: CollectFeeMode.QuoteToken, creatorTradingFeePercentage: d.creatorTradingFeePercent, poolCreationFee: 0, enableFirstSwapWithMinFee: false,
-    },
-    migration: { migrationOption: MigrationOption.MET_DAMM_V2, migrationFeeOption: d.migrationFeeOption as MigrationFeeOption, migrationFee: { feePercentage: 0, creatorFeePercentage: 0 } },
-    liquidityDistribution: {
-      partnerLiquidityPercentage: d.lp.partnerClaimable, partnerPermanentLockedLiquidityPercentage: d.lp.partnerLocked,
-      creatorLiquidityPercentage: d.lp.creatorClaimable, creatorPermanentLockedLiquidityPercentage: d.lp.creatorLocked,
-    },
-    lockedVesting: { totalLockedVestingAmount: 0, numberOfVestingPeriod: 0, cliffUnlockAmount: 0, totalVestingDuration: 0, cliffDurationFromMigrationTime: 0 },
-    activationType: ActivationType.Slot,
-    percentageSupplyOnMigration: d.percentageSupplyOnMigration,
-    migrationQuoteThreshold: d.migrationThresholdSol,
-  } as Parameters<typeof buildCurve>[0]);
 }
 
 /** Readable, exact terms the owner reviews and that the confirmed account must match. */

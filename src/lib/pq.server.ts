@@ -9,7 +9,8 @@ import { pqKeyHash } from "@/pq/mldsa";
 import { DBC_PROGRAM_ID, SOL_MINT, verifyPassportOffline, type Check, type PassportManifest, PASSPORT_SCHEMA } from "@/pq/passport";
 import { CHALLENGE_TTL_MS, GENESIS, anchorMemo, buildStatement, isSolanaAddress, validateRegistration, validateIdentityProof, registrationHash } from "@/pq/registration";
 import * as sol from "./solana.server";
-import { buildConfigParams, compareConfig, expectedTerms, parseDraft } from "@/pq/config-draft";
+import { compareConfig, expectedTerms, parseDraft } from "@/pq/config-draft";
+import { buildConfigParams } from "@/pq/config-build";
 
 const PREP_TTL_MS = 90_000;
 const NONCE_TTL_MS = 15 * 60_000;
