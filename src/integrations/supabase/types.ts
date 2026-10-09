@@ -119,6 +119,7 @@ export type Database = {
       chain_preparations: {
         Row: {
           cluster: string
+          confirmed_at: string | null
           created_at: string
           expires_at: string
           id: string
@@ -128,12 +129,15 @@ export type Database = {
           owner_id: string
           payload: Json
           signature: string | null
+          signed_transaction_b64: string | null
           subject: string
           submitted_at: string | null
+          transaction_b64: string | null
           wallet: string
         }
         Insert: {
           cluster: string
+          confirmed_at?: string | null
           created_at?: string
           expires_at: string
           id?: string
@@ -143,12 +147,15 @@ export type Database = {
           owner_id: string
           payload?: Json
           signature?: string | null
+          signed_transaction_b64?: string | null
           subject: string
           submitted_at?: string | null
+          transaction_b64?: string | null
           wallet: string
         }
         Update: {
           cluster?: string
+          confirmed_at?: string | null
           created_at?: string
           expires_at?: string
           id?: string
@@ -158,8 +165,10 @@ export type Database = {
           owner_id?: string
           payload?: Json
           signature?: string | null
+          signed_transaction_b64?: string | null
           subject?: string
           submitted_at?: string | null
+          transaction_b64?: string | null
           wallet?: string
         }
         Relationships: []
@@ -364,27 +373,41 @@ export type Database = {
           created_at: string
           expires_at: string
           identity_id: string
+          manifest_hash: string | null
           nonce: string
           owner_id: string
+          preparation_id: string | null
           used_at: string | null
         }
         Insert: {
           created_at?: string
           expires_at: string
           identity_id: string
+          manifest_hash?: string | null
           nonce: string
           owner_id: string
+          preparation_id?: string | null
           used_at?: string | null
         }
         Update: {
           created_at?: string
           expires_at?: string
           identity_id?: string
+          manifest_hash?: string | null
           nonce?: string
           owner_id?: string
+          preparation_id?: string | null
           used_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "launch_nonces_preparation_id_fkey"
+            columns: ["preparation_id"]
+            isOneToOne: false
+            referencedRelation: "chain_preparations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       launches: {
         Row: {
@@ -764,14 +787,49 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_chain_submission: {
+        Args: {
+          _hash: string
+          _id: string
+          _owner: string
+          _signature: string
+          _transaction: string
+        }
+        Returns: {
+          cluster: string
+          confirmed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          kind: string
+          message_b64: string
+          message_hash: string
+          owner_id: string
+          payload: Json
+          signature: string | null
+          signed_transaction_b64: string | null
+          subject: string
+          submitted_at: string | null
+          transaction_b64: string | null
+          wallet: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chain_preparations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       consume_launch_nonce: {
         Args: { _identity: string; _nonce: string; _owner: string }
         Returns: {
           created_at: string
           expires_at: string
           identity_id: string
+          manifest_hash: string | null
           nonce: string
           owner_id: string
+          preparation_id: string | null
           used_at: string | null
         }
         SetofOptions: {
@@ -807,6 +865,7 @@ export type Database = {
         Args: { _hash: string; _id: string; _owner: string }
         Returns: {
           cluster: string
+          confirmed_at: string | null
           created_at: string
           expires_at: string
           id: string
@@ -816,8 +875,37 @@ export type Database = {
           owner_id: string
           payload: Json
           signature: string | null
+          signed_transaction_b64: string | null
           subject: string
           submitted_at: string | null
+          transaction_b64: string | null
+          wallet: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chain_preparations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_launch_preparation: {
+        Args: { _identity: string; _nonce: string; _owner: string; _row: Json }
+        Returns: {
+          cluster: string
+          confirmed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          kind: string
+          message_b64: string
+          message_hash: string
+          owner_id: string
+          payload: Json
+          signature: string | null
+          signed_transaction_b64: string | null
+          subject: string
+          submitted_at: string | null
+          transaction_b64: string | null
           wallet: string
         }
         SetofOptions: {
@@ -836,6 +924,38 @@ export type Database = {
           reason: string
           t: number
         }[]
+      }
+      record_launch_confirmation: {
+        Args: { _id: string; _lifecycle: string; _owner: string; _slot: number }
+        Returns: string
+      }
+      register_pq_identity: {
+        Args: { _challenge: string; _owner: string; _proof: Json }
+        Returns: {
+          alg: string
+          anchor_signature: string | null
+          anchor_slot: number | null
+          anchored_at: string | null
+          cluster: string
+          created_at: string
+          genesis_hash: string
+          id: string
+          key_hash: string
+          owner_id: string
+          pq_signature: string
+          public_key: string
+          registration_hash: string
+          statement: string
+          status: string
+          wallet: string
+          wallet_signature: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pq_identities"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
     }
     Enums: {
