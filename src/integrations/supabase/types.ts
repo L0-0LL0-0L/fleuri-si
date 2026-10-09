@@ -116,6 +116,54 @@ export type Database = {
         }
         Relationships: []
       }
+      chain_preparations: {
+        Row: {
+          cluster: string
+          created_at: string
+          expires_at: string
+          id: string
+          kind: string
+          message_b64: string
+          message_hash: string
+          owner_id: string
+          payload: Json
+          signature: string | null
+          subject: string
+          submitted_at: string | null
+          wallet: string
+        }
+        Insert: {
+          cluster: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          kind: string
+          message_b64: string
+          message_hash: string
+          owner_id: string
+          payload?: Json
+          signature?: string | null
+          subject: string
+          submitted_at?: string | null
+          wallet: string
+        }
+        Update: {
+          cluster?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          kind?: string
+          message_b64?: string
+          message_hash?: string
+          owner_id?: string
+          payload?: Json
+          signature?: string | null
+          subject?: string
+          submitted_at?: string | null
+          wallet?: string
+        }
+        Relationships: []
+      }
       coins: {
         Row: {
           avatar: number
@@ -311,6 +359,95 @@ export type Database = {
         }
         Relationships: []
       }
+      launch_nonces: {
+        Row: {
+          created_at: string
+          expires_at: string
+          identity_id: string
+          nonce: string
+          owner_id: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          identity_id: string
+          nonce: string
+          owner_id: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          identity_id?: string
+          nonce?: string
+          owner_id?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
+      launches: {
+        Row: {
+          base_mint: string
+          checked_at: string
+          cluster: string
+          config: string
+          created_at: string
+          creator_wallet: string
+          damm_v2_pool: string | null
+          id: string
+          lifecycle: string
+          migration_signature: string | null
+          owner_id: string
+          passport_id: string
+          pool: string
+          signature: string
+          slot: number
+        }
+        Insert: {
+          base_mint: string
+          checked_at?: string
+          cluster: string
+          config: string
+          created_at?: string
+          creator_wallet: string
+          damm_v2_pool?: string | null
+          id?: string
+          lifecycle?: string
+          migration_signature?: string | null
+          owner_id: string
+          passport_id: string
+          pool: string
+          signature: string
+          slot: number
+        }
+        Update: {
+          base_mint?: string
+          checked_at?: string
+          cluster?: string
+          config?: string
+          created_at?: string
+          creator_wallet?: string
+          damm_v2_pool?: string | null
+          id?: string
+          lifecycle?: string
+          migration_signature?: string | null
+          owner_id?: string
+          passport_id?: string
+          pool?: string
+          signature?: string
+          slot?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "launches_passport_id_fkey"
+            columns: ["passport_id"]
+            isOneToOne: true
+            referencedRelation: "passports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ledger: {
         Row: {
           agent_id: string | null
@@ -371,6 +508,158 @@ export type Database = {
           wallet_provider?: string | null
           wallet_signed_at?: number | null
           wallet_verified?: boolean
+        }
+        Relationships: []
+      }
+      passports: {
+        Row: {
+          base_mint: string
+          cluster: string
+          created_at: string
+          id: string
+          identity_id: string
+          manifest: Json
+          manifest_hash: string
+          metadata_hash: string | null
+          metadata_uri: string | null
+          pool: string
+          signature: string
+        }
+        Insert: {
+          base_mint: string
+          cluster: string
+          created_at?: string
+          id?: string
+          identity_id: string
+          manifest: Json
+          manifest_hash: string
+          metadata_hash?: string | null
+          metadata_uri?: string | null
+          pool: string
+          signature: string
+        }
+        Update: {
+          base_mint?: string
+          cluster?: string
+          created_at?: string
+          id?: string
+          identity_id?: string
+          manifest?: Json
+          manifest_hash?: string
+          metadata_hash?: string | null
+          metadata_uri?: string | null
+          pool?: string
+          signature?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "passports_identity_id_fkey"
+            columns: ["identity_id"]
+            isOneToOne: false
+            referencedRelation: "pq_identities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pq_challenges: {
+        Row: {
+          cluster: string
+          expires_at: string
+          genesis_hash: string
+          id: string
+          issued_at: string
+          nonce: string
+          owner_id: string
+          pq_key_hash: string
+          statement: string
+          used_at: string | null
+          wallet: string
+        }
+        Insert: {
+          cluster: string
+          expires_at: string
+          genesis_hash: string
+          id?: string
+          issued_at?: string
+          nonce: string
+          owner_id: string
+          pq_key_hash: string
+          statement: string
+          used_at?: string | null
+          wallet: string
+        }
+        Update: {
+          cluster?: string
+          expires_at?: string
+          genesis_hash?: string
+          id?: string
+          issued_at?: string
+          nonce?: string
+          owner_id?: string
+          pq_key_hash?: string
+          statement?: string
+          used_at?: string | null
+          wallet?: string
+        }
+        Relationships: []
+      }
+      pq_identities: {
+        Row: {
+          alg: string
+          anchor_signature: string | null
+          anchor_slot: number | null
+          anchored_at: string | null
+          cluster: string
+          created_at: string
+          genesis_hash: string
+          id: string
+          key_hash: string
+          owner_id: string
+          pq_signature: string
+          public_key: string
+          registration_hash: string
+          statement: string
+          status: string
+          wallet: string
+          wallet_signature: string
+        }
+        Insert: {
+          alg?: string
+          anchor_signature?: string | null
+          anchor_slot?: number | null
+          anchored_at?: string | null
+          cluster: string
+          created_at?: string
+          genesis_hash: string
+          id?: string
+          key_hash: string
+          owner_id: string
+          pq_signature: string
+          public_key: string
+          registration_hash: string
+          statement: string
+          status?: string
+          wallet: string
+          wallet_signature: string
+        }
+        Update: {
+          alg?: string
+          anchor_signature?: string | null
+          anchor_slot?: number | null
+          anchored_at?: string | null
+          cluster?: string
+          created_at?: string
+          genesis_hash?: string
+          id?: string
+          key_hash?: string
+          owner_id?: string
+          pq_signature?: string
+          public_key?: string
+          registration_hash?: string
+          statement?: string
+          status?: string
+          wallet?: string
+          wallet_signature?: string
         }
         Relationships: []
       }
@@ -475,6 +764,69 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      consume_launch_nonce: {
+        Args: { _identity: string; _nonce: string; _owner: string }
+        Returns: {
+          created_at: string
+          expires_at: string
+          identity_id: string
+          nonce: string
+          owner_id: string
+          used_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_nonces"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      consume_pq_challenge: {
+        Args: { _id: string; _owner: string }
+        Returns: {
+          cluster: string
+          expires_at: string
+          genesis_hash: string
+          id: string
+          issued_at: string
+          nonce: string
+          owner_id: string
+          pq_key_hash: string
+          statement: string
+          used_at: string | null
+          wallet: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pq_challenges"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      consume_preparation: {
+        Args: { _hash: string; _id: string; _owner: string }
+        Returns: {
+          cluster: string
+          created_at: string
+          expires_at: string
+          id: string
+          kind: string
+          message_b64: string
+          message_hash: string
+          owner_id: string
+          payload: Json
+          signature: string | null
+          subject: string
+          submitted_at: string | null
+          wallet: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chain_preparations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       garden_commit: { Args: { p: Json }; Returns: number }
       my_alerts: {
         Args: { p_limit?: number }
