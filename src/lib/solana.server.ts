@@ -159,7 +159,8 @@ export async function estimateWalletCost(conn: Connection, message: Uint8Array, 
   if (sim.value.err) return { ok: false as const, balanceLamports: pre, error: `Simulation failed: ${JSON.stringify(sim.value.err)}. ${(sim.value.logs ?? []).slice(-3).join(" | ")}`.slice(0, 400) };
   const post = sim.value.accounts?.[0]?.lamports ?? pre;
   const networkFee = fee.value ?? 0;
-  return { ok: true as const, balanceLamports: pre, rentLamports: Math.max(0, pre - post), networkFeeLamports: networkFee, totalLamports: Math.max(0, pre - post) + networkFee };
+  // Simulated post-balance of the payer: account rent plus whatever the RPC deducts for fees.
+  return { ok: true as const, balanceLamports: pre, simulatedChangeLamports: Math.max(0, pre - post), networkFeeLamports: networkFee };
 }
 
 export async function buildMigrationLockerTx(conn: Connection, pool: string, wallet: string) {
