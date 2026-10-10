@@ -127,7 +127,7 @@ describe("botanist payment orchestration", () => {
     fail = false; const r = await settleAndDeliver(w.d, w.job, null); expect(r.status).toBe(200); expect(w.calls.filter((c) => c === "settle")).toHaveLength(1);
   });
   it("generic x402 client: 402 → signed-header retry of the ORIGINAL POST {mint} settles that exact job; replay and UI resume return the same receipt", async () => {
-    const token = "ab".repeat(32); const j = { ...mkJob(), capability_hash: sha256Hex(utf8(token)) }; const chain = new Map();
+    const token = "ab".repeat(32); const j: Job = { ...mkJob(), capability_hash: sha256Hex(utf8(token)) }; const chain = new Map();
     // Only the capability holder receives this 402 (the quote response); it carries the off-chain capability.
     const pr: any = decodePaymentRequiredHeader(r402(j, undefined, {}, token).headers!["PAYMENT-REQUIRED"]);
     expect(pr.accepts[0].extra.botanistCapability).toBe(token); expect(pr.accepts[0].extra.botanistJob).toBe(j.id);
@@ -149,7 +149,7 @@ describe("botanist payment orchestration", () => {
     expect((await resolveHeaderJob(sig, { mint: j.mint }, "https://evil.test/r", find) as any).status).toBe(409);
   });
   it("a PUBLIC on-chain memo plus a forged header cannot retrieve a paid report without the capability", async () => {
-    const token = "cd".repeat(32); const j = { ...mkJob(), capability_hash: sha256Hex(utf8(token)) }; const chain = new Map();
+    const token = "cd".repeat(32); const j: Job = { ...mkJob(), capability_hash: sha256Hex(utf8(token)) }; const chain = new Map();
     const { b64: tx, vt } = payTx(j);
     const w = world(j, { chain, settle: async () => { chain.set("SIGP", landed(vt, j)); return { success: true, transaction: "SIGP" }; } });
     expect((await settleAndDeliver(w.d, j, header(j, tx), token)).status).toBe(200); expect(w.job.report).toBeTruthy();
