@@ -1,0 +1,12 @@
+$schema: https://api.gitbook.com/gitbook-docs.yaml
+site:
+  title: fleuri docs
+  structure:
+    - type: space
+      key: fleuri
+      title: fleuri
+      path: docs
+      default: true
+      content:
+        directory: ./docs
+        language: en
