@@ -14,6 +14,7 @@ beforeAll(async () => {
   // Supabase-style broad default grants, so the hardening migration is actually exercised.
   await db.exec("grant all on all tables in schema public to anon,authenticated;");
   await db.exec(await sql("../../drizzle/migrations/0006_harden_new_table_permissions.sql"));
+  await db.exec(await sql("../../drizzle/migrations/0007_persist_owner_permission_restrictions.sql"));
 }, 30_000);
 afterAll(async () => { await db?.close(); });
 const job = async (memo: string, expires = "now()+interval '10 minutes'") => (await db.query<any>(`insert into botanist_jobs(request_hash,capability_hash,client_hash,mint,network,asset,amount,pay_to,memo,quote_expires_at) values(md5($1)||md5($1),$2,'c','mint','solana:x','usdc',500000,'pay',$1,${expires}) returning id`, [memo, cap])).rows[0].id;
@@ -26,6 +27,12 @@ describe("botanist job state machine", () => {
       await expect(db.query("select * from botanist_jobs")).rejects.toThrow(/permission/);
       for (const t of ["botanist_jobs", "passport_observations", "pollen_vaults", "pollen_associations"]) await expect(db.exec(`truncate ${t} cascade`)).rejects.toThrow(/permission/);
       await expect(db.exec("insert into pollen_vaults(address) values('x')")).rejects.toThrow(/permission/);
+      for (const t of ["passport_observations", "pollen_vaults", "pollen_associations"]) {
+        await expect(db.query(`select count(*) from ${t}`)).resolves.toBeTruthy(); // public SELECT retained
+        await expect(db.exec(`delete from ${t}`)).rejects.toThrow(/permission/);
+        await expect(db.exec(`update ${t} set created_at=created_at`)).rejects.toThrow(/permission|column/);
+      }
+      await expect(db.query("select public.observations_append_only()")).rejects.toThrow(/permission|trigger/);
       await expect(db.query("select botanist_claim_payment(gen_random_uuid(),'a','b','c','d')")).rejects.toThrow(/permission/);
       await db.exec("reset role");
     }
