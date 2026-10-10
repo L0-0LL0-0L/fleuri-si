@@ -25,6 +25,14 @@ export function SandboxBadge({ className }: { className?: string }) {
   );
 }
 
+export function OnchainBadge({ className }: { className?: string }) {
+  return (
+    <span className={cn("chip bg-ink text-paper-light", className)} title="Transactions on this page use real Solana assets and require your wallet's approval.">
+      <span className="h-1.5 w-1.5 bg-poppy" aria-hidden /> On-chain · real assets
+    </span>
+  );
+}
+
 export function SegTabs<T extends string>({
   value,
   onChange,
