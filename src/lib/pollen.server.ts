@@ -89,6 +89,7 @@ export async function prepareFund(savePrep: SavePrep, ownerId: string, input: { 
   const tx = await client.fundFeeVault({ fundAmount: new BN(amount.toString()), funder: pk(input.wallet, "wallet"), feeVault: new PublicKey(input.vault) });
   const built = sol.finalizeUnsigned(tx, new PublicKey(input.wallet), await conn.getLatestBlockhash("confirmed"), [input.wallet], [DFS_PROGRAM_ID]);
   const cost = await sol.estimateWalletCost(conn, built.message, input.wallet);
+  if (!cost.ok) throw new Error(cost.error);
   const prep = await savePrep(ownerId, "pollen_fund", input.wallet, input.vault, built, { vault: input.vault, amount: amount.toString(), fundedBefore: v.funded });
   return { preparationId: prep.id, transaction: sol.unsignedB64(built.tx), cluster, amount: amount.toString(), symbol: v.symbol, decimals: v.decimals, cost };
 }
@@ -97,12 +98,14 @@ export async function prepareClaim(savePrep: SavePrep, ownerId: string, input: {
   const { conn, cluster } = await ready();
   const v = await readVault(conn, input.vault);
   const me = v.recipients.find((r) => r.address === input.wallet);
+  if (!v.supported) throw new Error("Only USDC and wrapped-SOL vaults are supported for claims here.");
   if (!me) throw new Error("The connected wallet is not a recipient of this vault.");
   if (BigInt(me.unclaimed) === 0n) throw new Error("Nothing unclaimed for this wallet yet.");
   const client = new DynamicFeeSharingClient(conn, "confirmed");
   const tx = await client.claimUserFee({ feeVault: new PublicKey(input.vault), user: new PublicKey(input.wallet), payer: new PublicKey(input.wallet) });
   const built = sol.finalizeUnsigned(tx, new PublicKey(input.wallet), await conn.getLatestBlockhash("confirmed"), [input.wallet], [DFS_PROGRAM_ID]);
   const cost = await sol.estimateWalletCost(conn, built.message, input.wallet);
+  if (!cost.ok) throw new Error(cost.error);
   const prep = await savePrep(ownerId, "pollen_claim", input.wallet, input.vault, built, { vault: input.vault, expected: me.unclaimed, claimedBefore: me.claimed });
   return { preparationId: prep.id, transaction: sol.unsignedB64(built.tx), cluster, expected: me.unclaimed, symbol: v.symbol, decimals: v.decimals, cost };
 }
@@ -127,6 +130,7 @@ export async function prepareRoute(savePrep: SavePrep, ownerId: string, input: {
   const tx = await client.fundByClaimDbcPartnerTradingFee({ signer: new PublicKey(input.wallet), feeClaimer: new PublicKey(input.vault), feeVault: new PublicKey(input.vault), poolConfig: new PublicKey(launch.config), virtualPool: new PublicKey(launch.pool) });
   const built = sol.finalizeUnsigned(tx, new PublicKey(input.wallet), await conn.getLatestBlockhash("confirmed"), [input.wallet], [DFS_PROGRAM_ID]);
   const cost = await sol.estimateWalletCost(conn, built.message, input.wallet);
+  if (!cost.ok) throw new Error(cost.error);
   const prep = await savePrep(ownerId, "pollen_route", input.wallet, input.vault, built, { vault: input.vault, launchId: launch.id, fundedBefore: r.vault.funded });
   return { preparationId: prep.id, transaction: sol.unsignedB64(built.tx), cluster, cost };
 }
