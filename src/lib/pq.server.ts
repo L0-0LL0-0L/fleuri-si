@@ -310,7 +310,7 @@ export async function prepareLaunch(ownerId: string, signed: unknown) {
   if (canonicalize(expected) !== canonicalize(got)) throw new Error("Passport economics differ from the live DBC config. Start the launch again.");
   if (await conn.getAccountInfo(new PublicKey(m.token.baseMint))) throw new Error("Base mint already exists; use a fresh mint keypair.");
   const gatewayImage = m.token.imageUri.replace("ipfs://", e.gateway);
-  const metadataBytes = utf8(canonicalize({ name: m.token.name, symbol: m.token.symbol, image: gatewayImage, description: `Launched with a Fleuri ML-DSA-65 launch passport. Provenance only; not quantum-safe custody.`, external_url: `${e.origin}/passport/${off.passport.manifestHash}`, properties: { fleuri_passport: off.passport } }));
+  const metadataBytes = utf8(canonicalize({ name: m.token.name, symbol: m.token.symbol, image: gatewayImage, description: `Launched with a Fleuri ML-DSA-65 launch passport. Provenance only; not quantum-safe custody.`, external_url: `${e.origin}/passport/${off.passport.manifestHash}`, ...(m.token.website?{website:m.token.website}:{}), ...(m.token.twitter?{twitter:m.token.twitter}:{}), properties: { fleuri_passport: off.passport } }));
   const cid = await sol.pinBytes(metadataBytes, `fleuri-passport-${off.passport.manifestHash.slice(0, 12)}.json`, "application/json");
   const metadataUri = `${e.gateway}${cid}`;
   if (metadataUri.length > 200) throw new Error("Metadata URI too long.");

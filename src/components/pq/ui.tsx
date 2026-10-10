@@ -139,6 +139,8 @@ function units(raw:string,decimals:number) { const padded=raw.padStart(decimals+
 export function PassportTerms({manifest:m}:{manifest:PassportManifest}) {
   const values:[string,string][]=[
     ["Token",`${m.token.name} · $${m.token.symbol}`], ["Supply cap",`${units(m.token.totalSupply,m.token.decimals)} · ${m.token.decimals} decimals`],
+    ...(m.token.website?[["Website",m.token.website] as [string,string]]:[]),
+    ...(m.token.twitter?[["Twitter / X",m.token.twitter] as [string,string]]:[]),
     ["Initial base fee (rounded)",`${m.fees.baseFeeBps} bps · dynamic fees ${m.fees.dynamicFeeEnabled?"enabled":"off"}`],
     ["Trading split after protocol",`creator ${m.fees.creatorTradingFeePercent}% · partner ${m.fees.partnerTradingFeePercent}%`],
     ["Pool creation fee",`${units(m.fees.poolCreationFeeLamports,9)} SOL + network/rent costs`],
@@ -151,7 +153,7 @@ export function PassportTerms({manifest:m}:{manifest:PassportManifest}) {
     ["Mint",m.token.baseMint], ["DBC config",m.config.address], ["DBC pool",m.pool.address], ["Image",m.token.imageUri],
   ];
   return <div className="space-y-3">
-    <dl className="hair divide-y divide-ink/20">{values.map(([label,value])=><div key={label} className="grid gap-1 p-2 sm:grid-cols-[10rem_minmax(0,1fr)]"><dt className="font-mono text-[0.65rem] uppercase text-ink-soft">{label}</dt><dd className="min-w-0 break-all text-sm">{value}</dd></div>)}</dl>
+    <dl className="hair divide-y divide-ink/20">{values.map(([label,value])=><div key={label} className="grid gap-1 p-2 sm:grid-cols-[10rem_minmax(0,1fr)]"><dt className="font-mono text-[0.65rem] uppercase text-ink-soft">{label}</dt><dd className="min-w-0 break-all text-sm">{/^https?:\/\//.test(value)?<a className="underline" href={value} target="_blank" rel="noreferrer">{value}</a>:value}</dd></div>)}</dl>
     <p className="text-xs text-ink-soft">{m.authority.policy}</p>
     <details className="hair p-2"><summary className="cursor-pointer font-mono text-xs">Complete signed config snapshot</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all text-[0.65rem]">{JSON.stringify(m.config.snapshot,null,2)}</pre></details>
   </div>;

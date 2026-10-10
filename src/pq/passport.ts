@@ -16,6 +16,8 @@ const h64 = z.string().regex(/^[0-9a-f]{64}$/);
 const uint = z.string().regex(/^(0|[1-9][0-9]{0,38})$/);
 const pct = z.number().int().min(0).max(100);
 const Scalar = z.union([z.string().max(200), z.number().int(), z.boolean(), z.null()]);
+const httpsUrl = (s: string) => { try { const u = new URL(s); return u.protocol === "https:" && u.hostname.includes(".") && !u.username && !u.password; } catch { return false; } };
+const twitterUrl = (s: string) => { try { const u = new URL(s); return u.protocol === "https:" && ["x.com", "www.x.com", "twitter.com", "www.twitter.com"].includes(u.hostname); } catch { return false; } };
 
 export const Manifest = z
   .object({
@@ -34,6 +36,8 @@ export const Manifest = z
         symbol: z.string().regex(/^[A-Z0-9]{1,10}$/),
         imageUri: z.string().regex(/^ipfs:\/\/[A-Za-z0-9]{46,100}$/),
         imageSha256: h64.nullable(),
+        website: z.string().max(200).refine(httpsUrl, "Website must be an https URL").optional(),
+        twitter: z.string().max(200).refine(twitterUrl, "Twitter must be an https://x.com or https://twitter.com URL").optional(),
         decimals: z.number().int().min(6).max(9),
         totalSupply: uint,
       })

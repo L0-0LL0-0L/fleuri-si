@@ -25,6 +25,7 @@ function Launchpad() {
   const [busy,setBusy]=useState<string|null>(null); const [error,setError]=useState("");
   const [name,setName]=useState(""); const [symbol,setSymbol]=useState("");
   const [imageUri,setImageUri]=useState(""); const [imageHash,setImageHash]=useState<string|null>(null); const [file,setFile]=useState<File|null>(null);
+  const [website,setWebsite]=useState(""); const [twitter,setTwitter]=useState("");
   const [manifest,setManifest]=useState<PassportManifest|null>(null); const [signed,setSigned]=useState<SignedPassportT|null>(null);
   const [reviewAck,setReviewAck]=useState(false); const [done,setDone]=useState<{signature:string;hash:string}|null>(null);
   const identity=mine?.identities.find(i=>i.key_hash===local.envelope?.keyHash && i.cluster===readiness?.cluster && i.status==="anchored");
@@ -54,7 +55,10 @@ function Launchpad() {
     mint.current ??= Keypair.generate();
     const r=await pqStartLaunch({data:{identityId:identity.id,baseMint:mint.current.publicKey.toBase58()}});
     if(!r.ok) throw new Error(r.error);
-    const m=parseManifest({...r.data.template,token:{...r.data.template.token,name:name.trim(),symbol:symbol.trim().toUpperCase(),imageUri:uri.trim(),imageSha256:hash}});
+    const token:PassportManifest["token"]={...r.data.template.token,name:name.trim(),symbol:symbol.trim().toUpperCase(),imageUri:uri.trim(),imageSha256:hash};
+    if(website.trim()) token.website=website.trim();
+    if(twitter.trim()) token.twitter=twitter.trim();
+    const m=parseManifest({...r.data.template,token});
     setManifest(m); setReviewAck(false);
   }
   async function launch(kind:WalletKind) {
@@ -91,11 +95,13 @@ function Launchpad() {
     </Panel>
     {!userId && <Panel title="Your workspace"><p className="text-sm">Use your existing workspace session to register an identity and view your launches.</p><button type="button" className="btn btn-ink" disabled={!!busy} onClick={()=>void run("Opening workspace…",async()=>{await store.startSandbox();await refresh();})}>{busy??"Open workspace"}</button></Panel>}
     {!canReview && !manifest && <p className="hair bg-paper-light p-3 text-sm">Before launching: <Link to="/identity" className="font-semibold underline">create or restore your key, download its backup, unlock it and anchor it</Link>. Launching also requires every network readiness check to pass.</p>}
-    {done?<Panel title="Your bloom is on chain"><p className="display text-2xl">planted. signed. yours.</p><a className="block break-all text-xs underline" href={explorerTx(done.signature,readiness.cluster)} target="_blank" rel="noreferrer">View confirmed launch transaction</a><Link to="/passport/$hash" params={{hash:done.hash}} className="btn btn-red">Open the public passport</Link><button type="button" className="btn btn-paper" onClick={()=>{setDone(null);setManifest(null);setSigned(null);setName("");setSymbol("");setFile(null);setImageUri("");setImageHash(null);}}>Plant another token</button></Panel>
+    {done?<Panel title="Your bloom is on chain"><p className="display text-2xl">planted. signed. yours.</p><a className="block break-all text-xs underline" href={explorerTx(done.signature,readiness.cluster)} target="_blank" rel="noreferrer">View confirmed launch transaction</a><Link to="/passport/$hash" params={{hash:done.hash}} className="btn btn-red">Open the public passport</Link><button type="button" className="btn btn-paper" onClick={()=>{setDone(null);setManifest(null);setSigned(null);setName("");setSymbol("");setFile(null);setImageUri("");setImageHash(null);setWebsite("");setTwitter("");}}>Plant another token</button></Panel>
     :!manifest?<Panel title="Your next bloom">
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();void run("Reading exact chain terms…",review);}}>
         <label className="text-sm font-semibold">Token name<input required maxLength={32} value={name} onChange={e=>setName(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="a strange little bloom"/></label>
         <label className="text-sm font-semibold">Ticker<input required pattern="[A-Z0-9]{1,10}" maxLength={10} value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="BLOOM"/></label>
+        <label className="text-sm font-semibold">Website · optional<input maxLength={200} value={website} onChange={e=>setWebsite(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="https://your-token.site"/></label>
+        <label className="text-sm font-semibold">Twitter / X · optional<input maxLength={200} value={twitter} onChange={e=>setTwitter(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="https://x.com/yourhandle"/></label>
         <label className="text-sm font-semibold sm:col-span-2">Token image · PNG, JPEG, GIF or WebP, up to 1 MB<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="mt-2 block w-full text-xs" onChange={e=>setFile(e.target.files?.[0]??null)}/></label>
         <label className="text-sm sm:col-span-2">Or an existing immutable image CID<input value={imageUri} disabled={!!file} onChange={e=>{setImageUri(e.target.value);setImageHash(null);}} className="hair mt-1 h-11 w-full bg-paper-light px-3 font-mono text-xs" placeholder="ipfs://bafy…"/></label>
         <p className="text-xs text-ink-soft sm:col-span-2">Supply, fees, LP shares and graduation are read from the configured Meteora pool config. The mint key is generated on your device; its private key stays here.</p>
