@@ -43,8 +43,12 @@ export function Panel({ title, children, className }: { title: string; children:
 export function useWallets() {
   const [avail, setAvail] = useState<Record<WalletKind, boolean>>({ phantom: false, solflare: false });
   useEffect(() => {
-    const t = setTimeout(() => setAvail({ phantom: !!getProvider("phantom"), solflare: !!getProvider("solflare") }), 300);
-    return () => clearTimeout(t);
+    // Wallets inject asynchronously; poll for a few seconds so late injectors are found.
+    const check = () => setAvail({ phantom: !!getProvider("phantom"), solflare: !!getProvider("solflare") });
+    check();
+    const t = setInterval(check, 500);
+    const stop = setTimeout(() => clearInterval(t), 5000);
+    return () => { clearInterval(t); clearTimeout(stop); };
   }, []);
   return avail;
 }
