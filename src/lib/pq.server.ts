@@ -9,6 +9,8 @@ import { pqKeyHash } from "@/pq/mldsa";
 import { DBC_PROGRAM_ID, SOL_MINT, verifyPassportOffline, type Check, type PassportManifest, PASSPORT_SCHEMA } from "@/pq/passport";
 import { CHALLENGE_TTL_MS, GENESIS, anchorMemo, buildStatement, isSolanaAddress, validateRegistration, validateIdentityProof, registrationHash } from "@/pq/registration";
 import * as sol from "./solana.server";
+import { launchIxProblems } from "@/pq/evidence";
+import { deriveInitAccounts } from "@/pq/chain-read";
 import { compareConfig, expectedTerms, parseDraft } from "@/pq/config-draft";
 import { buildConfigParams } from "@/pq/config-build";
 
@@ -144,7 +146,9 @@ export async function confirmPrepared(ownerId: string, preparationId: string): P
   }
   if (prep.kind === "launch") {
     const p = prep.payload as any;
-    if (!tx.ixs.some((x) => x.program === DBC_PROGRAM_ID)) throw new Error("Confirmed transaction did not call Meteora DBC.");
+    // Same strict decoded create-instruction validator as the portable verifier.
+    const ixProblems = launchIxProblems(tx as any, p.passport.manifest, p.metadataUri, deriveInitAccounts(p.baseMint, p.pool));
+    if (ixProblems.length) throw new Error(`Launch instruction does not match the passport: ${ixProblems.slice(0, 2).join("; ")}`);
     const pool = await sol.readPool(conn, p.pool);
     if (!pool) return { status: "pending", detail: "Pool account not visible yet…" };
     if (pool.baseMint !== p.baseMint || pool.config !== p.config || pool.creator !== prep.wallet) throw new Error("On-chain pool does not match the passport terms.");
@@ -444,14 +448,16 @@ export async function verifyPublic(input: { passport?: unknown; hash?: string })
       const tx=await sol.readConfirmedTx(conn,launch.signature);
       if(!tx) add("transaction","Launch transaction","unavailable","Confirmed launch transaction is not available from this RPC.");
       else {
-        const ok=!!prep && !tx.err && tx.signers.includes(m.creatorWallet) && tx.ixs.some(x=>x.program===DBC_PROGRAM_ID) && messageHash(tx.serialized)===prep.message_hash && canonicalize(prep.payload.passport)===canonicalize(signed) && prep.wallet===m.creatorWallet;
-        add("transaction","Launch transaction",ok?"pass":"fail",ok?`Exact prepared transaction, signed by the creator, confirmed in slot ${tx.slot}.`:"Transaction or prepared passport binding differs.");
+        const probs=launchIxProblems(tx as any,m,rec.metadata_uri,deriveInitAccounts(m.token.baseMint,launch.pool));
+        const bound=!!prep && messageHash(tx.serialized)===prep.message_hash && canonicalize(prep.payload.passport)===canonicalize(signed) && prep.wallet===m.creatorWallet;
+        const ok=probs.length===0 && bound;
+        add("transaction","Launch transaction",ok?"pass":"fail",ok?`Decoded initialize_virtual_pool_with_spl_token proves the original creator, mint, config, pool and metadata; exact prepared bytes confirmed in slot ${tx.slot}.`:probs.length?probs.slice(0,3).join("; "):"Transaction or prepared passport binding differs.");
       }
     } catch(err) {add("transaction","Launch transaction","unavailable",(err as Error).message);}
     try {
       const [pool,meta,mint]=await Promise.all([sol.readPool(conn,launch.pool),sol.readTokenMetadata(conn,m.token.baseMint),sol.readTokenMint(conn,m.token.baseMint)]);
-      const ok=!!pool && pool.creator===m.creatorWallet && pool.baseMint===m.token.baseMint && pool.config===m.config.address && !!meta && meta.uri===rec.metadata_uri && meta.name===m.token.name && meta.symbol===m.token.symbol && !meta.isMutable && meta.updateAuthority===PublicKey.default.toBase58() && mint.decimals===m.token.decimals && mint.supply<=BigInt(m.token.totalSupply) && !mint.mintAuthority && !mint.freezeAuthority;
-      add("onchain","Mint, pool and immutable metadata",ok?"pass":"fail",ok?"Creator, pool, immutable metadata, decimals and revoked mint/freeze authorities match. Circulating supply is within the signed cap.":"Pool, token supply, metadata or authority policy differs.");
+      const ok=!!pool && pool.baseMint===m.token.baseMint && pool.config===m.config.address && !!meta && meta.uri===rec.metadata_uri && meta.name===m.token.name && meta.symbol===m.token.symbol && !meta.isMutable && meta.updateAuthority===PublicKey.default.toBase58() && mint.decimals===m.token.decimals && mint.supply<=BigInt(m.token.totalSupply) && !mint.mintAuthority && !mint.freezeAuthority;
+      add("onchain","Mint, pool and immutable metadata",ok?"pass":"fail",ok?`Pool links this mint and config; immutable metadata, decimals and revoked mint/freeze authorities match; supply within cap.${pool!.creator!==m.creatorWallet?` Current pool creator is ${pool!.creator} (changed after launch; original creator is proven by the launch instruction).`:""}`:"Pool, token supply, metadata or authority policy differs.");
       if(pool) {
         const life=mapLifecycle(pool);
         add("lifecycle","Graduation state","pass",{curve_active:"Bonding curve active",curve_completed:"Curve completed; awaiting migration",migration_pending:"Migration pending; DAMM v2 pool is not confirmed",damm_v2_live:`Live on DAMM v2: ${pool.dammV2Pool}`}[life]);
