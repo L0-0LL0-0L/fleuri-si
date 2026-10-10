@@ -409,6 +409,39 @@ export type Database = {
           },
         ]
       }
+      launch_proposals: {
+        Row: {
+          agent_handle: string
+          created_at: string
+          id: string
+          name: string
+          reason: string
+          status: string
+          symbol: string
+          tagline: string
+        }
+        Insert: {
+          agent_handle: string
+          created_at?: string
+          id?: string
+          name: string
+          reason?: string
+          status?: string
+          symbol: string
+          tagline?: string
+        }
+        Update: {
+          agent_handle?: string
+          created_at?: string
+          id?: string
+          name?: string
+          reason?: string
+          status?: string
+          symbol?: string
+          tagline?: string
+        }
+        Relationships: []
+      }
       launches: {
         Row: {
           base_mint: string
