@@ -62,7 +62,7 @@ export async function registerIdentity(ownerId: string, i: { challengeId: string
   return row;
 }
 
-async function savePrep(ownerId: string, kind: string, wallet: string, subject: string, built: {tx: Transaction; message: Uint8Array; lastValidBlockHeight: number}, payload: Record<string, unknown>) {
+export async function savePrep(ownerId: string, kind: string, wallet: string, subject: string, built: {tx: Transaction; message: Uint8Array; lastValidBlockHeight: number}, payload: Record<string, unknown>) {
   const d = await db();
   const row = must(
     await d
@@ -185,6 +185,7 @@ export async function confirmPrepared(ownerId: string, preparationId: string): P
     must(await d.from("chain_preparations").update({ confirmed_at: new Date().toISOString(), payload: { ...prep.payload, verifiedSlot: tx.slot, snapshotHash: r.snapshotHash } }).eq("id", preparationId).eq("owner_id", ownerId));
     return { status: "confirmed", detail: `Config ${prep.subject} confirmed in slot ${tx.slot} and matches every reviewed term.`, id: prep.subject };
   }
+  if (String(prep.kind).startsWith("pollen_")) { const pl = await import("./pollen.server"); return pl.confirmPollen(prep, tx, conn, ownerId); }
   throw new Error("Unknown preparation kind.");
 }
 

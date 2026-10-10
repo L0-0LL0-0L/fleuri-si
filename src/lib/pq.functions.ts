@@ -217,3 +217,28 @@ export const pqLiving = createServerFn({ method: "POST" })
 export const pqExportBundle = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ hash: z.string().regex(/^[0-9a-f]{64}$/) }).strict().parse(d))
   .handler(async ({ data }) => { const s = await import("./living.server"); return safe(() => s.exportBundle(data.hash)); });
+
+// ---------- Pollen (Meteora Dynamic Fee Sharing) ----------
+const pollenCall = <T,>(fn: (pl: typeof import("./pollen.server"), save: any) => Promise<T>) => safe(async () => { const [pl, pq] = await Promise.all([import("./pollen.server"), import("./pq.server")]); return fn(pl, pq.savePrep); });
+const amountText = z.string().max(24);
+export const pollenList = createServerFn({ method: "GET" }).handler(async () => safe(async () => (await import("./pollen.server")).listVaults()));
+export const pollenInspect = createServerFn({ method: "POST" }).inputValidator((d: unknown) => z.object({ vault: addr }).strict().parse(d)).handler(async ({ data }) => safe(async () => (await import("./pollen.server")).inspect(data.vault)));
+export const pollenForLaunch = createServerFn({ method: "POST" }).inputValidator((d: unknown) => z.object({ launchId: id, signer: addr.nullable() }).strict().parse(d)).handler(async ({ data }) => safe(async () => (await import("./pollen.server")).forLaunch(data.launchId, data.signer)));
+export const pollenPrepareCreate = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ wallet: addr, base: addr, terms: z.object({ mint: addr, recipients: z.array(z.object({ address: addr, bps: z.number().int() }).strict()).max(5) }).strict() }).strict().parse(d))
+  .handler(async ({ data, context }) => pollenCall((pl, save) => pl.prepareCreate(save, context.userId, data)));
+export const pollenPrepareFund = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ wallet: addr, vault: addr, amount: amountText }).strict().parse(d))
+  .handler(async ({ data, context }) => pollenCall((pl, save) => pl.prepareFund(save, context.userId, data)));
+export const pollenPrepareClaim = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ wallet: addr, vault: addr }).strict().parse(d))
+  .handler(async ({ data, context }) => pollenCall((pl, save) => pl.prepareClaim(save, context.userId, data)));
+export const pollenPrepareRoute = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ wallet: addr, vault: addr, launchId: id }).strict().parse(d))
+  .handler(async ({ data, context }) => pollenCall((pl, save) => pl.prepareRoute(save, context.userId, data)));
+export const pollenImport = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ vault: addr }).strict().parse(d))
+  .handler(async ({ data, context }) => safe(async () => (await import("./pollen.server")).importVault(context.userId, data.vault)));
+export const pollenAssociate = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ vault: addr, launchId: id }).strict().parse(d))
+  .handler(async ({ data, context }) => safe(async () => (await import("./pollen.server")).associate(context.userId, data.vault, data.launchId)));
