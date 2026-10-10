@@ -113,9 +113,9 @@ export async function handleBotanist(request: Request): Promise<Response> {
 
   // Generic x402 retry of the original POST {mint}: recover the exact quoted job from its payment.
   if (sig && !body.jobId) {
-    const r = await resolveHeaderJob(sig, body, `${sol.solEnv().origin}/api/public/botanist/report`, async (memo) => (await admin.from("botanist_jobs").select("*").eq("memo", memo).maybeSingle()).data);
+    const r = await resolveHeaderJob(sig, body, `${sol.solEnv().origin}/api/public/botanist/report`, (id, token) => findJob(id, token));
     if (!("job" in r)) return out(r);
-    return out(await settleAndDeliver(flowDeps(admin), r.job, sig));
+    return out(await settleAndDeliver(flowDeps(admin), r.job, sig, r.token));
   }
 
   // Resume an existing job (capability token required; never a list or public lookup).
@@ -124,9 +124,9 @@ export async function handleBotanist(request: Request): Promise<Response> {
     if (!j) return json(404, { error: "Unknown job or wrong retrieval token." });
     if (!sig && !j.payment_hash && !j.report) {
       if (new Date(j.quote_expires_at).getTime() < Date.now()) return json(410, { error: "Quote expired. Start a new report; nothing was charged.", expired: true });
-      return out(r402(j));
+      return out(r402(j, undefined, {}, String(body.token)));
     }
-    return out(await settleAndDeliver(flowDeps(admin), j, sig));
+    return out(await settleAndDeliver(flowDeps(admin), j, sig, String(body.token)));
   }
 
   // New quote.
@@ -146,6 +146,6 @@ export async function handleBotanist(request: Request): Promise<Response> {
   row.accepted = requirementOf(row); row.resource_info = resourceOf(row);
   const { data: j, error } = await admin.from("botanist_jobs").insert(row).select("*").single();
   if (error) return json(500, { error: "Could not create quote." });
-  const o = r402(j); return json(402, { ...o.body, token }, o.headers);
+  const o = r402(j, undefined, {}, token); return json(402, { ...o.body, token }, o.headers);
 }
 

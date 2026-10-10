@@ -24,10 +24,17 @@ export type FlowDeps = {
 export const requirementOf = (j: Job): Requirement => (j as any).accepted ?? ({ scheme: "exact", network: j.network, asset: j.asset, amount: String(j.amount), payTo: j.pay_to, maxTimeoutSeconds: QUOTE_TTL_S, extra: { feePayer: j.fee_payer, memo: j.memo } });
 /** Frozen at quote time so identical-body /settle retries stay identical after settings or code changes. */
 export const resourceOf = (j: Job) => (j as any).resource_info ?? { url: j.resource, description: `Botanist field report for mint ${j.mint}`, mimeType: "application/json" };
-export const paymentRequired = (j: Job, error?: string) => ({ x402Version: 2, ...(error ? { error } : {}), resource: resourceOf(j), accepts: [requirementOf(j)] });
+/**
+ * The off-chain retrieval capability (job id + raw token) is advertised to the capability holder in the
+ * 402's requirement extra, so generic x402 clients echo it back in PAYMENT-SIGNATURE.accepted. It is never
+ * stored in plaintext (only capability_hash), never part of the frozen requirement sent to the facilitator,
+ * and never on chain — the public memo is NOT authorization.
+ */
+export const withCapability = (r: Requirement, j: Job, token?: string): Requirement => token ? ({ ...r, extra: { ...r.extra, botanistJob: j.id, botanistCapability: token } } as any) : r;
+export const paymentRequired = (j: Job, error?: string, token?: string) => ({ x402Version: 2, ...(error ? { error } : {}), resource: resourceOf(j), accepts: [withCapability(requirementOf(j), j, token)] });
 /** Every real 402 carries the PAYMENT-REQUIRED header. */
-export const r402 = (j: Job, error?: string, extra: Record<string, unknown> = {}): Out => {
-  const pr = paymentRequired(j, error);
+export const r402 = (j: Job, error?: string, extra: Record<string, unknown> = {}, token?: string): Out => {
+  const pr = paymentRequired(j, error, token);
   return { status: 402, body: { ...pr, ...extra, jobId: j.id, expiresAt: j.quote_expires_at, mint: j.mint }, headers: { "PAYMENT-REQUIRED": encodePaymentRequiredHeader(pr as any) } };
 };
 const FREE = /free_tier|quota|allowance/i;
@@ -53,7 +60,8 @@ async function confirm(d: FlowDeps, j: Job, signature: string) {
 const pending = (j: Job, detail: string): Out => ({ status: 202, body: { status: "pending", detail: `${detail} Resume this job later — the same signed payment is reused and you will not be asked to pay again.`, jobId: j.id } });
 
 /** Accept (first time) or resume a payment, settle, confirm the exact credit, then deliver. */
-export async function settleAndDeliver(d: FlowDeps, job: Job, sig: string | null): Promise<Out> {
+/** Callers MUST have authorized the job with its capability (body token or header capability) first. */
+export async function settleAndDeliver(d: FlowDeps, job: Job, sig: string | null, token?: string): Promise<Out> {
   let j = job;
   if (j.report) return delivered(j);
   if (j.status === "failed") return { status: 410, body: { error: `This payment did not settle on chain (${j.error ?? "failed"}). Nothing was credited; start a new quote.`, jobId: j.id, terminal: true } };
@@ -68,9 +76,9 @@ export async function settleAndDeliver(d: FlowDeps, job: Job, sig: string | null
       // Already accepted: only the identical bytes may resume. No re-verification, no new lock.
       if (txB64 !== j.payment_tx_b64) return { status: 409, body: { error: "This job already has a different accepted payment. Resume with the saved one.", jobId: j.id } };
     } else {
-      if (payload.x402Version !== 2 || !sameRequirement(req, payload.accepted)) return r402(j, "Payment does not match the frozen quote.");
+      if (payload.x402Version !== 2 || !sameRequirement(req, payload.accepted)) return r402(j, "Payment does not match the frozen quote.", {}, token);
       if (new Date(j.quote_expires_at).getTime() <= Date.now()) return { status: 410, body: { error: "Quote expired. Start a new report; nothing was charged." } };
-      let local; try { local = verifyExactTransaction(txB64, req); } catch (e) { return r402(j, (e as Error).message); }
+      let local; try { local = verifyExactTransaction(txB64, req); } catch (e) { return r402(j, (e as Error).message, {}, token); }
       // Facilitator verification (incl. simulation) BEFORE binding, so a bad first payload can't lock the job.
       const durable = { x402Version: 2, resource: resourceOf(j), accepted: req, payload: { transaction: txB64 } };
       let v: any;
@@ -78,13 +86,13 @@ export async function settleAndDeliver(d: FlowDeps, job: Job, sig: string | null
       if (!v?.isValid) {
         const why = `${v?.invalidReason ?? ""} ${v?.invalidMessage ?? ""}`;
         if (FREE.test(why)) return { status: 503, body: { error: "The payment facilitator's free allowance is used up right now. Nothing was charged; retry later.", jobId: j.id } };
-        return r402(j, `Payment rejected by facilitator: ${v?.invalidMessage ?? v?.invalidReason ?? "invalid"}`);
+        return r402(j, `Payment rejected by facilitator: ${v?.invalidMessage ?? v?.invalidReason ?? "invalid"}`, {}, token);
       }
       try { j = await d.rpc("botanist_claim_payment", { _id: j.id, _cap: j.capability_hash, _payment_hash: local.paymentHash, _tx: txB64, _payer: local.payer }); }
       catch (e) { const m = (e as Error).message; return { status: 409, body: { error: /duplicate|unique/i.test(m) ? "This payment is already bound to another job." : m, jobId: j.id } }; }
     }
   }
-  if (!j.payment_tx_b64) return r402(j);
+  if (!j.payment_tx_b64) return r402(j, undefined, {}, token);
 
   if (!j.settle_signature) {
     // 1) Known candidate first (even if its blockhash has expired). 2) Recover a lost response from chain.
@@ -123,16 +131,20 @@ export async function settleAndDeliver(d: FlowDeps, job: Job, sig: string | null
 
 /**
  * Generic x402 clients retry the ORIGINAL request ({mint}) with PAYMENT-SIGNATURE and no jobId.
- * The quote's high-entropy job memo (in accepted.extra.memo, and inside the signed transfer) is the
- * capability that recovers that exact job; mint and resource must match the frozen quote.
+ * Authorization is the off-chain capability echoed in accepted.extra (botanistJob + botanistCapability),
+ * checked against capability_hash BEFORE any job state or report is returned. The memo is public once the
+ * payment lands, so it is only cross-checked, never used to authorize.
  */
-export async function resolveHeaderJob(sig: string, body: any, resource: string, findByMemo: (memo: string) => Promise<Job | null>): Promise<{ job: Job } | Out> {
+export async function resolveHeaderJob(sig: string, body: any, resource: string, findByCapability: (id: string, token: string) => Promise<Job | null>): Promise<{ job: Job; token: string } | Out> {
   let p: any; try { p = decodePaymentSignatureHeader(sig); } catch { return { status: 400, body: { error: "PAYMENT-SIGNATURE could not be decoded." } }; }
-  const memo = p?.accepted?.extra?.memo;
-  if (typeof memo !== "string" || !/^fleuri-botanist:[0-9a-f]{32}$/.test(memo)) return { status: 400, body: { error: "Payment does not reference a Botanist quote. Request a quote first." } };
-  const j = await findByMemo(memo);
-  if (!j) return { status: 404, body: { error: "Unknown quote for this payment." } };
+  const x = p?.accepted?.extra ?? {};
+  const id = x.botanistJob, token = x.botanistCapability;
+  if (typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id) || typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token))
+    return { status: 401, body: { error: "Payment does not carry this quote's retrieval capability. Retry with the PAYMENT-REQUIRED you were issued, or resume with jobId and token." } };
+  const j = await findByCapability(id, token);
+  if (!j) return { status: 404, body: { error: "Unknown job or wrong retrieval capability." } };
+  if (x.memo !== j.memo) return { status: 409, body: { error: "This payment references a different quote.", jobId: j.id } };
   if (body?.mint !== undefined && String(body.mint).trim() !== j.mint) return { status: 409, body: { error: "This payment was quoted for a different mint.", jobId: j.id } };
   if (j.resource !== resource || (p.resource?.url && p.resource.url !== j.resource)) return { status: 409, body: { error: "This payment was quoted for a different resource.", jobId: j.id } };
-  return { job: j };
+  return { job: j, token };
 }
