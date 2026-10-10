@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/bits";
 import { FlowerTiles } from "@/components/PixelFlower";
 import { CheckList, Panel, PassportTerms, PendingTransactions, RealBadge, WalletButtons, downloadPassport, explorerTx, lifecycleLabel, signSubmitConfirm, useWallets, type PqMine } from "@/components/pq/ui";
-import { getPqReadiness, pqMine, pqPinImage, pqPrepareLaunch, pqPrepareMigration, pqPublicLaunches, pqRefreshLifecycle, pqStartLaunch } from "@/lib/pq.functions";
+import { getPqReadiness, pqLaunchProposals, pqMine, pqPinImage, pqPrepareLaunch, pqPrepareMigration, pqPublicLaunches, pqRefreshLifecycle, pqSetProposalStatus, pqStartLaunch } from "@/lib/pq.functions";
 import { b64 } from "@/pq/canonical";
 import { loadLocal, usePqLocal, withSecret } from "@/pq/local";
 import { parseManifest, signPassport, type PassportManifest, type SignedPassportT } from "@/pq/passport";
@@ -28,6 +28,7 @@ function Launchpad() {
   const [website,setWebsite]=useState(""); const [twitter,setTwitter]=useState("");
   const [manifest,setManifest]=useState<PassportManifest|null>(null); const [signed,setSigned]=useState<SignedPassportT|null>(null);
   const [reviewAck,setReviewAck]=useState(false); const [done,setDone]=useState<{signature:string;hash:string}|null>(null);
+  const [proposals,setProposals]=useState<any[]>([]); const [usedProposal,setUsedProposal]=useState<string|null>(null);
   const identity=mine?.identities.find(i=>i.key_hash===local.envelope?.keyHash && i.cluster===readiness?.cluster && i.status==="anchored");
   async function refresh() {
     if(store.get().userId) {const r=await pqMine(); if(r.ok) setMine(r.data); else setError(r.error);}
