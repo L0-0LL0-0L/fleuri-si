@@ -2,7 +2,7 @@
 // connection; the standalone browser verifier passes a caller-selected RPC connection.
 import { Connection, PublicKey } from "@solana/web3.js";
 import { DynamicBondingCurveClient, deriveDbcPoolAuthority, deriveDbcTokenVaultAddress, deriveDbcEventAuthority, deriveDbcPoolAddress, deriveMintMetadata, METAPLEX_PROGRAM_ID, DAMM_V2_MIGRATION_FEE_ADDRESS, DAMM_V2_PROGRAM_ID, deriveDammV2PoolAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
-import { getMint, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { getMint, getExtensionTypes, ExtensionType, TOKEN_PROGRAM_ID, unpackMint } from "@solana/spl-token";
 import { Buffer } from "buffer";
 import { domainHash, sha256Hex } from "./canonical";
 import { DBC_PROGRAM_ID, SOL_MINT } from "./passport";
@@ -195,33 +195,49 @@ export async function readTokenMint(conn: Connection, mint: string) {
 export const derivePool = (baseMint: string, config: string) => deriveDbcPoolAddress(new PublicKey(SOL_MINT), new PublicKey(baseMint), new PublicKey(config)).toBase58();
 
 const UPGRADEABLE_LOADER = "BPFLoaderUpgradeab1e11111111111111111111111";
-/** Upgrade authority of a BPF-upgradeable program, read from its ProgramData account. */
-export async function readUpgradeAuthority(conn: Connection, program: string): Promise<{ loader: string; programData: string | null; authority: string | null; immutable: boolean; slot: number | null }> {
+const IMMUTABLE_LOADERS = new Set(["BPFLoader1111111111111111111111111111111111", "BPFLoader2111111111111111111111111111111111"]);
+type Acct = { owner: PublicKey; executable: boolean; data: Uint8Array } | null;
+export type UpgradeInfo = { status: "ok"; loader: string; programData: string | null; authority: string | null; immutable: boolean; slot: number | null } | { status: "unavailable"; reason: string };
+/** Pure decoder; only known loaders are ever called immutable. Unknown/LoaderV4 => unavailable. */
+export function decodeUpgradeAuthority(program: Acct, programData: Acct, programDataAddress?: string): UpgradeInfo {
+  if (!program) return { status: "unavailable", reason: "Program account not found." };
+  if (!program.executable) return { status: "unavailable", reason: "Account is not an executable program." };
+  const loader = program.owner.toBase58(); const d = Buffer.from(program.data);
+  if (IMMUTABLE_LOADERS.has(loader)) return { status: "ok", loader, programData: null, authority: null, immutable: true, slot: null };
+  if (loader !== UPGRADEABLE_LOADER) return { status: "unavailable", reason: `Loader ${loader} is not decoded here.` };
+  if (d.length < 36 || d.readUInt32LE(0) !== 2) return { status: "unavailable", reason: "Unexpected upgradeable Program layout." };
+  const pdAddr = new PublicKey(d.subarray(4, 36)).toBase58();
+  if (programDataAddress && programDataAddress !== pdAddr) return { status: "unavailable", reason: "ProgramData address mismatch." };
+  if (!programData || programData.owner.toBase58() !== UPGRADEABLE_LOADER) return { status: "unavailable", reason: "ProgramData missing or not owned by the upgradeable loader." };
+  const pd = Buffer.from(programData.data);
+  if (pd.length < 13 || pd.readUInt32LE(0) !== 3) return { status: "unavailable", reason: "ProgramData state tag is not ProgramData." };
+  const flag = pd[12];
+  if (flag !== 0 && flag !== 1) return { status: "unavailable", reason: "Invalid upgrade-authority option flag." };
+  if (flag === 1 && pd.length < 45) return { status: "unavailable", reason: "Truncated upgrade authority." };
+  const slot = Number(pd.readBigUInt64LE(4));
+  return { status: "ok", loader, programData: pdAddr, authority: flag === 1 ? new PublicKey(pd.subarray(13, 45)).toBase58() : null, immutable: flag === 0, slot };
+}
+export async function readUpgradeAuthority(conn: Connection, program: string): Promise<UpgradeInfo> {
   const info = await conn.getAccountInfo(new PublicKey(program));
-  if (!info) throw new Error("Program account not found.");
-  const loader = info.owner.toBase58();
-  if (loader !== UPGRADEABLE_LOADER) return { loader, programData: null, authority: null, immutable: true, slot: null };
-  if (info.data.length < 36 || info.data.readUInt32LE(0) !== 2) throw new Error("Unexpected upgradeable program layout.");
-  const programData = new PublicKey(info.data.subarray(4, 36));
-  const pd = await conn.getAccountInfo(programData);
-  if (!pd || pd.data.length < 13 || pd.data.readUInt32LE(0) !== 3) throw new Error("ProgramData account is unreadable.");
-  const slot = Number(pd.data.readBigUInt64LE(4));
-  const has = pd.data[12] === 1;
-  const authority = has ? new PublicKey(pd.data.subarray(13, 45)).toBase58() : null;
-  return { loader, programData: programData.toBase58(), authority, immutable: !has, slot };
+  if (!info || info.owner.toBase58() !== UPGRADEABLE_LOADER || info.data.length < 36) return decodeUpgradeAuthority(info, null);
+  const pdAddr = new PublicKey(info.data.subarray(4, 36));
+  return decodeUpgradeAuthority(info, await conn.getAccountInfo(pdAddr), pdAddr.toBase58());
 }
 
-/** Classic SPL Token or Token-2022 mint, any decimals (Botanist inspects arbitrary mints). */
-export async function readAnyMint(conn: Connection, mint: string) {
-  const info = await conn.getAccountInfo(new PublicKey(mint));
+const T22 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+/** Strict SPL mint decode via unpackMint (rejects token accounts, uninitialized and malformed data). */
+export function decodeAnyMint(address: string, info: { owner: PublicKey; data: Uint8Array; executable?: boolean; lamports?: number } | null) {
   if (!info) throw new Error("Mint account not found.");
   const owner = info.owner.toBase58();
-  const T22 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-  if (owner !== TOKEN_PROGRAM_ID.toBase58() && owner !== T22) throw new Error("Account is not an SPL Token mint.");
-  if (info.data.length < 82) throw new Error("Mint data too short.");
-  const d = Buffer.from(info.data);
-  const opt = (o: number) => (d.readUInt32LE(o) === 1 ? new PublicKey(d.subarray(o + 4, o + 36)).toBase58() : null);
-  return { program: owner === T22 ? "token-2022" : "spl-token", mintAuthority: opt(0), supply: d.readBigUInt64LE(36), decimals: d[44], initialized: d[45] === 1, freezeAuthority: opt(46), extensionsBytes: Math.max(0, d.length - 82) };
+  if (owner !== TOKEN_PROGRAM_ID.toBase58() && owner !== T22) throw new Error("Account is not owned by an SPL token program.");
+  const m = unpackMint(new PublicKey(address), { ...info, data: Buffer.from(info.data), executable: !!info.executable, lamports: info.lamports ?? 0 } as any, new PublicKey(owner));
+  if (!m.isInitialized) throw new Error("Mint is not initialized.");
+  let extensions: string[] = [];
+  if (owner === T22) { try { extensions = getExtensionTypes(m.tlvData).map((t) => ExtensionType[t] ?? `unknown(${t})`); } catch { extensions = ["undecodable"]; } }
+  return { program: owner === T22 ? "token-2022" : "spl-token", mintAuthority: m.mintAuthority?.toBase58() ?? null, supply: m.supply, decimals: m.decimals, initialized: true, freezeAuthority: m.freezeAuthority?.toBase58() ?? null, extensions };
+}
+export async function readAnyMint(conn: Connection, mint: string) {
+  return decodeAnyMint(mint, await conn.getAccountInfo(new PublicKey(mint)));
 }
 
 export function deriveInitAccounts(mint: string, pool: string) {
