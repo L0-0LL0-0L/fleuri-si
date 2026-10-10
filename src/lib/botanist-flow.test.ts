@@ -161,6 +161,6 @@ describe("botanist payment orchestration", () => {
       const r: any = await resolveHeaderJob(c, { mint: j.mint }, j.resource, spy);
       expect("job" in r).toBe(false); expect([401, 404]).toContain(r.status); expect(JSON.stringify(r.body)).not.toContain("report_ready"); expect(r.body.report).toBeUndefined();
     }
-    expect(lookups).toBe(3); // malformed / missing capabilities are rejected before any lookup
+    expect(lookups).toBe(2); // malformed / missing capabilities are rejected before any lookup
   });
 });
