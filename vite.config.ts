@@ -18,7 +18,9 @@ export default defineConfig({
         name: "buffer-shim",
         enforce: "pre",
         resolveId(specifier): string | undefined {
-          if (specifier === "buffer" || specifier === "node:buffer") {
+          // Build only: in dev the raw CommonJS file has no ESM `Buffer` export; there the
+          // dependency optimizer pre-bundles `buffer` (optimizeDeps.include below).
+          if ((specifier === "buffer" || specifier === "node:buffer") && this.environment?.mode === "build") {
             return fileURLToPath(new URL("./node_modules/buffer/index.js", import.meta.url));
           }
           // bigint-buffer's "browser" field maps dist/node.js → dist/browser.js,
@@ -32,6 +34,7 @@ export default defineConfig({
         },
       },
     ],
+    optimizeDeps: { include: ["buffer"] },
     resolve: { alias: [
       { find: /^@coral-xyz\/anchor$/, replacement: fileURLToPath(new URL("./node_modules/@coral-xyz/anchor/dist/browser/index.js", import.meta.url)) },
     ] },
