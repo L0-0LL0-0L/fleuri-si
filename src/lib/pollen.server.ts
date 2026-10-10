@@ -49,7 +49,7 @@ export async function readVault(conn: Connection, address: string) {
   return {
     address, mint, supported: !!supported, symbol: POLLEN_MINTS[mint]?.symbol ?? "unsupported", decimals: POLLEN_MINTS[mint]?.decimals ?? null,
     owner: v.owner.toBase58(), base: v.base.toBase58(), tokenVault: v.tokenVault.toBase58(), totalShare: Number(v.totalShare),
-    funded: b.totalFundedFee, claimed: b.totalClaimedFee, unclaimed: b.totalUnclaimedFee, feePerShare: fps.toString(),
+    funded: b.totalFundedFee, claimed: b.totalClaimedFee, unclaimed: b.totalUnclaimedFee, dust: (BigInt(b.totalFundedFee) - BigInt(b.totalClaimedFee) - BigInt(b.totalUnclaimedFee)).toString(), feePerShare: fps.toString(),
     recipients: users,
   };
 }
@@ -144,7 +144,11 @@ export async function confirmPollen(prep: any, tx: { slot: number; ixs: { progra
   }
   if (prep.kind === "pollen_fund" || prep.kind === "pollen_route") {
     if (BigInt(v.funded) <= BigInt(prep.payload.fundedBefore)) return { status: "pending" as const, detail: "Waiting for the vault's funded total to update…" };
-    return done(`Vault accounting updated in slot ${tx.slot}: total funded ${v.funded} base units.`);
+    // fundFee moves min(max_amount, source balance); report what the chain actually moved, not the draft.
+    const t = await conn.getTransaction(prep.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    const bal = (a: any[] | null | undefined) => BigInt(a?.find((b: any) => b.mint === v.mint && b.owner === v.address)?.uiTokenAmount?.amount ?? "0");
+    const moved = t?.meta ? bal(t.meta.postTokenBalances) - bal(t.meta.preTokenBalances) : null;
+    return done(`Confirmed in slot ${tx.slot}: ${moved === null ? "amount unavailable from RPC" : `${moved} base units actually funded`}${prep.kind === "pollen_fund" && moved !== null && moved.toString() !== prep.payload.amount ? ` (requested ${prep.payload.amount}; the program caps at your balance)` : ""}. Vault total funded: ${v.funded}.`);
   }
   if (prep.kind === "pollen_claim") {
     const me = v.recipients.find((r) => r.address === prep.wallet);
