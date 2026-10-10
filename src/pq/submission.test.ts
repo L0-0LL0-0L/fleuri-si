@@ -8,7 +8,7 @@ import { GENESIS } from "./registration";
 import { buildMemoTx } from "@/lib/solana.server";
 import { DBC_PROGRAM_ID } from "./passport";
 
-const mock=vi.hoisted(()=>({prep:null as any,launch:null as any,pool:null as any,events:[] as string[],failSend:false,raw:[] as Uint8Array[],height:1,confirmed:null as any,tables:[] as string[]}));
+const mock=vi.hoisted(()=>({prep:null as any,launch:null as any,pool:null as any,meta:null as any,mint:null as any,dbcConfig:null as any,events:[] as string[],failSend:false,raw:[] as Uint8Array[],height:1,confirmed:null as any,tables:[] as string[]}));
 vi.mock("@/integrations/supabase/client.server",()=>({supabaseAdmin:{
   from:(table:string)=>{mock.tables.push(table);const q:any={select:()=>q,eq:()=>q,update:(p:any)=>{if(table==="chain_preparations")mock.prep={...mock.prep,...p};else mock.events.push("publish");return q;},single:async()=>({data:mock.launch,error:null}),maybeSingle:async()=>({data:mock.prep,error:null}),then:(resolve:any)=>resolve({data:mock.prep,error:null})};return q;},
   rpc:async(name:string,args:any)=>{
