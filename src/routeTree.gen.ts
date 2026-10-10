@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as AlertsRouteImport } from './routes/alerts'
+import { Route as BotanistRouteImport } from './routes/botanist'
 import { Route as CoinsRouteImport } from './routes/coins'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as IdentityRouteImport } from './routes/identity'
@@ -26,6 +27,7 @@ import { Route as AHandleRouteImport } from './routes/a.$handle'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
 import { Route as PassportHashRouteImport } from './routes/passport.$hash'
 import { Route as TMintRouteImport } from './routes/t.$mint'
+import { Route as ApiPublicBotanistReportRouteImport } from './routes/api/public/botanist/report'
 import { Route as ApiPublicGardenTickRouteImport } from './routes/api/public/garden/tick'
 
 const IndexRoute = IndexRouteImport.update({
@@ -46,6 +48,11 @@ const AgentsRoute = AgentsRouteImport.update({
 const AlertsRoute = AlertsRouteImport.update({
   id: '/alerts',
   path: '/alerts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BotanistRoute = BotanistRouteImport.update({
+  id: '/botanist',
+  path: '/botanist',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CoinsRoute = CoinsRouteImport.update({
@@ -113,6 +120,11 @@ const TMintRoute = TMintRouteImport.update({
   path: '/t/$mint',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicBotanistReportRoute = ApiPublicBotanistReportRouteImport.update({
+  id: '/api/public/botanist/report',
+  path: '/api/public/botanist/report',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicGardenTickRoute = ApiPublicGardenTickRouteImport.update({
   id: '/api/public/garden/tick',
   path: '/api/public/garden/tick',
@@ -124,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/activity': typeof ActivityRoute
   '/agents': typeof AgentsRoute
   '/alerts': typeof AlertsRoute
+  '/botanist': typeof BotanistRoute
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
   '/identity': typeof IdentityRoute
@@ -137,6 +150,7 @@ export interface FileRoutesByFullPath {
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
   '/t/$mint': typeof TMintRoute
+  '/api/public/botanist/report': typeof ApiPublicBotanistReportRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRoutesByTo {
@@ -144,6 +158,7 @@ export interface FileRoutesByTo {
   '/activity': typeof ActivityRoute
   '/agents': typeof AgentsRoute
   '/alerts': typeof AlertsRoute
+  '/botanist': typeof BotanistRoute
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
   '/identity': typeof IdentityRoute
@@ -157,6 +172,7 @@ export interface FileRoutesByTo {
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
   '/t/$mint': typeof TMintRoute
+  '/api/public/botanist/report': typeof ApiPublicBotanistReportRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRoutesById {
@@ -165,6 +181,7 @@ export interface FileRoutesById {
   '/activity': typeof ActivityRoute
   '/agents': typeof AgentsRoute
   '/alerts': typeof AlertsRoute
+  '/botanist': typeof BotanistRoute
   '/coins': typeof CoinsRoute
   '/docs': typeof DocsRoute
   '/identity': typeof IdentityRoute
@@ -178,6 +195,7 @@ export interface FileRoutesById {
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
   '/t/$mint': typeof TMintRoute
+  '/api/public/botanist/report': typeof ApiPublicBotanistReportRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRouteTypes {
@@ -187,6 +205,7 @@ export interface FileRouteTypes {
     | '/activity'
     | '/agents'
     | '/alerts'
+    | '/botanist'
     | '/coins'
     | '/docs'
     | '/identity'
@@ -200,6 +219,7 @@ export interface FileRouteTypes {
     | '/c/$symbol'
     | '/passport/$hash'
     | '/t/$mint'
+    | '/api/public/botanist/report'
     | '/api/public/garden/tick'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -207,6 +227,7 @@ export interface FileRouteTypes {
     | '/activity'
     | '/agents'
     | '/alerts'
+    | '/botanist'
     | '/coins'
     | '/docs'
     | '/identity'
@@ -220,6 +241,7 @@ export interface FileRouteTypes {
     | '/c/$symbol'
     | '/passport/$hash'
     | '/t/$mint'
+    | '/api/public/botanist/report'
     | '/api/public/garden/tick'
   id:
     | '__root__'
@@ -227,6 +249,7 @@ export interface FileRouteTypes {
     | '/activity'
     | '/agents'
     | '/alerts'
+    | '/botanist'
     | '/coins'
     | '/docs'
     | '/identity'
@@ -240,6 +263,7 @@ export interface FileRouteTypes {
     | '/c/$symbol'
     | '/passport/$hash'
     | '/t/$mint'
+    | '/api/public/botanist/report'
     | '/api/public/garden/tick'
   fileRoutesById: FileRoutesById
 }
@@ -248,6 +272,7 @@ export interface RootRouteChildren {
   ActivityRoute: typeof ActivityRoute
   AgentsRoute: typeof AgentsRoute
   AlertsRoute: typeof AlertsRoute
+  BotanistRoute: typeof BotanistRoute
   CoinsRoute: typeof CoinsRoute
   DocsRoute: typeof DocsRoute
   IdentityRoute: typeof IdentityRoute
@@ -261,6 +286,7 @@ export interface RootRouteChildren {
   CSymbolRoute: typeof CSymbolRoute
   PassportHashRoute: typeof PassportHashRoute
   TMintRoute: typeof TMintRoute
+  ApiPublicBotanistReportRoute: typeof ApiPublicBotanistReportRoute
   ApiPublicGardenTickRoute: typeof ApiPublicGardenTickRoute
 }
 
@@ -292,6 +318,13 @@ declare module '@tanstack/react-router' {
       path: '/alerts'
       fullPath: '/alerts'
       preLoaderRoute: typeof AlertsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/botanist': {
+      id: '/botanist'
+      path: '/botanist'
+      fullPath: '/botanist'
+      preLoaderRoute: typeof BotanistRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/coins': {
@@ -385,6 +418,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TMintRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/botanist/report': {
+      id: '/api/public/botanist/report'
+      path: '/api/public/botanist/report'
+      fullPath: '/api/public/botanist/report'
+      preLoaderRoute: typeof ApiPublicBotanistReportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/garden/tick': {
       id: '/api/public/garden/tick'
       path: '/api/public/garden/tick'
@@ -400,6 +440,7 @@ const rootRouteChildren: RootRouteChildren = {
   ActivityRoute: ActivityRoute,
   AgentsRoute: AgentsRoute,
   AlertsRoute: AlertsRoute,
+  BotanistRoute: BotanistRoute,
   CoinsRoute: CoinsRoute,
   DocsRoute: DocsRoute,
   IdentityRoute: IdentityRoute,
@@ -413,6 +454,7 @@ const rootRouteChildren: RootRouteChildren = {
   CSymbolRoute: CSymbolRoute,
   PassportHashRoute: PassportHashRoute,
   TMintRoute: TMintRoute,
+  ApiPublicBotanistReportRoute: ApiPublicBotanistReportRoute,
   ApiPublicGardenTickRoute: ApiPublicGardenTickRoute,
 }
 export const routeTree = rootRouteImport

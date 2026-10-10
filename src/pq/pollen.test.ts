@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Keypair } from "@solana/web3.js";
-import { USDC_MINT, WSOL_MINT, compareVault, dbcPartnerRouting, parseAmount, parseTerms } from "./pollen";
+import { USDC_MINT, WSOL_MINT, claimable, fundDelta, compareVault, dbcPartnerRouting, parseAmount, parseTerms } from "./pollen";
 const w = () => Keypair.generate().publicKey.toBase58();
 
 describe("pollen allocation rules", () => {
@@ -41,5 +41,14 @@ describe("pollen allocation rules", () => {
     expect(dbcPartnerRouting({ ...base, vaultMint: USDC_MINT }).eligible).toBe(false);
     expect(dbcPartnerRouting({ ...base, signer: w() }).eligible).toBe(false);
     expect(dbcPartnerRouting({ ...base, migrated: true }).eligible).toBe(false);
+  });
+  it("computes claimable from the feePerShare checkpoint with Q64 floor rounding", () => {
+    const total = 10_000n; let fps = 0n;
+    fps += fundDelta(1_000_001n, total); // 1.000001 USDC funded
+    expect(claimable(3333n, fps, 0n)).toBe(333_300n); // floor, never over-pays
+    const cp = fps; fps += fundDelta(500_000n, total);
+    expect(claimable(3333n, fps, cp)).toBe(166_650n);
+    expect(claimable(6667n, fps, 0n) + claimable(3333n, fps, 0n)).toBeLessThanOrEqual(1_500_001n);
+    expect(() => claimable(1n, 0n, 1n)).toThrow();
   });
 });

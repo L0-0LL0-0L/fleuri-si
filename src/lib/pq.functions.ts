@@ -242,3 +242,12 @@ export const pollenImport = createServerFn({ method: "POST" }).middleware([requi
 export const pollenAssociate = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ vault: addr, launchId: id }).strict().parse(d))
   .handler(async ({ data, context }) => safe(async () => (await import("./pollen.server")).associate(context.userId, data.vault, data.launchId)));
+
+export const botanistInfo = createServerFn({ method: "GET" }).handler(() => safe(async () => {
+  const { botanistReadiness } = await import("./botanist.server");
+  const { connection } = await import("./solana.server");
+  const r = await botanistReadiness();
+  let blockhash: string | null = null;
+  try { blockhash = (await connection().getLatestBlockhash("confirmed")).blockhash; } catch { /* readiness shows RPC */ }
+  return { ...r, blockhash };
+}));
