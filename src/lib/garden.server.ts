@@ -73,7 +73,7 @@ export type LaunchProposalDraft = { agentHandle: string; name: string; symbol: s
 export async function recordLaunchProposal(p: LaunchProposalDraft) {
   try {
     const db = await admin();
-    const { error } = await db.from("launch_proposals").insert({
+    const { error } = await (db as any).from("launch_proposals").insert({
       agent_handle: p.agentHandle,
       name: p.name.slice(0, 32),
       symbol: p.symbol.slice(0, 10),
