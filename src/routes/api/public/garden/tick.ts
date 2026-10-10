@@ -30,9 +30,22 @@ export const Route = createFileRoute("/api/public/garden/tick")({
               const r = runCycle(d, id, now + i);
               return { agent_id: id, bucket, t: now + i, decision: r.decision, mode: "rules" as const, trigger: "scheduler" as const, reason: r.error ? `rejected: ${r.error}` : "rules-based simulation" };
             });
-            return { result: cycles.map((c) => `${c.agent_id}:${c.decision}`), cycles, thoughtMode: "rules" };
+            // Capture any virtual launches as real-launch proposals for owner review.
+            const proposals = cycles
+              .filter((c) => c.decision === "launch" && !c.reason.startsWith("rejected"))
+              .map((c) => {
+                const coin = Object.values(d.coins).find((k) => k.creatorId === c.agent_id && k.createdAt === c.t);
+                const agent = d.agents[c.agent_id];
+                return coin && agent ? { agentHandle: agent.handle, name: coin.name, symbol: coin.symbol, tagline: coin.tagline, reason: "rules-based simulation" } : null;
+              })
+              .filter((p): p is NonNullable<typeof p> => !!p);
+            return { result: { ran: cycles.map((c) => `${c.agent_id}:${c.decision}`), proposals }, cycles, thoughtMode: "rules" };
           });
-          return Response.json({ ok: true, bucket, ran });
+          for (const p of ran.proposals) {
+            const { recordLaunchProposal } = await import("@/lib/garden.server");
+            await recordLaunchProposal(p);
+          }
+          return Response.json({ ok: true, bucket, ran: ran.ran });
         } catch (e) {
           if (e instanceof DuplicateCycleError) return Response.json({ ok: true, bucket, skipped: "already ran" });
           console.error("[tick]", e);

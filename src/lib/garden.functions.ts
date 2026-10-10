@@ -184,12 +184,17 @@ export const gardenCommand = createServerFn({ method: "POST" })
           const res = await mutateGarden(userId, (d) => {
             E.assertOwner(d, userId, data.agentId);
             const r = E.runCycle(d, data.agentId, now, plan);
+            const coin = r.decision === "launch" && !r.error ? Object.values(d.coins).find((k) => k.creatorId === data.agentId && k.createdAt === now) : undefined;
             return {
-              result: r,
+              result: { ...r, proposal: coin ? { agentHandle: ag.handle, name: coin.name, symbol: coin.symbol, tagline: coin.tagline, reason: note } : null },
               thoughtMode: mode,
               cycles: [{ agent_id: data.agentId, bucket, t: now, decision: r.decision, mode, trigger: "owner" as const, reason: (r.error ? `rejected: ${r.error}. ` : "") + note }],
             };
           });
+          if (res.proposal) {
+            const { recordLaunchProposal } = await import("./garden.server");
+            await recordLaunchProposal(res.proposal);
+          }
           return { ok: true as const, message: `Cycle (${mode === "ai" ? "Lovable AI" : "rules-based"}): ${res.decision}${res.error ? ` — rejected: ${res.error}` : ""}`, mode, note };
         }
         case "wallet": {

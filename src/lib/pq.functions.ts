@@ -147,3 +147,24 @@ export const pqPublicLaunches = createServerFn({ method: "GET" }).handler(async 
   const r = await (pub as any).from("launches").select("id,pool,base_mint,lifecycle,cluster,created_at,passports(manifest_hash,manifest)").order("created_at", { ascending: false }).limit(30);
   return r.error ? { ok: false as const, error: r.error.message } : { ok: true as const, data: r.data as any[] };
 });
+
+// Agent-drafted launch proposals: public read, owner reviews and signs by hand.
+export const pqLaunchProposals = createServerFn({ method: "GET" }).handler(async () => {
+  const { createClient } = await import("@supabase/supabase-js");
+  const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
+  const pub = createClient(process.env["SUPABASE_URL"]!, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: (input, init) => { const h = new Headers(init?.headers); if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`) h.delete("Authorization"); h.set("apikey", key); return fetch(input, { ...init, headers: h }); } },
+  });
+  const r = await (pub as any).from("launch_proposals").select("id,created_at,agent_handle,name,symbol,tagline,reason,status").eq("status", "pending").order("created_at", { ascending: false }).limit(20);
+  return r.error ? { ok: false as const, error: r.error.message } : { ok: true as const, data: r.data as any[] };
+});
+
+export const pqSetProposalStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id, status: z.enum(["dismissed", "launched"]) }).strict().parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const r = await (supabaseAdmin as any).from("launch_proposals").update({ status: data.status }).eq("id", data.id).eq("status", "pending");
+    return r.error ? { ok: false as const, error: r.error.message } : { ok: true as const, data: true };
+  });

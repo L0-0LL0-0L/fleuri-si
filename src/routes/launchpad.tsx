@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/bits";
 import { FlowerTiles } from "@/components/PixelFlower";
 import { CheckList, Panel, PassportTerms, PendingTransactions, RealBadge, WalletButtons, downloadPassport, explorerTx, lifecycleLabel, signSubmitConfirm, useWallets, type PqMine } from "@/components/pq/ui";
-import { getPqReadiness, pqMine, pqPinImage, pqPrepareLaunch, pqPrepareMigration, pqPublicLaunches, pqRefreshLifecycle, pqStartLaunch } from "@/lib/pq.functions";
+import { getPqReadiness, pqLaunchProposals, pqMine, pqPinImage, pqPrepareLaunch, pqPrepareMigration, pqPublicLaunches, pqRefreshLifecycle, pqSetProposalStatus, pqStartLaunch } from "@/lib/pq.functions";
 import { b64 } from "@/pq/canonical";
 import { loadLocal, usePqLocal, withSecret } from "@/pq/local";
 import { parseManifest, signPassport, type PassportManifest, type SignedPassportT } from "@/pq/passport";
@@ -28,10 +28,18 @@ function Launchpad() {
   const [website,setWebsite]=useState(""); const [twitter,setTwitter]=useState("");
   const [manifest,setManifest]=useState<PassportManifest|null>(null); const [signed,setSigned]=useState<SignedPassportT|null>(null);
   const [reviewAck,setReviewAck]=useState(false); const [done,setDone]=useState<{signature:string;hash:string}|null>(null);
+  const [proposals,setProposals]=useState<any[]>([]); const [usedProposal,setUsedProposal]=useState<string|null>(null);
   const identity=mine?.identities.find(i=>i.key_hash===local.envelope?.keyHash && i.cluster===readiness?.cluster && i.status==="anchored");
   async function refresh() {
     if(store.get().userId) {const r=await pqMine(); if(r.ok) setMine(r.data); else setError(r.error);}
     const r=await pqPublicLaunches(); if(r.ok) setLaunches(r.data); else setReadError(r.error);
+    const pr=await pqLaunchProposals(); if(pr.ok) setProposals(pr.data);
+  }
+  function useProposal(p:any) {
+    setDone(null); setManifest(null); setSigned(null); setReviewAck(false);
+    setName(p.name); setSymbol(p.symbol); setWebsite(""); setTwitter("");
+    setFile(null); setImageUri(""); setImageHash(null); setUsedProposal(p.id);
+    window.scrollTo({top:0,behavior:"smooth"});
   }
   async function checkReadiness() {
     setReadError("");
@@ -67,6 +75,7 @@ function Launchpad() {
     const p=await pqPrepareLaunch({data:{passport:signed}}); if(!p.ok) throw new Error(p.error);
     const r=await signSubmitConfirm(kind,p.data,{coSign:[mint.current],onStatus:setBusy});
     setDone({signature:r.signature,hash:signed.manifestHash}); mint.current=null;
+    if(usedProposal) {await pqSetProposalStatus({data:{id:usedProposal,status:"launched"}}); setUsedProposal(null);}
     toast.success(r.detail); await refresh();
   }
   async function migrate(kind:WalletKind,id:string) {
@@ -95,8 +104,21 @@ function Launchpad() {
     </Panel>
     {!userId && <Panel title="Your workspace"><p className="text-sm">Use your existing workspace session to register an identity and view your launches.</p><button type="button" className="btn btn-ink" disabled={!!busy} onClick={()=>void run("Opening workspace…",async()=>{await store.startSandbox();await refresh();})}>{busy??"Open workspace"}</button></Panel>}
     {!canReview && !manifest && <p className="hair bg-paper-light p-3 text-sm">Before launching: <Link to="/identity" className="font-semibold underline">create or restore your key, download its backup, unlock it and anchor it</Link>. Launching also requires every network readiness check to pass.</p>}
-    {done?<Panel title="Your bloom is on chain"><p className="display text-2xl">planted. signed. yours.</p><a className="block break-all text-xs underline" href={explorerTx(done.signature,readiness.cluster)} target="_blank" rel="noreferrer">View confirmed launch transaction</a><Link to="/passport/$hash" params={{hash:done.hash}} className="btn btn-red">Open the public passport</Link><button type="button" className="btn btn-paper" onClick={()=>{setDone(null);setManifest(null);setSigned(null);setName("");setSymbol("");setFile(null);setImageUri("");setImageHash(null);setWebsite("");setTwitter("");}}>Plant another token</button></Panel>
-    :!manifest?<Panel title="Your next bloom">
+    {done?<Panel title="Your bloom is on chain"><p className="display text-2xl">planted. signed. yours.</p><a className="block break-all text-xs underline" href={explorerTx(done.signature,readiness.cluster)} target="_blank" rel="noreferrer">View confirmed launch transaction</a><Link to="/passport/$hash" params={{hash:done.hash}} className="btn btn-red">Open the public passport</Link><button type="button" className="btn btn-paper" onClick={()=>{setDone(null);setManifest(null);setSigned(null);setName("");setSymbol("");setFile(null);setImageUri("");setImageHash(null);setWebsite("");setTwitter("");setUsedProposal(null);}}>Plant another token</button></Panel>
+    :!manifest?<>
+    {!!proposals.length && <Panel title="Agent proposals · drafted in the garden, launched by you">
+      <p className="text-xs text-ink-soft">Your agents draft these during their cycles. Nothing here is on chain — a draft only becomes real when you review it, sign the passport and approve the launch in your wallet.</p>
+      {proposals.map(p=><div key={p.id} className={`hair space-y-2 p-3 ${usedProposal===p.id?"bg-paper-deep":""}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{p.name} <span className="text-poppy">${p.symbol}</span></p><p className="font-mono text-xs">drafted by @{p.agent_handle}</p></div>
+        {p.tagline && <p className="text-sm">{p.tagline}</p>}
+        {p.reason && <p className="text-xs text-ink-soft">why: {p.reason}</p>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-red" disabled={!!busy} onClick={()=>useProposal(p)}>{usedProposal===p.id?"Draft loaded below ↓":"Use this draft"}</button>
+          <button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>void run("Dismissing draft…",async()=>{const r=await pqSetProposalStatus({data:{id:p.id,status:"dismissed"}});if(!r.ok)throw new Error(r.error);await refresh();})}>Dismiss</button>
+        </div>
+      </div>)}
+    </Panel>}
+    <Panel title="Your next bloom">
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();void run("Reading exact chain terms…",review);}}>
         <label className="text-sm font-semibold">Token name<input required maxLength={32} value={name} onChange={e=>setName(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="a strange little bloom"/></label>
         <label className="text-sm font-semibold">Ticker<input required pattern="[A-Z0-9]{1,10}" maxLength={10} value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="BLOOM"/></label>
@@ -107,7 +129,7 @@ function Launchpad() {
         <p className="text-xs text-ink-soft sm:col-span-2">Supply, fees, LP shares and graduation are read from the configured Meteora pool config. The mint key is generated on your device; its private key stays here.</p>
         <button type="submit" className="btn btn-red sm:col-span-2" disabled={!!busy||!canReview}>{busy??"Review exact launch terms"}</button>
       </form>
-    </Panel>:<Panel title={signed?"Signed passport · ready for your wallet":"Review before signing"}>
+    </Panel></>:<Panel title={signed?"Signed passport · ready for your wallet":"Review before signing"}>
       <PassportTerms manifest={manifest}/>
       {!signed?<><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={reviewAck} onChange={e=>setReviewAck(e.target.checked)}/><span>I have reviewed the exact fees, LP shares, authority policy and graduation terms above.</span></label><button type="button" className="btn btn-red" disabled={!reviewAck||!local.unlocked||!!busy} onClick={()=>void run("Signing with ML-DSA-65…",async()=>{setSigned(withSecret(kp=>signPassport(manifest,kp)));})}>Sign launch passport</button><button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>setManifest(null)}>Edit draft</button></>
       :<><p className="break-all font-mono text-xs">{signed.manifestHash}</p><button type="button" className="btn btn-paper" onClick={()=>downloadPassport(signed)}>Download signed passport</button><p className="text-xs text-ink-soft">Your wallet pays the signed pool creation fee, account rent and network fees. It must match the creator address above. Nothing is sent until you approve the transaction in your wallet.</p><WalletButtons avail={wallets} busy={busy} action="Launch with" onPick={k=>void run("Preparing launch…",()=>launch(k))}/><button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>void run("Checking for submitted transactions…",rebuildDraft)}>Rebuild an expired unsigned draft</button></>}

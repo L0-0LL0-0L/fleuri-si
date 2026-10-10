@@ -64,6 +64,28 @@ export async function peekGarden(ownerId: string | null) {
   return (await loadForMutation(db, ownerId)).state;
 }
 
+export type LaunchProposalDraft = { agentHandle: string; name: string; symbol: string; tagline: string; reason: string };
+
+/**
+ * Best-effort record of an agent's virtual launch as a real-launch proposal.
+ * Never throws: a proposal is advisory and must not fail the garden commit.
+ */
+export async function recordLaunchProposal(p: LaunchProposalDraft) {
+  try {
+    const db = await admin();
+    const { error } = await (db as any).from("launch_proposals").insert({
+      agent_handle: p.agentHandle,
+      name: p.name.slice(0, 32),
+      symbol: p.symbol.slice(0, 10),
+      tagline: p.tagline.slice(0, 200),
+      reason: p.reason.slice(0, 200),
+    });
+    if (error) console.error("[proposals] insert failed", error.message);
+  } catch (e) {
+    console.error("[proposals] insert failed", (e as Error).message);
+  }
+}
+
 export async function ensureOwner(ownerId: string) {
   const db = await admin();
   const { data } = await db.from("owners").select("id").eq("id", ownerId).maybeSingle();
