@@ -46,8 +46,8 @@ export async function buildReport(d: ReportDeps, mint: string) {
     } catch (e) { facts.dbc = null; unavailable.dbcPool = msg(e); }
     try {
       const c = await d.readDbcConfig(launch.config); const t = c.terms;
-      const signedFeeClaimer = manifest?.config?.terms?.fees?.feeClaimer ?? manifest?.fees?.feeClaimer ?? null;
-      facts.dbcConfig = { address: launch.config, feeClaimer: t.fees.feeClaimer, signedFeeClaimer, matchesSigned: signedFeeClaimer === null ? null : t.fees.feeClaimer === signedFeeClaimer, baseFeeBps: t.fees.baseFeeBps, dynamicFeeEnabled: t.fees.dynamicFeeEnabled, creatorTradingFeePercent: t.fees.creatorTradingFeePercent, partnerTradingFeePercent: t.fees.partnerTradingFeePercent, migrationQuoteThresholdLamports: t.migration.quoteThresholdLamports, migrationTarget: t.migration.target, migratedPoolFeeBps: t.migration.migratedPoolFeeBps, lp: t.lp, eligibilityProblems: c.problems ?? [] };
+      const signedFeeClaimer = manifest?.fees?.feeClaimer ?? null;
+      facts.dbcConfig = { address: launch.config, feeClaimer: t.fees.feeClaimer, signedFeeClaimer, matchesSigned: signedFeeClaimer === null ? null : t.fees.feeClaimer === signedFeeClaimer, baseFeeBps: t.fees.baseFeeBps, dynamicFeeEnabled: t.fees.dynamicFeeEnabled, creatorTradingFeePercent: t.fees.creatorTradingFeePercent, partnerTradingFeePercent: t.fees.partnerTradingFeePercent, migrationQuoteThresholdLamports: t.migration.quoteThresholdLamports, migrationTarget: t.migration.target, migratedPoolFeeBps: t.migration.migratedPoolFeeBps, signedQuoteThresholdLamports: manifest?.migration?.quoteThresholdLamports ?? null, lp: t.lp, eligibilityProblems: c.problems ?? [] };
     } catch (e) { unavailable.dbcConfig = msg(e); }
     try { const u = await d.readUpgradeAuthority(d.dbcProgram); if (u.status === "ok") facts.dbcProgram = u; else unavailable.dbcProgram = u.reason; } catch (e) { unavailable.dbcProgram = msg(e); }
   } else if (!unavailable.protocol) unavailable.protocol = "Not a fleuri launch: DBC config, signed promises and graduation are not applicable.";
