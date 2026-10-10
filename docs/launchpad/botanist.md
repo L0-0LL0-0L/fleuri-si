@@ -23,3 +23,11 @@ This is not an audit, a safety rating or financial advice.
 5. If something goes wrong partway, **Open / resume** reuses the same signed payment, so you are never charged twice.
 
 The receipt lists the network, asset, amount, recipient, payer, transaction, slot and a digest of the report. It proves the payment and identifies which report was delivered. It does not certify the token.
+
+## Payment safety and resuming
+
+- Your wallet signs one standard Solana (v0) transaction: the exact USDC amount to the service account, plus a memo that ties it to your job. Fleuri checks your signature and asks the payment facilitator to verify it before the payment is attached to the job.
+- The signed payment is saved in your browser before it is sent. If the page or connection drops, **Resume** sends the exact same payment again. Your wallet is never asked to pay twice for the same job.
+- A report is delivered only after the chain shows that this exact transaction credited the service account. A different transfer never unlocks a report.
+- If the payment is refused before it is accepted, nothing is charged and you can sign again. If the accepted transaction fails on chain, the job closes, no report is delivered, and nothing is credited.
+- The report covers authorities, metadata, the largest holder accounts, and protocol fees and graduation for fleuri launches. Anything that could not be read is marked unavailable. You can download the raw JSON and receipt.

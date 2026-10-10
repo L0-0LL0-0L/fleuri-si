@@ -57,6 +57,13 @@
       "when": 1791641695469,
       "tag": "0007_persist_owner_permission_restrictions",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791642601674,
+      "tag": "0008_botanist_settlement_recovery",
+      "breakpoints": true
     }
   ]
 }
