@@ -2,18 +2,14 @@
 import { it } from "vitest";
 import { generatePqKeypair } from "./mldsa";
 import { Manifest, parseManifest } from "./passport";
-import { canonicalize } from "./canonical";
 import { manifestFixture } from "./fixtures";
 it("debug", () => {
   const kp = generatePqKeypair();
-  const f = manifestFixture(kp);
-  const m = { ...f, token: { ...f.token, website: "https://fleuri.si", twitter: "https://x.com/fleuri" } } as any;
-  const text = canonicalize(m);
-  console.log("text includes:", text.includes("fleuri.si"));
-  const r = Manifest.safeParse(m);
-  console.log("after canonicalize direct:", r.success ? r.data.token.website : r.error.issues[0]);
-  const p = parseManifest(m);
-  console.log("via fn:", p.website, "twitter:", p.twitter);
-  const r2 = Manifest.safeParse(m);
-  console.log("direct again:", r2.success ? r2.data.token.website : r2.error.issues[0]);
+  const mk = () => { const f = manifestFixture(kp); return { ...f, token: { ...f.token, website: "https://fleuri.si", twitter: "https://x.com/fleuri" } } as any; };
+  const p = parseManifest(mk());
+  console.log("A via fn:", p.website, p.twitter, "token.website:", p.token.website);
+  const r = Manifest.safeParse(mk());
+  console.log("B direct:", r.success ? r.data.token.website : r.error.issues[0]);
+  const p2 = parseManifest(mk());
+  console.log("C via fn json token:", JSON.stringify(p2.token).slice(0, 300));
 });
