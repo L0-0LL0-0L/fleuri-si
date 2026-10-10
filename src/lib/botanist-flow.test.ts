@@ -2,14 +2,14 @@
 // Botanist quote → payment → settlement → report orchestration, with in-memory chain/facilitator/DB fakes.
 import { describe, expect, it } from "vitest";
 import { ComputeBudgetProgram, Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
-import { encodePaymentSignatureHeader } from "@x402/core/http";
+import { decodePaymentRequiredHeader, encodePaymentSignatureHeader } from "@x402/core/http";
 import { BOTANIST_ASSET, X402_NETWORK, createTransferCheckedInstruction, getAssociatedTokenAddressSync, verifyExactTransaction } from "@/pq/botanist";
 import { b64 } from "@/pq/canonical";
-import { settleAndDeliver, requirementOf, type FlowDeps, type Job } from "./botanist-flow";
+import { r402, resolveHeaderJob, settleAndDeliver, requirementOf, type FlowDeps, type Job } from "./botanist-flow";
 
 const fac = Keypair.generate(), payer = Keypair.generate(), payTo = Keypair.generate().publicKey.toBase58();
 const MEMO = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
-const mkJob = (): Job => ({ id: crypto.randomUUID(), capability_hash: "c", network: X402_NETWORK, asset: BOTANIST_ASSET, amount: 500000, pay_to: payTo, fee_payer: fac.publicKey.toBase58(), memo: `fleuri-botanist:${Math.random()}`, resource: "https://fleuri.test/api/public/botanist/report", mint: "So11111111111111111111111111111111111111112", status: "quoted", quote_expires_at: new Date(Date.now() + 600_000).toISOString() });
+const mkJob = (): Job => ({ id: crypto.randomUUID(), capability_hash: "c", network: X402_NETWORK, asset: BOTANIST_ASSET, amount: 500000, pay_to: payTo, fee_payer: fac.publicKey.toBase58(), memo: `fleuri-botanist:${crypto.randomUUID().replace(/-/g, "")}`, resource: "https://fleuri.test/api/public/botanist/report", mint: "So11111111111111111111111111111111111111112", status: "quoted", quote_expires_at: new Date(Date.now() + 600_000).toISOString() });
 function payTx(j: Job, signer = payer, blockhash = "11111111111111111111111111111112") {
   const mint = new PublicKey(BOTANIST_ASSET);
   const m = new TransactionMessage({ payerKey: fac.publicKey, recentBlockhash: blockhash, instructions: [
@@ -106,5 +106,23 @@ describe("botanist payment orchestration", () => {
     const w = world(j, { chain, reportFails: () => fail, settle: async () => { chain.set("SIGR", landed(vt, j)); return { success: true, transaction: "SIGR" }; } });
     expect((await settleAndDeliver(w.d, j, header(j, tx))).body.settled).toBe(true);
     fail = false; const r = await settleAndDeliver(w.d, w.job, null); expect(r.status).toBe(200); expect(w.calls.filter((c) => c === "settle")).toHaveLength(1);
+  });
+  it("generic x402 client: 402 → signed-header retry of the ORIGINAL POST {mint} settles that exact job; replay returns the same receipt", async () => {
+    const j = mkJob(); const chain = new Map();
+    // Client only sees the 402 header; it signs accepts[0] and retries the same body without jobId.
+    const pr: any = decodePaymentRequiredHeader(r402(j).headers!["PAYMENT-REQUIRED"]);
+    const { b64: tx, vt } = payTx({ ...j, memo: pr.accepts[0].extra.memo });
+    const sig = encodePaymentSignatureHeader({ x402Version: 2, resource: pr.resource, accepted: pr.accepts[0], payload: { transaction: tx } } as any);
+    const w = world(j, { chain, settle: async () => { chain.set("SIGG", landed(vt, j)); return { success: true, transaction: "SIGG" }; } });
+    const find = async (memo: string) => (memo === w.job.memo ? w.job : null);
+    const r = await resolveHeaderJob(sig, { mint: j.mint }, j.resource, find); expect("job" in r).toBe(true);
+    const first = await settleAndDeliver(w.d, (r as any).job, sig); expect(first.status).toBe(200);
+    const again = await resolveHeaderJob(sig, { mint: j.mint }, j.resource, find);
+    const replay = await settleAndDeliver(w.d, (again as any).job, sig);
+    expect(replay.body.receipt).toEqual(first.body.receipt); expect(w.calls.filter((c) => c === "settle")).toHaveLength(1);
+    expect((await resolveHeaderJob(sig, { mint: "Other1111111111111111111111111111111111111" }, j.resource, find) as any).status).toBe(409);
+    expect((await resolveHeaderJob(sig, { mint: j.mint }, "https://evil.test/r", find) as any).status).toBe(409);
+    const forged = encodePaymentSignatureHeader({ x402Version: 2, resource: pr.resource, accepted: { ...pr.accepts[0], extra: { ...pr.accepts[0].extra, memo: "fleuri-botanist:" + "0".repeat(32) } }, payload: { transaction: tx } } as any);
+    expect((await resolveHeaderJob(forged, { mint: j.mint }, j.resource, find) as any).status).toBe(404);
   });
 });
