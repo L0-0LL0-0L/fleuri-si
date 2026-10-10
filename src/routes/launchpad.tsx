@@ -55,7 +55,10 @@ function Launchpad() {
     mint.current ??= Keypair.generate();
     const r=await pqStartLaunch({data:{identityId:identity.id,baseMint:mint.current.publicKey.toBase58()}});
     if(!r.ok) throw new Error(r.error);
-    const m=parseManifest({...r.data.template,token:{...r.data.template.token,name:name.trim(),symbol:symbol.trim().toUpperCase(),imageUri:uri.trim(),imageSha256:hash}});
+    const token:PassportManifest["token"]={...r.data.template.token,name:name.trim(),symbol:symbol.trim().toUpperCase(),imageUri:uri.trim(),imageSha256:hash};
+    if(website.trim()) token.website=website.trim();
+    if(twitter.trim()) token.twitter=twitter.trim();
+    const m=parseManifest({...r.data.template,token});
     setManifest(m); setReviewAck(false);
   }
   async function launch(kind:WalletKind) {
@@ -97,6 +100,8 @@ function Launchpad() {
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();void run("Reading exact chain terms…",review);}}>
         <label className="text-sm font-semibold">Token name<input required maxLength={32} value={name} onChange={e=>setName(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="a strange little bloom"/></label>
         <label className="text-sm font-semibold">Ticker<input required pattern="[A-Z0-9]{1,10}" maxLength={10} value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="BLOOM"/></label>
+        <label className="text-sm font-semibold">Website · optional<input maxLength={200} value={website} onChange={e=>setWebsite(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="https://your-token.site"/></label>
+        <label className="text-sm font-semibold">Twitter / X · optional<input maxLength={200} value={twitter} onChange={e=>setTwitter(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="https://x.com/yourhandle"/></label>
         <label className="text-sm font-semibold sm:col-span-2">Token image · PNG, JPEG, GIF or WebP, up to 1 MB<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="mt-2 block w-full text-xs" onChange={e=>setFile(e.target.files?.[0]??null)}/></label>
         <label className="text-sm sm:col-span-2">Or an existing immutable image CID<input value={imageUri} disabled={!!file} onChange={e=>{setImageUri(e.target.value);setImageHash(null);}} className="hair mt-1 h-11 w-full bg-paper-light px-3 font-mono text-xs" placeholder="ipfs://bafy…"/></label>
         <p className="text-xs text-ink-soft sm:col-span-2">Supply, fees, LP shares and graduation are read from the configured Meteora pool config. The mint key is generated on your device; its private key stays here.</p>
