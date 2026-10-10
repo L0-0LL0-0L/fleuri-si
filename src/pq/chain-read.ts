@@ -1,6 +1,6 @@
 // Isomorphic Solana/Meteora chain readers. No secrets: the server passes its configured RPC
 // connection; the standalone browser verifier passes a caller-selected RPC connection.
-import { Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { DynamicBondingCurveClient, deriveDbcPoolAddress, deriveMintMetadata, METAPLEX_PROGRAM_ID, DAMM_V2_MIGRATION_FEE_ADDRESS, DAMM_V2_PROGRAM_ID, deriveDammV2PoolAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { getMint, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { Buffer } from "buffer";
@@ -193,3 +193,33 @@ export async function readTokenMint(conn: Connection, mint: string) {
 }
 
 export const derivePool = (baseMint: string, config: string) => deriveDbcPoolAddress(new PublicKey(SOL_MINT), new PublicKey(baseMint), new PublicKey(config)).toBase58();
+
+const UPGRADEABLE_LOADER = "BPFLoaderUpgradeab1e11111111111111111111111";
+/** Upgrade authority of a BPF-upgradeable program, read from its ProgramData account. */
+export async function readUpgradeAuthority(conn: Connection, program: string): Promise<{ loader: string; programData: string | null; authority: string | null; immutable: boolean; slot: number | null }> {
+  const info = await conn.getAccountInfo(new PublicKey(program));
+  if (!info) throw new Error("Program account not found.");
+  const loader = info.owner.toBase58();
+  if (loader !== UPGRADEABLE_LOADER) return { loader, programData: null, authority: null, immutable: true, slot: null };
+  if (info.data.length < 36 || info.data.readUInt32LE(0) !== 2) throw new Error("Unexpected upgradeable program layout.");
+  const programData = new PublicKey(info.data.subarray(4, 36));
+  const pd = await conn.getAccountInfo(programData);
+  if (!pd || pd.data.length < 13 || pd.data.readUInt32LE(0) !== 3) throw new Error("ProgramData account is unreadable.");
+  const slot = Number(pd.data.readBigUInt64LE(4));
+  const has = pd.data[12] === 1;
+  const authority = has ? new PublicKey(pd.data.subarray(13, 45)).toBase58() : null;
+  return { loader, programData: programData.toBase58(), authority, immutable: !has, slot };
+}
+
+/** Classic SPL Token or Token-2022 mint, any decimals (Botanist inspects arbitrary mints). */
+export async function readAnyMint(conn: Connection, mint: string) {
+  const info = await conn.getAccountInfo(new PublicKey(mint));
+  if (!info) throw new Error("Mint account not found.");
+  const owner = info.owner.toBase58();
+  const T22 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+  if (owner !== TOKEN_PROGRAM_ID.toBase58() && owner !== T22) throw new Error("Account is not an SPL Token mint.");
+  if (info.data.length < 82) throw new Error("Mint data too short.");
+  const d = Buffer.from(info.data);
+  const opt = (o: number) => (d.readUInt32LE(o) === 1 ? new PublicKey(d.subarray(o + 4, o + 36)).toBase58() : null);
+  return { program: owner === T22 ? "token-2022" : "spl-token", mintAuthority: opt(0), supply: d.readBigUInt64LE(36), decimals: d[44], initialized: d[45] === 1, freezeAuthority: opt(46), extensionsBytes: Math.max(0, d.length - 82) };
+}
