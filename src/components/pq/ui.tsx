@@ -153,7 +153,7 @@ export function PassportTerms({manifest:m}:{manifest:PassportManifest}) {
     ["Mint",m.token.baseMint], ["DBC config",m.config.address], ["DBC pool",m.pool.address], ["Image",m.token.imageUri],
   ];
   return <div className="space-y-3">
-    <dl className="hair divide-y divide-ink/20">{values.map(([label,value])=><div key={label} className="grid gap-1 p-2 sm:grid-cols-[10rem_minmax(0,1fr)]"><dt className="font-mono text-[0.65rem] uppercase text-ink-soft">{label}</dt><dd className="min-w-0 break-all text-sm">{value}</dd></div>)}</dl>
+    <dl className="hair divide-y divide-ink/20">{values.map(([label,value])=><div key={label} className="grid gap-1 p-2 sm:grid-cols-[10rem_minmax(0,1fr)]"><dt className="font-mono text-[0.65rem] uppercase text-ink-soft">{label}</dt><dd className="min-w-0 break-all text-sm">{/^https?:\/\//.test(value)?<a className="underline" href={value} target="_blank" rel="noreferrer">{value}</a>:value}</dd></div>)}</dl>
     <p className="text-xs text-ink-soft">{m.authority.policy}</p>
     <details className="hair p-2"><summary className="cursor-pointer font-mono text-xs">Complete signed config snapshot</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all text-[0.65rem]">{JSON.stringify(m.config.snapshot,null,2)}</pre></details>
   </div>;
