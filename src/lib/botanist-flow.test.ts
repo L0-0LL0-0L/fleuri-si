@@ -1,3 +1,4 @@
+import { sha256Hex, utf8 } from "@/pq/canonical";
 // @vitest-environment node
 // Botanist quote → payment → settlement → report orchestration, with in-memory chain/facilitator/DB fakes.
 import { describe, expect, it } from "vitest";
@@ -125,22 +126,41 @@ describe("botanist payment orchestration", () => {
     expect((await settleAndDeliver(w.d, j, header(j, tx))).body.settled).toBe(true);
     fail = false; const r = await settleAndDeliver(w.d, w.job, null); expect(r.status).toBe(200); expect(w.calls.filter((c) => c === "settle")).toHaveLength(1);
   });
-  it("generic x402 client: 402 → signed-header retry of the ORIGINAL POST {mint} settles that exact job; replay returns the same receipt", async () => {
-    const j = mkJob(); const chain = new Map();
-    // Client only sees the 402 header; it signs accepts[0] and retries the same body without jobId.
-    const pr: any = decodePaymentRequiredHeader(r402(j).headers!["PAYMENT-REQUIRED"]);
+  it("generic x402 client: 402 → signed-header retry of the ORIGINAL POST {mint} settles that exact job; replay and UI resume return the same receipt", async () => {
+    const token = "ab".repeat(32); const j = { ...mkJob(), capability_hash: sha256Hex(utf8(token)) }; const chain = new Map();
+    // Only the capability holder receives this 402 (the quote response); it carries the off-chain capability.
+    const pr: any = decodePaymentRequiredHeader(r402(j, undefined, {}, token).headers!["PAYMENT-REQUIRED"]);
+    expect(pr.accepts[0].extra.botanistCapability).toBe(token); expect(pr.accepts[0].extra.botanistJob).toBe(j.id);
     const { b64: tx, vt } = payTx({ ...j, memo: pr.accepts[0].extra.memo });
     const sig = encodePaymentSignatureHeader({ x402Version: 2, resource: pr.resource, accepted: pr.accepts[0], payload: { transaction: tx } } as any);
     const w = world(j, { chain, settle: async () => { chain.set("SIGG", landed(vt, j)); return { success: true, transaction: "SIGG" }; } });
-    const find = async (memo: string) => (memo === w.job.memo ? w.job : null);
+    const find = async (id: string, t: string) => (id === w.job.id && sha256Hex(utf8(t)) === w.job.capability_hash ? w.job : null);
     const r = await resolveHeaderJob(sig, { mint: j.mint }, j.resource, find); expect("job" in r).toBe(true);
-    const first = await settleAndDeliver(w.d, (r as any).job, sig); expect(first.status).toBe(200);
+    const first = await settleAndDeliver(w.d, (r as any).job, sig, token); expect(first.status).toBe(200);
+    // The facilitator got the frozen requirement only: no capability, byte-stable across retries.
+    expect(w.settles[0].body).not.toContain(token);
     const again = await resolveHeaderJob(sig, { mint: j.mint }, j.resource, find);
-    const replay = await settleAndDeliver(w.d, (again as any).job, sig);
+    const replay = await settleAndDeliver(w.d, (again as any).job, sig, token);
     expect(replay.body.receipt).toEqual(first.body.receipt); expect(w.calls.filter((c) => c === "settle")).toHaveLength(1);
+    // UI resume path (jobId + token, authorized by findJob's capability_hash match) returns the same receipt.
+    const ui = await find(j.id, token); expect(ui).not.toBeNull();
+    expect((await settleAndDeliver(w.d, ui!, null, token)).body.receipt).toEqual(first.body.receipt);
     expect((await resolveHeaderJob(sig, { mint: "Other1111111111111111111111111111111111111" }, j.resource, find) as any).status).toBe(409);
     expect((await resolveHeaderJob(sig, { mint: j.mint }, "https://evil.test/r", find) as any).status).toBe(409);
-    const forged = encodePaymentSignatureHeader({ x402Version: 2, resource: pr.resource, accepted: { ...pr.accepts[0], extra: { ...pr.accepts[0].extra, memo: "fleuri-botanist:" + "0".repeat(32) } }, payload: { transaction: tx } } as any);
-    expect((await resolveHeaderJob(forged, { mint: j.mint }, j.resource, find) as any).status).toBe(404);
+  });
+  it("a PUBLIC on-chain memo plus a forged header cannot retrieve a paid report without the capability", async () => {
+    const token = "cd".repeat(32); const j = { ...mkJob(), capability_hash: sha256Hex(utf8(token)) }; const chain = new Map();
+    const { b64: tx, vt } = payTx(j);
+    const w = world(j, { chain, settle: async () => { chain.set("SIGP", landed(vt, j)); return { success: true, transaction: "SIGP" }; } });
+    expect((await settleAndDeliver(w.d, j, header(j, tx), token)).status).toBe(200); expect(w.job.report).toBeTruthy();
+    const find = async (id: string, t: string) => (id === w.job.id && sha256Hex(utf8(t)) === w.job.capability_hash ? w.job : null);
+    let lookups = 0; const spy = async (id: string, t: string) => { lookups++; return find(id, t); };
+    const forge = (extra: Record<string, unknown>) => encodePaymentSignatureHeader({ x402Version: 2, resource: { url: j.resource }, accepted: { ...requirementOf(j), extra: { feePayer: j.fee_payer, memo: j.memo, ...extra } }, payload: { transaction: "AAAA" } } as any);
+    const cases = [forge({}), forge({ botanistJob: j.id }), forge({ botanistJob: j.id, botanistCapability: "00".repeat(32) }), forge({ botanistJob: crypto.randomUUID(), botanistCapability: token }), forge({ botanistJob: j.id, botanistCapability: "short" })];
+    for (const c of cases) {
+      const r: any = await resolveHeaderJob(c, { mint: j.mint }, j.resource, spy);
+      expect("job" in r).toBe(false); expect([401, 404]).toContain(r.status); expect(JSON.stringify(r.body)).not.toContain("report_ready"); expect(r.body.report).toBeUndefined();
+    }
+    expect(lookups).toBe(3); // malformed / missing capabilities are rejected before any lookup
   });
 });
