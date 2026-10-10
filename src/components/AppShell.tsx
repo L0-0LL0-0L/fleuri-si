@@ -77,7 +77,8 @@ function WalletBlock() {
         <>
           <span className="block font-mono text-[0.65rem] uppercase text-ink-soft">{o.wallet ? `${o.wallet.provider} · verified` : "sandbox workspace"}</span>
           <span className="block truncate font-mono text-xs">{o.wallet ? `${o.wallet.address.slice(0, 4)}…${o.wallet.address.slice(-4)}` : o.id.slice(0, 8)}</span>
-          <span className="num block text-sm font-bold">{o.vsol.toFixed(2)} vSOL</span>
+          <span className="block font-mono text-[0.6rem] uppercase text-ink-soft">Garden virtual balance</span>
+          <span className="num block text-sm font-bold">{o.vsol.toFixed(2)} vSOL <span className="font-normal text-ink-soft">· not real SOL</span></span>
         </>
       ) : (
         <>
@@ -178,6 +179,7 @@ function RightRail() {
 
 function TopStrip({ onMenu }: { onMenu: () => void }) {
   const { ui, state, store, error, lastSync, syncing } = useGarden();
+  const onchain = isOnchainPath(useRouterState({ select: (s) => s.location.pathname }));
   return (
     <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-ink bg-paper/95 px-3 py-2 backdrop-blur grain">
       <button type="button" className="hair grid h-10 w-10 place-items-center bg-paper-light lg:hidden" onClick={onMenu} aria-label="Open navigation">
@@ -186,7 +188,7 @@ function TopStrip({ onMenu }: { onMenu: () => void }) {
       <span className="lg:hidden">
         <Link to="/" className="wordmark text-3xl" aria-label="fleuri home">fleuri</Link>
       </span>
-      <SandboxBadge className="hidden sm:inline-flex" />
+      {onchain ? <OnchainBadge className="hidden min-[400px]:inline-flex" /> : <SandboxBadge className="hidden sm:inline-flex" />}
       <span className={cn("hidden font-mono text-[0.65rem] md:inline", error && "text-poppy-deep")} role="status">
         {error ? (
           <button type="button" className="underline" onClick={() => store.refresh(true)}>cloud sync failed · retry</button>
@@ -221,7 +223,7 @@ function TopStrip({ onMenu }: { onMenu: () => void }) {
           <Terminal className="h-3.5 w-3.5" /> Terminal
         </Link>
         <button type="button" className="btn btn-ink h-9 min-h-9 px-3 text-xs" onClick={() => store.setUI({ walletOpen: true })}>
-          {state?.owner ? (state.owner.wallet ? `${state.owner.wallet.address.slice(0, 4)}…` : `${state.owner.vsol.toFixed(0)} vSOL`) : "Connect"}
+          {state?.owner ? (state.owner.wallet ? `${state.owner.wallet.address.slice(0, 4)}…` : `Garden ${state.owner.vsol.toFixed(0)} vSOL`) : "Garden"}
         </button>
       </div>
     </div>
@@ -253,7 +255,7 @@ function BottomNav() {
 export function AppShell({ children }: { children: ReactNode }) {
   const { ui, error, store, state } = useGarden();
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const pqPage = ["/identity", "/launchpad", "/verify"].includes(path) || path.startsWith("/passport/");
+  const pqPage = isOnchainPath(path);
   const wide = path === "/terminal" || pqPage;
   const [menu, setMenu] = useState(false);
   const create = useCreate();
