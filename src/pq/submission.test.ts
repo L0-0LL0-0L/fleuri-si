@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Keypair } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { createDbcProgram } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import { deriveInitAccounts, derivePool } from "./chain-read";
 import bs58 from "bs58";
 import { b64 } from "./canonical";
 import { messageHash } from "./chain-pure";
@@ -8,12 +10,13 @@ import { GENESIS } from "./registration";
 import { buildMemoTx } from "@/lib/solana.server";
 import { DBC_PROGRAM_ID } from "./passport";
 
-const mock=vi.hoisted(()=>({prep:null as any,launch:null as any,pool:null as any,events:[] as string[],failSend:false,raw:[] as Uint8Array[],height:1,confirmed:null as any,tables:[] as string[]}));
+const mock=vi.hoisted(()=>({prep:null as any,launch:null as any,pool:null as any,meta:null as any,mint:null as any,dbcConfig:null as any,events:[] as string[],failSend:false,raw:[] as Uint8Array[],height:1,confirmed:null as any,tables:[] as string[]}));
 vi.mock("@/integrations/supabase/client.server",()=>({supabaseAdmin:{
   from:(table:string)=>{mock.tables.push(table);const q:any={select:()=>q,eq:()=>q,update:(p:any)=>{if(table==="chain_preparations")mock.prep={...mock.prep,...p};else mock.events.push("publish");return q;},single:async()=>({data:mock.launch,error:null}),maybeSingle:async()=>({data:mock.prep,error:null}),then:(resolve:any)=>resolve({data:mock.prep,error:null})};return q;},
-  rpc:async(_name:string,args:any)=>{
+  rpc:async(name:string,args:any)=>{
     mock.events.push("persist");
     const p=mock.prep;
+    if(name==="record_launch_confirmation") return {data:"passport-id",error:null};
     if(p.submitted_at && (p.signature!==args._signature || p.signed_transaction_b64!==args._transaction)) return {error:{message:"Different transaction"}};
     mock.prep={...p,submitted_at:new Date().toISOString(),signature:args._signature,signed_transaction_b64:args._transaction};
     return {data:mock.prep,error:null};
@@ -21,7 +24,9 @@ vi.mock("@/integrations/supabase/client.server",()=>({supabaseAdmin:{
 }}));
 vi.mock("@/lib/solana.server",async(importOriginal)=>{
   const actual:any=await importOriginal();
-  return {...actual,readPool:async()=>mock.pool,readConfirmedTx:async()=>mock.confirmed,connection:()=>({
+  return {...actual,readPool:async()=>mock.pool,readConfirmedTx:async()=>mock.confirmed,
+    readTokenMetadata:async()=>mock.meta,readTokenMint:async()=>mock.mint,readDbcConfig:async()=>mock.dbcConfig,
+    connection:()=>({
     getGenesisHash:async()=>GENESIS.devnet,getBlockHeight:async()=>mock.height,
     sendRawTransaction:async(raw:Uint8Array)=>{mock.events.push("broadcast");mock.raw.push(raw);if(mock.failSend)throw new Error("RPC connection lost");return mock.prep.signature;},
   })};
@@ -34,7 +39,7 @@ process.env.SOLANA_CLUSTER = "devnet";
 const owner=crypto.randomUUID(),id=crypto.randomUUID();
 let signed:string,signature:string;
 beforeEach(async()=>{
-  mock.events=[];mock.raw=[];mock.failSend=false;mock.height=1;mock.confirmed=null;mock.tables=[];mock.launch=null;mock.pool=null;
+  mock.events=[];mock.raw=[];mock.failSend=false;mock.height=1;mock.confirmed=null;mock.tables=[];mock.launch=null;mock.pool=null;mock.meta=null;mock.mint=null;mock.dbcConfig=null;
   const wallet=Keypair.generate();const built=await buildMemoTx({getLatestBlockhash:async()=>({blockhash:Keypair.generate().publicKey.toBase58(),lastValidBlockHeight:100})} as any,wallet.publicKey.toBase58(),"fleuri:pqid:v1:test");
   built.tx.sign(wallet);signed=b64(built.tx.serialize());signature=bs58.encode(built.tx.signature!);
   mock.prep={id,owner_id:owner,cluster:"devnet",wallet:wallet.publicKey.toBase58(),message_hash:messageHash(built.message),message_b64:b64(built.message),expires_at:new Date(Date.now()+90000).toISOString(),submitted_at:null,signature:null,payload:{lastValidBlockHeight:100}};
@@ -79,5 +84,30 @@ describe("server submission recovery",()=>{
     mock.pool.migrationProgress=2;
     const r=await confirmPrepared(owner,id);expect(r.status).toBe("confirmed");expect(r.detail).toContain("Migrate again");
     expect(mock.prep.confirmed_at).toBeTruthy();expect(mock.events).not.toContain("publish");expect(mock.tables).not.toContain("passports");
+  });
+  it("confirms a launch whose pool creator lawfully changed after the create instruction",async()=>{
+    await submitPrepared(owner,id,signed);
+    const creator=new PublicKey(mock.prep.wallet),mint=Keypair.generate(),config=Keypair.generate().publicKey;
+    const pool=new PublicKey(derivePool(mint.publicKey.toBase58(),config.toBase58()));
+    const uri="ipfs://bafyexample",name="Bloom",symbol="BLOOM";
+    const d=deriveInitAccounts(mint.publicKey.toBase58(),pool.toBase58());const P=(s:string)=>new PublicKey(s);
+    const program=createDbcProgram(new Connection("http://127.0.0.1:1")).program as any;
+    const ix=await program.methods.initializeVirtualPoolWithSplToken({name,symbol,uri}).accountsPartial({
+      config,poolAuthority:P(d.poolAuthority),creator,baseMint:mint.publicKey,quoteMint:P("So11111111111111111111111111111111111111112"),pool,
+      baseVault:P(d.baseVault),quoteVault:P(d.quoteVault),mintMetadata:P(d.mintMetadata),metadataProgram:P("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
+      payer:creator,tokenQuoteProgram:P("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),tokenProgram:P("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),systemProgram:P("11111111111111111111111111111111"),
+    }).instruction();
+    const terms={fees:{feeBps:100},lp:{locked:100},migration:{quoteThresholdLamports:"1"},authority:{revoked:true}};
+    const manifest={config:{address:config.toBase58(),snapshotHash:"h",snapshot:{}},creatorWallet:creator.toBase58(),
+      token:{baseMint:mint.publicKey.toBase58(),name,symbol,decimals:6,totalSupply:"1000"},pool:{address:pool.toBase58()},...terms};
+    mock.prep.kind="launch";mock.prep.payload={...mock.prep.payload,baseMint:manifest.token.baseMint,config:manifest.config.address,pool:manifest.pool.address,metadataUri:uri,passport:{manifest}};
+    mock.confirmed={serialized:mock.prep._testMessage,signers:[creator.toBase58(),mint.publicKey.toBase58()],ixs:[{program:DBC_PROGRAM_ID,data:new Uint8Array(ix.data),accounts:ix.keys.map((k:any)=>k.pubkey.toBase58())}],slot:42,err:null};
+    // The pool's current creator changed after launch; authorship is proven by the decoded create instruction.
+    mock.pool={baseMint:manifest.token.baseMint,config:manifest.config.address,creator:Keypair.generate().publicKey.toBase58(),migrationProgress:0};
+    mock.meta={uri,name,symbol,isMutable:false,updateAuthority:PublicKey.default.toBase58()};
+    mock.mint={decimals:6,supply:1000n,mintAuthority:null,freezeAuthority:null};
+    mock.dbcConfig={problems:[],snapshotHash:"h",snapshot:{},terms:{...terms,decimals:6,totalSupply:"1000"}};
+    const r=await confirmPrepared(owner,id);
+    expect(r.status).toBe("confirmed");expect(r.id).toBe("passport-id");
   });
 });
