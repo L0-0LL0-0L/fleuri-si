@@ -22,7 +22,9 @@ vi.mock("@/integrations/supabase/client.server",()=>({supabaseAdmin:{
 }}));
 vi.mock("@/lib/solana.server",async(importOriginal)=>{
   const actual:any=await importOriginal();
-  return {...actual,readPool:async()=>mock.pool,readConfirmedTx:async()=>mock.confirmed,connection:()=>({
+  return {...actual,readPool:async()=>mock.pool,readConfirmedTx:async()=>mock.confirmed,
+    readTokenMetadata:async()=>mock.meta,readTokenMint:async()=>mock.mint,readDbcConfig:async()=>mock.dbcConfig,
+    connection:()=>({
     getGenesisHash:async()=>GENESIS.devnet,getBlockHeight:async()=>mock.height,
     sendRawTransaction:async(raw:Uint8Array)=>{mock.events.push("broadcast");mock.raw.push(raw);if(mock.failSend)throw new Error("RPC connection lost");return mock.prep.signature;},
   })};
