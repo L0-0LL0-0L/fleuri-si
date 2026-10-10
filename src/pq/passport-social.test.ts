@@ -10,8 +10,8 @@ beforeAll(() => { kp = generatePqKeypair(); });
 describe("passport social links", () => {
   it("accepts a manifest without website or twitter (older passports keep parsing)", () => {
     const m = manifestFixture(kp);
-    expect(m.website).toBeUndefined();
-    expect(m.twitter).toBeUndefined();
+    expect(m.token.website).toBeUndefined();
+    expect(m.token.twitter).toBeUndefined();
     expect(() => parseManifest(m)).not.toThrow();
   });
 
