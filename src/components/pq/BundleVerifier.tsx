@@ -10,6 +10,8 @@ export function BundleVerifier() {
   async function run() {
     setBusy(true); setErr(""); setRes(null);
     try {
+      // The lazily loaded chain reader pulls SPL helpers that expect a global Buffer at import.
+      const { Buffer } = await import("buffer"); (globalThis as any).Buffer ??= Buffer;
       const [{ verifyBundle }, { connectionReader, rpcConnection }] = await Promise.all([import("@/pq/evidence"), import("@/pq/evidence-reader")]);
       const at = { rpc, gw }; const r = await verifyBundle(file, connectionReader(rpcConnection(rpc), gw)); setRes({ ...r, endpoints: at });
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
