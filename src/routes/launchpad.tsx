@@ -104,8 +104,21 @@ function Launchpad() {
     </Panel>
     {!userId && <Panel title="Your workspace"><p className="text-sm">Use your existing workspace session to register an identity and view your launches.</p><button type="button" className="btn btn-ink" disabled={!!busy} onClick={()=>void run("Opening workspace…",async()=>{await store.startSandbox();await refresh();})}>{busy??"Open workspace"}</button></Panel>}
     {!canReview && !manifest && <p className="hair bg-paper-light p-3 text-sm">Before launching: <Link to="/identity" className="font-semibold underline">create or restore your key, download its backup, unlock it and anchor it</Link>. Launching also requires every network readiness check to pass.</p>}
-    {done?<Panel title="Your bloom is on chain"><p className="display text-2xl">planted. signed. yours.</p><a className="block break-all text-xs underline" href={explorerTx(done.signature,readiness.cluster)} target="_blank" rel="noreferrer">View confirmed launch transaction</a><Link to="/passport/$hash" params={{hash:done.hash}} className="btn btn-red">Open the public passport</Link><button type="button" className="btn btn-paper" onClick={()=>{setDone(null);setManifest(null);setSigned(null);setName("");setSymbol("");setFile(null);setImageUri("");setImageHash(null);setWebsite("");setTwitter("");}}>Plant another token</button></Panel>
-    :!manifest?<Panel title="Your next bloom">
+    {done?<Panel title="Your bloom is on chain"><p className="display text-2xl">planted. signed. yours.</p><a className="block break-all text-xs underline" href={explorerTx(done.signature,readiness.cluster)} target="_blank" rel="noreferrer">View confirmed launch transaction</a><Link to="/passport/$hash" params={{hash:done.hash}} className="btn btn-red">Open the public passport</Link><button type="button" className="btn btn-paper" onClick={()=>{setDone(null);setManifest(null);setSigned(null);setName("");setSymbol("");setFile(null);setImageUri("");setImageHash(null);setWebsite("");setTwitter("");setUsedProposal(null);}}>Plant another token</button></Panel>
+    :!manifest?<>
+    {!!proposals.length && <Panel title="Agent proposals · drafted in the garden, launched by you">
+      <p className="text-xs text-ink-soft">Your agents draft these during their cycles. Nothing here is on chain — a draft only becomes real when you review it, sign the passport and approve the launch in your wallet.</p>
+      {proposals.map(p=><div key={p.id} className={`hair space-y-2 p-3 ${usedProposal===p.id?"bg-paper-deep":""}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{p.name} <span className="text-poppy">${p.symbol}</span></p><p className="font-mono text-xs">drafted by @{p.agent_handle}</p></div>
+        {p.tagline && <p className="text-sm">{p.tagline}</p>}
+        {p.reason && <p className="text-xs text-ink-soft">why: {p.reason}</p>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-red" disabled={!!busy} onClick={()=>useProposal(p)}>{usedProposal===p.id?"Draft loaded below ↓":"Use this draft"}</button>
+          <button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>void run("Dismissing draft…",async()=>{const r=await pqSetProposalStatus({data:{id:p.id,status:"dismissed"}});if(!r.ok)throw new Error(r.error);await refresh();})}>Dismiss</button>
+        </div>
+      </div>)}
+    </Panel>}
+    <Panel title="Your next bloom">
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();void run("Reading exact chain terms…",review);}}>
         <label className="text-sm font-semibold">Token name<input required maxLength={32} value={name} onChange={e=>setName(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="a strange little bloom"/></label>
         <label className="text-sm font-semibold">Ticker<input required pattern="[A-Z0-9]{1,10}" maxLength={10} value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="BLOOM"/></label>
