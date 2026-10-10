@@ -97,8 +97,8 @@ export function settledCredit(tx: { meta: { err: unknown; preTokenBalances?: any
   const meta = tx.meta;
   if (!meta) return { ok: false as const, terminal: false, reason: "Transaction metadata unavailable." };
   let c: ExactCheck;
-  try { c = checkExactMessage(tx.transaction.message, req); } catch (e) { return { ok: false as const, terminal: true, reason: `Settled transaction is not this payment: ${(e as Error).message}` }; }
-  if (c.paymentHash !== acceptedHash) return { ok: false as const, terminal: true, reason: "Settled transaction message differs from the accepted payment." };
+  try { c = checkExactMessage(tx.transaction.message, req); } catch (e) { return { ok: false as const, terminal: true, mismatch: true, reason: `Settled transaction is not this payment: ${(e as Error).message}` }; }
+  if (c.paymentHash !== acceptedHash) return { ok: false as const, terminal: true, mismatch: true, reason: "Settled transaction message differs from the accepted payment." };
   if (meta.err) return { ok: false as const, terminal: true, reason: `Settlement failed on chain: ${JSON.stringify(meta.err)}` };
   const bal = (arr: any[] | null | undefined) => { const b = arr?.find((x) => x.accountIndex === c.destIndex); return b && b.mint === req.asset && b.owner === req.payTo ? BigInt(b.uiTokenAmount?.amount ?? "0") : 0n; };
   const delta = bal(meta.postTokenBalances) - bal(meta.preTokenBalances);

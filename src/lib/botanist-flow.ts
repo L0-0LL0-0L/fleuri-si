@@ -42,7 +42,7 @@ async function confirm(d: FlowDeps, j: Job, signature: string) {
   for (let i = 0; i < (d.confirmPolls ?? 6); i++) {
     let t: ConfirmedTx | null = null;
     try { t = await d.getTx(signature); } catch { t = null; }
-    if (t) { const c = settledCredit(t, requirementOf(j), j.payment_hash); return c.ok ? { kind: "ok" as const, slot: t.slot } : c.terminal ? { kind: "failed" as const, reason: c.reason } : { kind: "pending" as const, reason: c.reason }; }
+    if (t) { const c = settledCredit(t, requirementOf(j), j.payment_hash); return c.ok ? { kind: "ok" as const, slot: t.slot } : (c as any).mismatch ? { kind: "mismatch" as const, reason: c.reason } : c.terminal ? { kind: "failed" as const, reason: c.reason } : { kind: "pending" as const, reason: c.reason }; }
     if (i + 1 < (d.confirmPolls ?? 6)) await sleep(1500);
   }
   return { kind: "pending" as const, reason: "Settlement is not yet visible on chain." };
@@ -104,6 +104,7 @@ export async function settleAndDeliver(d: FlowDeps, job: Job, sig: string | null
     }
     const c = await confirm(d, j, candidate!);
     if (c.kind === "pending") return pending(j, c.reason);
+    if (c.kind === "mismatch") { await d.noteError(j.id, c.reason); return { status: 502, body: { error: `The facilitator reported a transaction that is not your accepted payment, so no report is delivered for it. Your accepted payment is unchanged; resume later.`, jobId: j.id } }; }
     if (c.kind === "failed") { await d.rpc("botanist_mark_failed", { _id: j.id, _reason: c.reason }); return { status: 410, body: { error: `${c.reason} No report is delivered for it.`, jobId: j.id, terminal: true } }; }
     j = await d.rpc("botanist_mark_settled", { _id: j.id, _sig: candidate, _slot: c.slot });
   }
