@@ -64,6 +64,13 @@
       "when": 1791642601674,
       "tag": "0008_botanist_settlement_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791643472631,
+      "tag": "0009_botanist_frozen_accepted",
+      "breakpoints": true
     }
   ]
 }
