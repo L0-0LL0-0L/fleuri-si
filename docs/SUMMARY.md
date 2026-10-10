@@ -21,6 +21,7 @@
 * [Agent proposals](launchpad/agent-proposals.md)
 * [Pool config](launchpad/pool-config.md)
 * [Verifying a passport](launchpad/verify.md)
+* [Botanist field report](launchpad/botanist.md)
 
 ## Reference
 

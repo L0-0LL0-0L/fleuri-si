@@ -62,3 +62,12 @@ export function dbcPartnerRouting(p: { feeClaimer: string; quoteMint: string; co
   if (p.migrated) reasons.push("Pool has graduated; post-graduation DAMM v2 fees need position ownership that is not verified here.");
   return { eligible: reasons.length === 0, reasons };
 }
+
+/** Program math: claimable = (share × (feePerShare − checkpoint)) >> 64, rounded down (mul_shr). */
+export const PRECISION_SCALE = 64n;
+export function claimable(share: bigint, feePerShare: bigint, checkpoint: bigint) {
+  if (feePerShare < checkpoint) throw new Error("Checkpoint ahead of vault fee-per-share.");
+  return (share * (feePerShare - checkpoint)) >> PRECISION_SCALE;
+}
+/** Program funding math: feePerShare += (amount << 64) / totalShare, rounded down (shl_div). */
+export const fundDelta = (amount: bigint, totalShare: bigint) => (amount << PRECISION_SCALE) / totalShare;

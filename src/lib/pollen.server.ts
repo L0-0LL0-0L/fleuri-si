@@ -5,7 +5,7 @@ import BN from "bn.js";
 import { DynamicFeeSharingClient, deriveFeeVaultPdaAddress } from "@meteora-ag/dynamic-fee-sharing-sdk";
 import { DynamicBondingCurveClient } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { DFS_PROGRAM_ID, POLLEN_MINTS, compareVault, dbcPartnerRouting, parseAmount, parseTerms, type PollenTermsT } from "@/pq/pollen";
+import { DFS_PROGRAM_ID, POLLEN_MINTS, claimable, compareVault, dbcPartnerRouting, parseAmount, parseTerms, type PollenTermsT } from "@/pq/pollen";
 import { isSolanaAddress } from "@/pq/registration";
 import { DBC_PROGRAM_ID } from "@/pq/passport";
 import * as sol from "./solana.server";
@@ -36,14 +36,21 @@ export async function readVault(conn: Connection, address: string) {
   const mint = v.tokenMint.toBase58();
   const mintInfo = await conn.getAccountInfo(v.tokenMint);
   const supported = mint in POLLEN_MINTS && mintInfo?.owner.equals(TOKEN_PROGRAM_ID);
-  const b = await client.getFeeBreakdown(a);
-  const users = (v.users as any[]).map((u) => ({ address: u.address.toBase58(), share: Number(u.share) })).filter((u) => u.address !== NULL_KEY);
-  const fees = new Map(b.userFees.map((u: any) => [u.address.toBase58(), u]));
+  // Exact program math from on-chain checkpoints; not the SDK's lifetime-funds approximation.
+  const fps = BigInt(v.feePerShare.toString());
+  const users = (v.users as any[]).filter((u) => u.address.toBase58() !== NULL_KEY && Number(u.share) > 0).map((u) => {
+    const share = BigInt(u.share.toString()); const claimed = BigInt(u.feeClaimed.toString());
+    const unclaimed = claimable(share, fps, BigInt(u.feePerShareCheckpoint.toString()));
+    return { address: u.address.toBase58(), share: Number(share), claimed: claimed.toString(), unclaimed: unclaimed.toString(), earned: (claimed + unclaimed).toString() };
+  });
+  const totalClaimed = users.reduce((a, u) => a + BigInt(u.claimed), 0n);
+  const totalUnclaimed = users.reduce((a, u) => a + BigInt(u.unclaimed), 0n);
+  const b = { totalFundedFee: v.totalFundedFee.toString(), totalClaimedFee: totalClaimed.toString(), totalUnclaimedFee: totalUnclaimed.toString() };
   return {
     address, mint, supported: !!supported, symbol: POLLEN_MINTS[mint]?.symbol ?? "unsupported", decimals: POLLEN_MINTS[mint]?.decimals ?? null,
     owner: v.owner.toBase58(), base: v.base.toBase58(), tokenVault: v.tokenVault.toBase58(), totalShare: Number(v.totalShare),
-    funded: b.totalFundedFee.toString(), claimed: b.totalClaimedFee.toString(), unclaimed: b.totalUnclaimedFee.toString(),
-    recipients: users.map((u) => { const f: any = fees.get(u.address); return { ...u, earned: f?.totalFee.toString() ?? "0", claimed: f?.feeClaimed.toString() ?? "0", unclaimed: f?.feeUnclaimed.toString() ?? "0" }; }),
+    funded: b.totalFundedFee, claimed: b.totalClaimedFee, unclaimed: b.totalUnclaimedFee, feePerShare: fps.toString(),
+    recipients: users,
   };
 }
 

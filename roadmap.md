@@ -1,9 +1,11 @@
 # Roadmap
 
-- [x] Switch launchpad to mainnet; SOLANA_CLUSTER matches saved RPC genesis
-- [x] FLEURI_ORIGIN set to https://fleuri.si
-- [x] Wallet-assisted, reviewable Meteora config creation at /launch-config
-- [x] Tests, typecheck, Worker build
-- [x] PINATA_JWT saved; Pinata confirms the key (status 200)
-- [ ] Sign the config at /launch-config — waits on owner's wallet with mainnet SOL
-- [ ] Save the confirmed address as METEORA_DBC_CONFIG — waits on the config above
+- [x] Mainnet launchpad, pool config, Pinata, METEORA_DBC_CONFIG verified
+- [x] Living passports: dated observations, append-only history, evidence bundle export
+- [x] Standalone bundle verifier (browser direct RPC + CLI) with fixture tests
+- [x] Pollen: Meteora DFS vault create/fund/claim/inspect/import, token-page association, DBC partner-fee routing eligibility
+- [x] Pollen claimable from feePerShare checkpoint (Q64 rounding)
+- [x] Botanist: x402 V2 endpoint, PayAI facilitator adapter, job state machine, recovery, receipts, report, wallet checkout page
+- [x] Migration: deny anon/authenticated TRUNCATE/writes on new tables + tests
+- [x] Tests, typecheck, build, browser smoke; docs/GitBook update
+- [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)

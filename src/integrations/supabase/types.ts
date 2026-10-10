@@ -124,6 +124,7 @@ export type Database = {
           client_hash: string
           created_at: string
           error: string | null
+          fee_payer: string | null
           id: string
           memo: string
           mint: string
@@ -136,6 +137,7 @@ export type Database = {
           report: Json | null
           report_digest: string | null
           request_hash: string
+          resource: string | null
           settle_signature: string | null
           settled_at: string | null
           settled_slot: number | null
@@ -149,6 +151,7 @@ export type Database = {
           client_hash: string
           created_at?: string
           error?: string | null
+          fee_payer?: string | null
           id?: string
           memo: string
           mint: string
@@ -161,6 +164,7 @@ export type Database = {
           report?: Json | null
           report_digest?: string | null
           request_hash: string
+          resource?: string | null
           settle_signature?: string | null
           settled_at?: string | null
           settled_slot?: number | null
@@ -174,6 +178,7 @@ export type Database = {
           client_hash?: string
           created_at?: string
           error?: string | null
+          fee_payer?: string | null
           id?: string
           memo?: string
           mint?: string
@@ -186,6 +191,7 @@ export type Database = {
           report?: Json | null
           report_digest?: string | null
           request_hash?: string
+          resource?: string | null
           settle_signature?: string | null
           settled_at?: string | null
           settled_slot?: number | null
@@ -1029,6 +1035,7 @@ export type Database = {
           client_hash: string
           created_at: string
           error: string | null
+          fee_payer: string | null
           id: string
           memo: string
           mint: string
@@ -1041,6 +1048,7 @@ export type Database = {
           report: Json | null
           report_digest: string | null
           request_hash: string
+          resource: string | null
           settle_signature: string | null
           settled_at: string | null
           settled_slot: number | null
@@ -1063,6 +1071,7 @@ export type Database = {
           client_hash: string
           created_at: string
           error: string | null
+          fee_payer: string | null
           id: string
           memo: string
           mint: string
@@ -1075,6 +1084,7 @@ export type Database = {
           report: Json | null
           report_digest: string | null
           request_hash: string
+          resource: string | null
           settle_signature: string | null
           settled_at: string | null
           settled_slot: number | null
@@ -1097,6 +1107,7 @@ export type Database = {
           client_hash: string
           created_at: string
           error: string | null
+          fee_payer: string | null
           id: string
           memo: string
           mint: string
@@ -1109,6 +1120,7 @@ export type Database = {
           report: Json | null
           report_digest: string | null
           request_hash: string
+          resource: string | null
           settle_signature: string | null
           settled_at: string | null
           settled_slot: number | null
