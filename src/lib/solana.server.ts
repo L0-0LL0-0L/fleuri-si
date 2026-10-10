@@ -85,14 +85,14 @@ export async function buildMigrationLockerTx(conn: Connection, pool: string, wal
   return finalizeUnsigned(tx, payer, await conn.getLatestBlockhash("confirmed"), [wallet]);
 }
 
-export function finalizeUnsigned(tx: Transaction, feePayer: PublicKey, bh: { blockhash: string; lastValidBlockHeight: number }, allowedSigners: string[]) {
+export function finalizeUnsigned(tx: Transaction, feePayer: PublicKey, bh: { blockhash: string; lastValidBlockHeight: number }, allowedSigners: string[], programs: string[] = [DBC_PROGRAM_ID, MEMO_PROGRAM_ID.toBase58()]) {
   tx.feePayer = feePayer;
   tx.recentBlockhash = bh.blockhash;
   const msg = tx.compileMessage();
   const signers = msg.accountKeys.slice(0, msg.header.numRequiredSignatures).map((k) => k.toBase58());
   const extra = signers.filter((x) => !allowedSigners.includes(x));
   if (extra.length || signers.length !== new Set(allowedSigners).size) throw new Error(`Transaction requires unexpected signers: ${signers.join(", ")}`);
-  if (!tx.instructions.some((i) => i.programId.toBase58() === DBC_PROGRAM_ID || i.programId.equals(MEMO_PROGRAM_ID))) throw new Error("Transaction does not call the expected program.");
+  if (!tx.instructions.some((i) => programs.includes(i.programId.toBase58()))) throw new Error("Transaction does not call the expected program.");
   const message = tx.serializeMessage();
   if (tx.serialize({requireAllSignatures: false, verifySignatures: false}).length > 1232) throw new Error("Prepared legacy transaction exceeds the wallet transaction size limit.");
   return { tx, message, lastValidBlockHeight: bh.lastValidBlockHeight, signers };
