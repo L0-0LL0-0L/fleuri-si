@@ -95,7 +95,7 @@ export async function signSubmitConfirm(
 
 export function WalletButtons({ avail, busy, disabled, action, onPick }: { avail: Record<WalletKind, boolean>; busy: string | null; disabled?: boolean; action: string; onPick: (k: WalletKind) => void }) {
   return <div className="flex flex-wrap items-center gap-2">
-    {(["phantom", "solflare"] as const).map(k => <button key={k} type="button" className="btn btn-red" disabled={!avail[k] || !!busy || disabled} onClick={() => onPick(k)}>{busy ?? `${action} ${k === "phantom" ? "Phantom" : "Solflare"}`}</button>)}
+    {(["phantom", "solflare"] as const).map(k => <button key={k} type="button" className="btn btn-red" disabled={!avail[k] || !!busy || disabled} onClick={() => onPick(k)}>{busy && avail[k] ? busy : `${action} ${k === "phantom" ? "Phantom" : "Solflare"}`}</button>)}
     {!avail.phantom && !avail.solflare && <p className="text-xs text-ink-soft">No Solana wallet detected. Install Phantom or Solflare, then reload. Fleuri never asks for a seed phrase.</p>}
   </div>;
 }
