@@ -19,6 +19,7 @@ import { Route as IdentityRouteImport } from './routes/identity'
 import { Route as LaunchConfigRouteImport } from './routes/launch-config'
 import { Route as LaunchpadRouteImport } from './routes/launchpad'
 import { Route as MeRouteImport } from './routes/me'
+import { Route as PollenRouteImport } from './routes/pollen'
 import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as AHandleRouteImport } from './routes/a.$handle'
@@ -77,6 +78,11 @@ const MeRoute = MeRouteImport.update({
   path: '/me',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PollenRoute = PollenRouteImport.update({
+  id: '/pollen',
+  path: '/pollen',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TerminalRoute = TerminalRouteImport.update({
   id: '/terminal',
   path: '/terminal',
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/launch-config': typeof LaunchConfigRoute
   '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
+  '/pollen': typeof PollenRoute
   '/terminal': typeof TerminalRoute
   '/verify': typeof VerifyRoute
   '/a/$handle': typeof AHandleRoute
@@ -143,6 +150,7 @@ export interface FileRoutesByTo {
   '/launch-config': typeof LaunchConfigRoute
   '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
+  '/pollen': typeof PollenRoute
   '/terminal': typeof TerminalRoute
   '/verify': typeof VerifyRoute
   '/a/$handle': typeof AHandleRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   '/launch-config': typeof LaunchConfigRoute
   '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
+  '/pollen': typeof PollenRoute
   '/terminal': typeof TerminalRoute
   '/verify': typeof VerifyRoute
   '/a/$handle': typeof AHandleRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/launch-config'
     | '/launchpad'
     | '/me'
+    | '/pollen'
     | '/terminal'
     | '/verify'
     | '/a/$handle'
@@ -203,6 +213,7 @@ export interface FileRouteTypes {
     | '/launch-config'
     | '/launchpad'
     | '/me'
+    | '/pollen'
     | '/terminal'
     | '/verify'
     | '/a/$handle'
@@ -222,6 +233,7 @@ export interface FileRouteTypes {
     | '/launch-config'
     | '/launchpad'
     | '/me'
+    | '/pollen'
     | '/terminal'
     | '/verify'
     | '/a/$handle'
@@ -242,6 +254,7 @@ export interface RootRouteChildren {
   LaunchConfigRoute: typeof LaunchConfigRoute
   LaunchpadRoute: typeof LaunchpadRoute
   MeRoute: typeof MeRoute
+  PollenRoute: typeof PollenRoute
   TerminalRoute: typeof TerminalRoute
   VerifyRoute: typeof VerifyRoute
   AHandleRoute: typeof AHandleRoute
@@ -323,6 +336,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pollen': {
+      id: '/pollen'
+      path: '/pollen'
+      fullPath: '/pollen'
+      preLoaderRoute: typeof PollenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terminal': {
       id: '/terminal'
       path: '/terminal'
@@ -386,6 +406,7 @@ const rootRouteChildren: RootRouteChildren = {
   LaunchConfigRoute: LaunchConfigRoute,
   LaunchpadRoute: LaunchpadRoute,
   MeRoute: MeRoute,
+  PollenRoute: PollenRoute,
   TerminalRoute: TerminalRoute,
   VerifyRoute: VerifyRoute,
   AHandleRoute: AHandleRoute,

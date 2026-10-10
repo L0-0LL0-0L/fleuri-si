@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { CopyLink, PageHeader } from "@/components/bits";
 import { Panel, RealBadge, explorerAddr, lifecycleLabel } from "@/components/pq/ui";
 import { pqTokenPage } from "@/lib/pq.functions";
+import { PollenOnToken } from "@/components/pq/PollenOnToken";
 
 export const Route = createFileRoute("/t/$mint")({
   head: () => ({ meta: [
@@ -52,7 +53,7 @@ function TokenPage() {
         {progress != null && !migrated && <><div className="hair h-3 bg-paper"><div className="h-full bg-poppy" style={{ width: `${progress}%` }} /></div><p className="text-sm">{fmt(c.raisedSol, 3)} / {fmt(c.thresholdSol, 2)} SOL raised on the bonding curve ({fmt(progress, 1)}%)</p></>}
         <p className="text-sm">Bonding-curve pool: <a className="underline break-all" href={explorerAddr(l.pool, l.cluster)} target="_blank" rel="noreferrer">{l.pool}</a></p>
         {dammPool && <p className="text-sm">DAMM v2 pool: <a className="underline break-all" href={explorerAddr(dammPool, l.cluster)} target="_blank" rel="noreferrer">{dammPool}</a></p>}
-        <Link to="/passport/$hash" params={{ hash: l.passports.manifest_hash }} className="text-sm underline">Open launch passport ↗</Link>
+        <Link to="/passport/$hash" params={{ hash: l.passports.manifest_hash }} className="text-sm underline">Open living passport &amp; evidence download ↗</Link>
       </Panel>
       <Panel title="Trade · real SOL, outside fleuri">
         <p className="text-sm">Buying and selling happens on these venues with your own wallet and real SOL. Fleuri does not hold funds or route trades.</p>
@@ -61,6 +62,7 @@ function TokenPage() {
           <a className="btn btn-paper" href={jupUrl} target="_blank" rel="noreferrer">Trade on Jupiter ↗</a>
         </div>
       </Panel>
+      <PollenOnToken launchId={l.id} cluster={l.cluster} />
       <Panel title="Top holders · live">
         {!c?.topHolders?.length ? <p className="text-sm">No holder data available.</p> :
           <ol className="space-y-1 text-sm">{c.topHolders.map((h: any, i: number) => <li key={h.address} className="flex justify-between gap-2"><a className="truncate font-mono text-xs underline" href={explorerAddr(h.address, l.cluster)} target="_blank" rel="noreferrer">{i + 1}. {h.address}{h.address === l.pool ? " (curve)" : ""}</a><span>{fmt(h.amount, 0)}{c.supply ? ` · ${fmt((h.amount / c.supply) * 100, 2)}%` : ""}</span></li>)}</ol>}
