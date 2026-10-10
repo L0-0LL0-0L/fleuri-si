@@ -37,7 +37,7 @@ process.env.SOLANA_CLUSTER = "devnet";
 const owner=crypto.randomUUID(),id=crypto.randomUUID();
 let signed:string,signature:string;
 beforeEach(async()=>{
-  mock.events=[];mock.raw=[];mock.failSend=false;mock.height=1;mock.confirmed=null;mock.tables=[];mock.launch=null;mock.pool=null;
+  mock.events=[];mock.raw=[];mock.failSend=false;mock.height=1;mock.confirmed=null;mock.tables=[];mock.launch=null;mock.pool=null;mock.meta=null;mock.mint=null;mock.dbcConfig=null;
   const wallet=Keypair.generate();const built=await buildMemoTx({getLatestBlockhash:async()=>({blockhash:Keypair.generate().publicKey.toBase58(),lastValidBlockHeight:100})} as any,wallet.publicKey.toBase58(),"fleuri:pqid:v1:test");
   built.tx.sign(wallet);signed=b64(built.tx.serialize());signature=bs58.encode(built.tx.signature!);
   mock.prep={id,owner_id:owner,cluster:"devnet",wallet:wallet.publicKey.toBase58(),message_hash:messageHash(built.message),message_b64:b64(built.message),expires_at:new Date(Date.now()+90000).toISOString(),submitted_at:null,signature:null,payload:{lastValidBlockHeight:100}};
