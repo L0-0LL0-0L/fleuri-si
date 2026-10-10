@@ -36,6 +36,13 @@
       "when": 1791584868042,
       "tag": "0004_allow_config_preparations",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791639925866,
+      "tag": "0005_living_passports_pollen_botanist",
+      "breakpoints": true
     }
   ]
 }

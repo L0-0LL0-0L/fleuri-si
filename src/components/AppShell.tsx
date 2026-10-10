@@ -24,6 +24,8 @@ const NAV = [
   { to: "/launchpad", label: "Launchpad", icon: Sprout },
   { to: "/identity", label: "PQ identity", icon: Flower2 },
   { to: "/verify", label: "Verify passport", icon: BookOpen },
+  { to: "/pollen", label: "Pollen vaults", icon: Flower2 },
+  { to: "/botanist", label: "Botanist report", icon: Sprout },
 ] as const;
 
 function useCreate() {
