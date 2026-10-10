@@ -10,7 +10,7 @@ export type ConfirmedTx = Parameters<typeof settledCredit>[0] & { slot: number }
 export type FlowDeps = {
   rpc: (fn: "botanist_claim_payment" | "botanist_record_candidate" | "botanist_mark_settled" | "botanist_mark_failed" | "botanist_store_report", args: Record<string, unknown>) => Promise<Job>;
   noteError: (id: string, error: string) => Promise<void>;
-  facilitator: (url: string) => { verify: (p: any, r: any) => Promise<any>; settle: (p: any, r: any) => Promise<any> };
+  facilitator: (url: string, idempotencyKey: string) => { verify: (p: any, r: any) => Promise<any>; settle: (p: any, r: any) => Promise<any> };
   defaultFacilitator: string;
   /** One confirmed-commitment read; null if not (yet) visible. May throw on RPC timeout. */
   getTx: (signature: string) => Promise<ConfirmedTx | null>;
@@ -21,8 +21,10 @@ export type FlowDeps = {
   confirmPolls?: number;
 };
 
-export const requirementOf = (j: Job): Requirement => ({ scheme: "exact", network: j.network, asset: j.asset, amount: String(j.amount), payTo: j.pay_to, maxTimeoutSeconds: QUOTE_TTL_S, extra: { feePayer: j.fee_payer, memo: j.memo } });
-export const paymentRequired = (j: Job, error?: string) => ({ x402Version: 2, ...(error ? { error } : {}), resource: { url: j.resource, description: `Botanist field report for mint ${j.mint}`, mimeType: "application/json" }, accepts: [requirementOf(j)] });
+export const requirementOf = (j: Job): Requirement => (j as any).accepted ?? ({ scheme: "exact", network: j.network, asset: j.asset, amount: String(j.amount), payTo: j.pay_to, maxTimeoutSeconds: QUOTE_TTL_S, extra: { feePayer: j.fee_payer, memo: j.memo } });
+/** Frozen at quote time so identical-body /settle retries stay identical after settings or code changes. */
+export const resourceOf = (j: Job) => (j as any).resource_info ?? { url: j.resource, description: `Botanist field report for mint ${j.mint}`, mimeType: "application/json" };
+export const paymentRequired = (j: Job, error?: string) => ({ x402Version: 2, ...(error ? { error } : {}), resource: resourceOf(j), accepts: [requirementOf(j)] });
 /** Every real 402 carries the PAYMENT-REQUIRED header. */
 export const r402 = (j: Job, error?: string, extra: Record<string, unknown> = {}): Out => {
   const pr = paymentRequired(j, error);
@@ -70,9 +72,9 @@ export async function settleAndDeliver(d: FlowDeps, job: Job, sig: string | null
       if (new Date(j.quote_expires_at).getTime() <= Date.now()) return { status: 410, body: { error: "Quote expired. Start a new report; nothing was charged." } };
       let local; try { local = verifyExactTransaction(txB64, req); } catch (e) { return r402(j, (e as Error).message); }
       // Facilitator verification (incl. simulation) BEFORE binding, so a bad first payload can't lock the job.
-      const durable = { x402Version: 2, resource: paymentRequired(j).resource, accepted: req, payload: { transaction: txB64 } };
+      const durable = { x402Version: 2, resource: resourceOf(j), accepted: req, payload: { transaction: txB64 } };
       let v: any;
-      try { v = await d.facilitator(facUrl).verify(durable, req); } catch { return { status: 502, body: { error: "Facilitator unreachable while verifying. Nothing was accepted or charged; try again.", jobId: j.id } }; }
+      try { v = await d.facilitator(facUrl, j.request_hash).verify(durable, req); } catch { return { status: 502, body: { error: "Facilitator unreachable while verifying. Nothing was accepted or charged; try again.", jobId: j.id } }; }
       if (!v?.isValid) {
         const why = `${v?.invalidReason ?? ""} ${v?.invalidMessage ?? ""}`;
         if (FREE.test(why)) return { status: 503, body: { error: "The payment facilitator's free allowance is used up right now. Nothing was charged; retry later.", jobId: j.id } };
@@ -89,9 +91,9 @@ export async function settleAndDeliver(d: FlowDeps, job: Job, sig: string | null
     let candidate: string | null = j.candidate_signature ?? null;
     if (!candidate) { try { candidate = await d.findByMessage(j); } catch { candidate = null; } if (candidate) j = await d.rpc("botanist_record_candidate", { _id: j.id, _sig: candidate }); }
     if (!candidate) {
-      const durable = { x402Version: 2, resource: paymentRequired(j).resource, accepted: req, payload: { transaction: j.payment_tx_b64 } };
+      const durable = { x402Version: 2, resource: resourceOf(j), accepted: req, payload: { transaction: j.payment_tx_b64 } };
       let s: any;
-      try { s = await d.facilitator(facUrl).settle(durable, req); }
+      try { s = await d.facilitator(facUrl, j.request_hash).settle(durable, req); }
       catch { await d.noteError(j.id, "Facilitator settle call failed or timed out"); return pending(j, "The facilitator did not answer; the payment may or may not have been broadcast."); }
       const why = `${s?.errorReason ?? ""} ${s?.errorMessage ?? ""}`;
       if (s?.transaction) { candidate = String(s.transaction); j = await d.rpc("botanist_record_candidate", { _id: j.id, _sig: candidate }); }
