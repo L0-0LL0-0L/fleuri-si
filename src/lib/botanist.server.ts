@@ -4,9 +4,11 @@
 // settlement, and only then deliver.
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { HTTPFacilitatorClient, encodePaymentRequiredHeader, decodePaymentSignatureHeader, encodePaymentResponseHeader } from "@x402/core/http";
-import { canonicalize, hex, sha256Hex, utf8 } from "@/pq/canonical";
-import { BOTANIST_ASSET, DEFAULT_PRICE, QUOTE_TTL_S, USDC_DECIMALS, X402_NETWORK, jobMemo, receipt, requestHash, sameRequirement, settledCredit, verifyExactTransaction, type Requirement } from "@/pq/botanist";
+import { HTTPFacilitatorClient } from "@x402/core/http";
+import { r402, requirementOf, settleAndDeliver, type FlowDeps, type Out } from "./botanist-flow";
+import { buildReport, type ReportDeps } from "./botanist-report";
+import { hex, sha256Hex, utf8 } from "@/pq/canonical";
+import { BOTANIST_ASSET, DEFAULT_PRICE, QUOTE_TTL_S, USDC_DECIMALS, X402_NETWORK, jobMemo, requestHash, settledCredit } from "@/pq/botanist";
 import { isSolanaAddress } from "@/pq/registration";
 import { DBC_PROGRAM_ID, type Check } from "@/pq/passport";
 import { readAnyMint, readUpgradeAuthority, readTokenMetadata, readDbcConfig, readPool } from "@/pq/chain-read";
@@ -55,17 +57,49 @@ export async function botanistReadiness(): Promise<{ ready: boolean; checks: Che
   return { ready: checks.every((c) => c.status === "pass"), checks, price: e.price.toString(), payTo: e.payTo, facilitator: e.facilitator, feePayer };
 }
 
-const requirementOf = (j: any): Requirement => ({ scheme: "exact", network: j.network, asset: j.asset, amount: String(j.amount), payTo: j.pay_to, maxTimeoutSeconds: QUOTE_TTL_S, extra: { feePayer: j.fee_payer, memo: j.memo } });
-const paymentRequired = (j: any, error?: string) => ({ x402Version: 2, ...(error ? { error } : {}), resource: { url: j.resource, description: `Botanist field report for mint ${j.mint}`, mimeType: "application/json" }, accepts: [requirementOf(j)] });
-
 function json(status: number, body: unknown, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store", ...headers } });
 }
+const out = (o: Out) => json(o.status, o.body, o.headers);
 
 async function findJob(id: string, token: string) {
   if (!/^[0-9a-f-]{36}$/.test(id) || !/^[0-9a-f]{64}$/.test(token)) return null;
   const { data } = await (await db()).from("botanist_jobs").select("*").eq("id", id).eq("capability_hash", sha256Hex(utf8(token))).maybeSingle();
   return data;
+}
+
+function flowDeps(admin: any): FlowDeps {
+  const conn = sol.connection();
+  const getTx = async (sig: string) => {
+    const t: any = await conn.getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+    return t ? { slot: t.slot, meta: t.meta, transaction: { message: t.transaction.message } } : null;
+  };
+  return {
+    rpc: async (fn, args) => { const { data, error } = await admin.rpc(fn, args); if (error) throw new Error(error.message); return data; },
+    noteError: async (id, e) => { await admin.from("botanist_jobs").update({ error: e.slice(0, 300) }).eq("id", id); },
+    facilitator: (url) => new HTTPFacilitatorClient({ url }) as any,
+    defaultFacilitator: botanistEnv().facilitator,
+    getTx,
+    findByMessage: async (j) => {
+      const ata = getAssociatedTokenAddressSync(new PublicKey(j.asset), new PublicKey(j.pay_to), true);
+      const since = Math.floor(new Date(j.created_at).getTime() / 1000) - 60;
+      const sigs = (await conn.getSignaturesForAddress(ata, { limit: 25 }, "confirmed")).filter((x) => !x.err && (x.blockTime ?? since) >= since);
+      for (const x of sigs) { const t = await getTx(x.signature); if (t && settledCredit(t, requirementOf(j), j.payment_hash).ok) return x.signature; }
+      return null;
+    },
+    buildReport: (mint) => buildReport(reportDeps(), mint),
+  };
+}
+
+export function reportDeps(): ReportDeps {
+  const conn = sol.connection();
+  return {
+    getSlot: () => conn.getSlot("confirmed"), cluster: sol.solEnv().cluster ?? "unknown", dbcProgram: DBC_PROGRAM_ID,
+    readAnyMint: (m) => readAnyMint(conn, m), readTokenMetadata: (m) => readTokenMetadata(conn, m), readUpgradeAuthority: (p) => readUpgradeAuthority(conn, p),
+    largestAccounts: async (m) => (await conn.getTokenLargestAccounts(new PublicKey(m))).value.map((a) => ({ address: a.address.toBase58(), amount: a.amount })),
+    findLaunch: async (m) => { const { data, error } = await (await db()).from("launches").select("pool,config,creator_wallet,lifecycle,damm_v2_pool,signature,passports(manifest_hash,manifest)").eq("base_mint", m).maybeSingle(); if (error) throw new Error(error.message); return data; },
+    readPool: (p) => readPool(conn, p), readDbcConfig: (c) => readDbcConfig(conn, c),
+  };
 }
 
 /** POST /api/public/botanist/report — x402 V2 resource. */
@@ -81,12 +115,11 @@ export async function handleBotanist(request: Request): Promise<Response> {
   if (body.jobId) {
     const j = await findJob(String(body.jobId), String(body.token ?? ""));
     if (!j) return json(404, { error: "Unknown job or wrong retrieval token." });
-    if (j.report) return delivered(j);
-    if (!sig && !j.payment_hash) {
-      if (new Date(j.quote_expires_at).getTime() < Date.now()) return json(410, { error: "Quote expired. Start a new report; nothing was charged." });
-      return json(402, paymentRequired(j), { "PAYMENT-REQUIRED": encodePaymentRequiredHeader(paymentRequired(j) as any) });
+    if (!sig && !j.payment_hash && !j.report) {
+      if (new Date(j.quote_expires_at).getTime() < Date.now()) return json(410, { error: "Quote expired. Start a new report; nothing was charged.", expired: true });
+      return out(r402(j));
     }
-    return settleAndDeliver(admin, j, sig);
+    return out(await settleAndDeliver(flowDeps(admin), j, sig));
   }
 
   // New quote.
@@ -102,96 +135,9 @@ export async function handleBotanist(request: Request): Promise<Response> {
   const id = crypto.randomUUID(); const tokenBytes = crypto.getRandomValues(new Uint8Array(32)); const token = hex(tokenBytes);
   const nonce = hex(crypto.getRandomValues(new Uint8Array(16)));
   const memo = jobMemo(id, nonce); const resource = `${sol.solEnv().origin}/api/public/botanist/report`;
-  const row = { id, request_hash: requestHash(id, mint, ready.price, ready.payTo, memo, resource), capability_hash: sha256Hex(utf8(token)), client_hash: clientHash, mint, network: X402_NETWORK, asset: BOTANIST_ASSET, amount: ready.price, pay_to: ready.payTo, memo, fee_payer: ready.feePayer, resource, quote_expires_at: new Date(Date.now() + QUOTE_TTL_S * 1000).toISOString() };
+  const row = { id, request_hash: requestHash(id, mint, ready.price, ready.payTo, memo, resource), capability_hash: sha256Hex(utf8(token)), client_hash: clientHash, mint, network: X402_NETWORK, asset: BOTANIST_ASSET, amount: ready.price, pay_to: ready.payTo, memo, fee_payer: ready.feePayer, facilitator: ready.facilitator, resource, quote_expires_at: new Date(Date.now() + QUOTE_TTL_S * 1000).toISOString() };
   const { data: j, error } = await admin.from("botanist_jobs").insert(row).select("*").single();
   if (error) return json(500, { error: "Could not create quote." });
-  const pr = paymentRequired(j);
-  return json(402, { ...pr, jobId: id, token }, { "PAYMENT-REQUIRED": encodePaymentRequiredHeader(pr as any) });
+  const o = r402(j); return json(402, { ...o.body, token }, o.headers);
 }
 
-async function settleAndDeliver(admin: any, j: any, sig: string | null): Promise<Response> {
-  const req = requirementOf(j);
-  let payload: any = null;
-  if (sig) {
-    try { payload = decodePaymentSignatureHeader(sig); } catch { return json(400, { error: "PAYMENT-SIGNATURE could not be decoded." }); }
-    if (payload.x402Version !== 2 || !sameRequirement(req, payload.accepted)) return json(402, paymentRequired(j, "Payment does not match the frozen quote."), { "PAYMENT-REQUIRED": encodePaymentRequiredHeader(paymentRequired(j, "mismatch") as any) });
-    const txB64 = String(payload.payload?.transaction ?? "");
-    let local; try { local = verifyExactTransaction(txB64, req); } catch (e) { return json(402, paymentRequired(j, (e as Error).message)); }
-    // Atomic: one payment per job, one job per payment; signed bytes persisted before broadcast.
-    const { data: claimed, error } = await admin.rpc("botanist_claim_payment", { _id: j.id, _cap: j.capability_hash, _payment_hash: local.paymentHash, _tx: txB64, _payer: local.payer });
-    if (error) return json(409, { error: /duplicate|unique/i.test(error.message) ? "This payment is already bound to another job." : error.message });
-    j = claimed;
-  }
-  if (!j.payment_tx_b64) return json(402, paymentRequired(j));
-  // Rebuild from the DURABLE bytes, never from a newer header.
-  payload = { x402Version: 2, resource: paymentRequired(j).resource, accepted: req, payload: { transaction: j.payment_tx_b64 } };
-  const conn = sol.connection();
-  if (!j.settle_signature) {
-    const f = new HTTPFacilitatorClient({ url: botanistEnv().facilitator });
-    try {
-      const v = await f.verify(payload, req as any);
-      if (!v.isValid && /free_tier|quota/i.test(`${v.invalidReason ?? ""} ${v.invalidMessage ?? ""}`)) return json(503, { error: "The payment facilitator's free allowance is used up right now. Nothing was charged; retry later with the same job.", jobId: j.id });
-      if (!v.isValid) { await admin.from("botanist_jobs").update({ error: `Facilitator rejected: ${v.invalidReason ?? "invalid"}` }).eq("id", j.id); return json(402, { error: `Payment rejected by facilitator: ${v.invalidMessage ?? v.invalidReason}`, jobId: j.id }); }
-      const s = await f.settle(payload, req as any);
-      if (!s.success && /free_tier|quota|rate/i.test(`${s.errorReason ?? ""} ${s.errorMessage ?? ""}`)) { await admin.from("botanist_jobs").update({ error: "Facilitator free allowance exhausted" }).eq("id", j.id); return json(503, { error: "The payment facilitator's free allowance is used up right now. Your signed payment was NOT broadcast; retry later with the same job.", jobId: j.id }); }
-      if (!s.success || !s.transaction) { await admin.from("botanist_jobs").update({ error: `Settlement failed: ${s.errorReason ?? "unknown"}` }).eq("id", j.id); return json(502, { error: `Settlement failed: ${s.errorMessage ?? s.errorReason}. Retry resumes this same payment; you will not be charged twice.`, jobId: j.id }); }
-      const ok = await confirmCredit(conn, s.transaction, req);
-      if (!ok.ok) return json(202, { status: "pending", detail: ok.reason, jobId: j.id });
-      const { data, error } = await admin.rpc("botanist_mark_settled", { _id: j.id, _sig: s.transaction, _slot: ok.slot });
-      if (error) return json(409, { error: error.message }); j = data;
-    } catch (e) {
-      await admin.from("botanist_jobs").update({ error: (e as Error).message.slice(0, 300) }).eq("id", j.id);
-      return json(502, { error: "Facilitator unreachable. Retry with the same job — the same signed payment is reused.", jobId: j.id });
-    }
-  }
-  try {
-    const report = await buildReport(conn, j.mint, { slotHint: j.settled_slot });
-    const { data, error } = await admin.rpc("botanist_store_report", { _id: j.id, _report: report, _digest: sha256Hex(utf8(canonicalize(report))) });
-    if (error) throw new Error(error.message);
-    return delivered(data);
-  } catch (e) {
-    await admin.from("botanist_jobs").update({ error: `Report generation: ${(e as Error).message.slice(0, 200)}` }).eq("id", j.id);
-    return json(503, { error: "Payment is settled; the report could not be generated yet. Retry with the same job to resume — no new charge.", jobId: j.id, settled: true });
-  }
-}
-
-async function confirmCredit(conn: any, signature: string, req: Requirement) {
-  for (let i = 0; i < 12; i++) {
-    const t = await conn.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
-    if (t?.meta) { const c = settledCredit(t.meta, req); return c.ok ? { ok: true as const, slot: t.slot } : { ok: false as const, reason: c.reason }; }
-    await new Promise((r) => setTimeout(r, 1500));
-  }
-  return { ok: false as const, reason: "Settlement not yet confirmed. Retry with the same job." };
-}
-
-function delivered(j: any) {
-  const rc = receipt({ ...j, amount: String(j.amount) }, j.report);
-  return json(200, { status: "report_ready", jobId: j.id, report: j.report, receipt: rc }, j.settle_signature ? { "PAYMENT-RESPONSE": encodePaymentResponseHeader({ success: true, transaction: j.settle_signature, network: j.network, payer: j.payer } as any) } : {});
-}
-
-/** Point-in-time facts only. Unavailable is labelled, never inferred. */
-export async function buildReport(conn: any, mint: string, _o: { slotHint?: number } = {}) {
-  const slot = await conn.getSlot("confirmed"); const at = new Date().toISOString();
-  const facts: Record<string, any> = {}; const unavailable: Record<string, string> = {};
-  const m = await readAnyMint(conn, mint);
-  facts.mint = { address: mint, program: m.program, decimals: m.decimals, supply: m.supply.toString(), mintAuthority: m.mintAuthority, freezeAuthority: m.freezeAuthority, mintAuthorityRevoked: !m.mintAuthority, freezeAuthorityRevoked: !m.freezeAuthority, token2022Extensions: m.extensions };
-  try { const md: any = await readTokenMetadata(conn, mint); facts.metadata = md ? { name: md.name, symbol: md.symbol, uri: md.uri, updateAuthority: md.updateAuthority, isMutable: md.isMutable } : null; if (!md) unavailable.metadata = "No Metaplex metadata account."; }
-  catch (e) { unavailable.metadata = (e as Error).message; }
-  try { const tp = await readUpgradeAuthority(conn, m.program === "token-2022" ? "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" : "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"); if (tp.status === "ok") facts.tokenProgram = tp; else unavailable.tokenProgram = tp.reason; } catch (e) { unavailable.tokenProgram = (e as Error).message; }
-  try {
-    const largest = await conn.getTokenLargestAccounts(new PublicKey(mint));
-    const top = largest.value.slice(0, 10).map((a: any) => ({ account: a.address.toBase58(), amount: a.amount }));
-    const sum = top.reduce((s: bigint, a: any) => s + BigInt(a.amount), 0n);
-    facts.holders = { topAccounts: top, top10ShareBps: m.supply > 0n ? Number((sum * 10_000n) / m.supply) : null, note: "Token accounts, not people; pools and exchanges hold on behalf of many." };
-  } catch (e) { unavailable.holders = `Largest accounts unavailable from RPC: ${(e as Error).message.slice(0, 120)}`; }
-  const { data: launch } = await (await db()).from("launches").select("pool,config,creator_wallet,lifecycle,damm_v2_pool,signature,passports(manifest_hash,manifest)").eq("base_mint", mint).maybeSingle();
-  if (launch) {
-    const sig: any = launch.passports?.manifest;
-    facts.fleuri = { passport: launch.passports?.manifest_hash, launchTx: launch.signature, recordedLifecycle: launch.lifecycle, signedCreator: launch.creator_wallet };
-    try { const p: any = await readPool(conn, launch.pool); facts.dbc = { pool: launch.pool, currentCreator: p.creator, creatorChanged: p.creator !== launch.creator_wallet, migrated: p.isMigrated ?? null, quoteReserve: p.quoteReserve ?? null }; } catch (e) { unavailable.dbcPool = (e as Error).message; }
-    try { const c: any = await readDbcConfig(conn, launch.config); facts.dbcConfig = { address: launch.config, feeClaimer: c.feeClaimer, signedFeeClaimer: sig?.fees?.feeClaimer, matchesSigned: c.feeClaimer === sig?.fees?.feeClaimer, migrationQuoteThreshold: c.migrationQuoteThreshold?.toString?.() ?? null }; } catch (e) { unavailable.dbcConfig = (e as Error).message; }
-    try { const u = await readUpgradeAuthority(conn, DBC_PROGRAM_ID); if (u.status === "ok") facts.dbcProgram = u; else unavailable.dbcProgram = u.reason; } catch (e) { unavailable.dbcProgram = (e as Error).message; }
-  } else unavailable.protocol = "Not a fleuri launch: DBC config, signed promises and graduation are not applicable.";
-  unavailable.lp = "LP position and lock state are not proven by this report; Meteora position accounts were not decoded.";
-  return { format: "fleuri.botanist.report/v1", observedSlot: slot, observedAt: at, mint, facts, unavailable, disclaimer: "Point-in-time chain observations. Not an audit, not a safety rating and not financial advice." };
-}
