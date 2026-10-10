@@ -115,3 +115,15 @@ export function receipt(job: { id: string; request_hash: string; network: string
     notice: "This receipt evidences payment and which report fleuri delivered (by digest). It is not a signature from fleuri and does not certify that the token is safe.",
   };
 }
+
+/** Exact JSON-safe form: BigInt/BN → decimal string, PublicKey → base58, undefined → null. */
+export function jsonSafe(v: any): any {
+  if (v === undefined || v === null) return null;
+  if (typeof v === "bigint") return v.toString();
+  if (typeof v === "number") { if (!Number.isFinite(v)) return null; return v; }
+  if (typeof v !== "object") return v;
+  if (typeof v.toBase58 === "function") return v.toBase58();
+  if (typeof v.toArrayLike === "function" && typeof v.toString === "function") return v.toString(10);
+  if (Array.isArray(v)) return v.map(jsonSafe);
+  const o: Record<string, any> = {}; for (const [k, x] of Object.entries(v)) o[k] = jsonSafe(x); return o;
+}
