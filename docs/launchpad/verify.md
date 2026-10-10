@@ -28,7 +28,7 @@ The original signed passport never changes. Its page can collect dated, append-o
 
 Download the evidence bundle from a passport page. Then verify it in **Verify → Evidence bundle** using any RPC and IPFS gateway you choose, or run `bun scripts/verify-bundle.ts bundle.json --rpc <url> --gateway <url>`. Neither one talks to fleuri's database, and the RPC address you enter is never saved.
 
-Import the bundle, then press **Verify bundle independently** to run the checks. Replacing it with an invalid file clears the old import and result. Changing the RPC or gateway also clears the displayed result: run verification again against the new sources.
+Import the bundle, then press **Verify** (followed by your filename) to run the independent checks. Replacing it with an invalid file clears the old import and result. Changing the RPC or gateway also clears the displayed result: run verification again against the new sources.
 
 The verifier checks all of the following itself:
 
