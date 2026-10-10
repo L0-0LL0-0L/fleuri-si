@@ -128,8 +128,10 @@ async function settleAndDeliver(admin: any, j: any, sig: string | null): Promise
     const f = new HTTPFacilitatorClient({ url: botanistEnv().facilitator });
     try {
       const v = await f.verify(payload, req as any);
+      if (!v.isValid && /free_tier|quota/i.test(`${v.invalidReason ?? ""} ${v.invalidMessage ?? ""}`)) return json(503, { error: "The payment facilitator's free allowance is used up right now. Nothing was charged; retry later with the same job.", jobId: j.id });
       if (!v.isValid) { await admin.from("botanist_jobs").update({ error: `Facilitator rejected: ${v.invalidReason ?? "invalid"}` }).eq("id", j.id); return json(402, { error: `Payment rejected by facilitator: ${v.invalidMessage ?? v.invalidReason}`, jobId: j.id }); }
       const s = await f.settle(payload, req as any);
+      if (!s.success && /free_tier|quota|rate/i.test(`${s.errorReason ?? ""} ${s.errorMessage ?? ""}`)) { await admin.from("botanist_jobs").update({ error: "Facilitator free allowance exhausted" }).eq("id", j.id); return json(503, { error: "The payment facilitator's free allowance is used up right now. Your signed payment was NOT broadcast; retry later with the same job.", jobId: j.id }); }
       if (!s.success || !s.transaction) { await admin.from("botanist_jobs").update({ error: `Settlement failed: ${s.errorReason ?? "unknown"}` }).eq("id", j.id); return json(502, { error: `Settlement failed: ${s.errorMessage ?? s.errorReason}. Retry resumes this same payment; you will not be charged twice.`, jobId: j.id }); }
       const ok = await confirmCredit(conn, s.transaction, req);
       if (!ok.ok) return json(202, { status: "pending", detail: ok.reason, jobId: j.id });
