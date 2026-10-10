@@ -18,12 +18,12 @@ describe("passport social links", () => {
   it("accepts https website and x.com/twitter.com twitter links", () => {
     const m = { ...manifestFixture(kp), token: { ...manifestFixture(kp).token, website: "https://fleuri.si", twitter: "https://x.com/fleuri" } };
     const parsed = parseManifest(m);
-    expect(parsed.website).toBe("https://fleuri.si");
-    expect(parsed.twitter).toBe("https://x.com/fleuri");
+    expect(parsed.token.website).toBe("https://fleuri.si");
+    expect(parsed.token.twitter).toBe("https://x.com/fleuri");
     const signed = signPassport(parsed, kp);
     const verified = verifyPassportOffline(JSON.parse(JSON.stringify(signed)));
     expect(verified.checks.every(c => c.status === "pass")).toBe(true);
-    expect(verified.passport?.manifest.website).toBe("https://fleuri.si");
+    expect(verified.passport?.manifest.token.website).toBe("https://fleuri.si");
   });
 
   it("rejects non-https websites", () => {
