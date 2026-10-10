@@ -17,10 +17,11 @@ export default defineConfig({
       {
         name: "buffer-shim",
         enforce: "pre",
-        resolveId(specifier) {
+        resolveId(specifier): string | undefined {
           if (specifier === "buffer" || specifier === "node:buffer") {
             return fileURLToPath(new URL("./node_modules/buffer/index.js", import.meta.url));
           }
+          return undefined;
         },
       },
     ],
