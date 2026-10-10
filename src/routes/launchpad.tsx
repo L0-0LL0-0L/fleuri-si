@@ -25,6 +25,7 @@ function Launchpad() {
   const [busy,setBusy]=useState<string|null>(null); const [error,setError]=useState("");
   const [name,setName]=useState(""); const [symbol,setSymbol]=useState("");
   const [imageUri,setImageUri]=useState(""); const [imageHash,setImageHash]=useState<string|null>(null); const [file,setFile]=useState<File|null>(null);
+  const [website,setWebsite]=useState(""); const [twitter,setTwitter]=useState("");
   const [manifest,setManifest]=useState<PassportManifest|null>(null); const [signed,setSigned]=useState<SignedPassportT|null>(null);
   const [reviewAck,setReviewAck]=useState(false); const [done,setDone]=useState<{signature:string;hash:string}|null>(null);
   const identity=mine?.identities.find(i=>i.key_hash===local.envelope?.keyHash && i.cluster===readiness?.cluster && i.status==="anchored");
