@@ -189,7 +189,7 @@ function TopStrip({ onMenu }: { onMenu: () => void }) {
       <span className="lg:hidden">
         <Link to="/" className="wordmark text-3xl" aria-label="fleuri home">fleuri</Link>
       </span>
-      {onchain ? <OnchainBadge className="hidden min-[400px]:inline-flex" /> : <SandboxBadge className="hidden sm:inline-flex" />}
+      {onchain ? <OnchainBadge className="inline-flex" /> : <SandboxBadge className="hidden sm:inline-flex" />}
       <span className={cn("hidden font-mono text-[0.65rem] md:inline", error && "text-poppy-deep")} role="status">
         {error ? (
           <button type="button" className="underline" onClick={() => store.refresh(true)}>cloud sync failed · retry</button>
