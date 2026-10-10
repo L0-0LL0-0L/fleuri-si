@@ -5,7 +5,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { HTTPFacilitatorClient } from "@x402/core/http";
-import { r402, requirementOf, settleAndDeliver, type FlowDeps, type Out } from "./botanist-flow";
+import { r402, requirementOf, resolveHeaderJob, settleAndDeliver, type FlowDeps, type Out } from "./botanist-flow";
 import { buildReport, type ReportDeps } from "./botanist-report";
 import { hex, sha256Hex, utf8 } from "@/pq/canonical";
 import { BOTANIST_ASSET, DEFAULT_PRICE, QUOTE_TTL_S, USDC_DECIMALS, X402_NETWORK, jobMemo, requestHash, settledCredit } from "@/pq/botanist";
@@ -110,6 +110,13 @@ export async function handleBotanist(request: Request): Promise<Response> {
   const sig = request.headers.get("PAYMENT-SIGNATURE");
   if (sig && sig.length > 6000) return json(413, { error: "Payment header too large." });
   const admin = await db();
+
+  // Generic x402 retry of the original POST {mint}: recover the exact quoted job from its payment.
+  if (sig && !body.jobId) {
+    const r = await resolveHeaderJob(sig, body, `${sol.solEnv().origin}/api/public/botanist/report`, async (memo) => (await admin.from("botanist_jobs").select("*").eq("memo", memo).maybeSingle()).data);
+    if (!("job" in r)) return out(r);
+    return out(await settleAndDeliver(flowDeps(admin), r.job, sig));
+  }
 
   // Resume an existing job (capability token required; never a list or public lookup).
   if (body.jobId) {
