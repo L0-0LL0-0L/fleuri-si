@@ -99,9 +99,7 @@ export async function connectWallet(kind: WalletKind) {
   const p = getProvider(kind);
   if (!p) throw new Error(`${kind === "phantom" ? "Phantom" : "Solflare"} is not installed in this browser.`);
   const res = await p.connect();
-  const pk = (res && "publicKey" in res ? res.publicKey : p.publicKey)?.toString();
-  if (!pk) throw new Error("The wallet did not share a public key.");
-  return pk;
+  return (res && "publicKey" in res ? res.publicKey?.toString() : undefined) ?? (await readPublicKey(p));
 }
 
 /** Asks the wallet to sign exact message bytes (Ed25519). */
