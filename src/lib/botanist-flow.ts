@@ -118,3 +118,19 @@ export async function settleAndDeliver(d: FlowDeps, job: Job, sig: string | null
     return { status: 503, body: { error: "Payment is settled; the report could not be generated yet. Resume this job — no new charge.", jobId: j.id, settled: true } };
   }
 }
+
+/**
+ * Generic x402 clients retry the ORIGINAL request ({mint}) with PAYMENT-SIGNATURE and no jobId.
+ * The quote's high-entropy job memo (in accepted.extra.memo, and inside the signed transfer) is the
+ * capability that recovers that exact job; mint and resource must match the frozen quote.
+ */
+export async function resolveHeaderJob(sig: string, body: any, resource: string, findByMemo: (memo: string) => Promise<Job | null>): Promise<{ job: Job } | Out> {
+  let p: any; try { p = decodePaymentSignatureHeader(sig); } catch { return { status: 400, body: { error: "PAYMENT-SIGNATURE could not be decoded." } }; }
+  const memo = p?.accepted?.extra?.memo;
+  if (typeof memo !== "string" || !/^fleuri-botanist:[0-9a-f]{32}$/.test(memo)) return { status: 400, body: { error: "Payment does not reference a Botanist quote. Request a quote first." } };
+  const j = await findByMemo(memo);
+  if (!j) return { status: 404, body: { error: "Unknown quote for this payment." } };
+  if (body?.mint !== undefined && String(body.mint).trim() !== j.mint) return { status: 409, body: { error: "This payment was quoted for a different mint.", jobId: j.id } };
+  if (j.resource !== resource || (p.resource?.url && p.resource.url !== j.resource)) return { status: 409, body: { error: "This payment was quoted for a different resource.", jobId: j.id } };
+  return { job: j };
+}
