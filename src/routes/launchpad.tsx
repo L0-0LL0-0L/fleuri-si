@@ -33,6 +33,13 @@ function Launchpad() {
   async function refresh() {
     if(store.get().userId) {const r=await pqMine(); if(r.ok) setMine(r.data); else setError(r.error);}
     const r=await pqPublicLaunches(); if(r.ok) setLaunches(r.data); else setReadError(r.error);
+    const pr=await pqLaunchProposals(); if(pr.ok) setProposals(pr.data);
+  }
+  function useProposal(p:any) {
+    setDone(null); setManifest(null); setSigned(null); setReviewAck(false);
+    setName(p.name); setSymbol(p.symbol); setWebsite(""); setTwitter("");
+    setFile(null); setImageUri(""); setImageHash(null); setUsedProposal(p.id);
+    window.scrollTo({top:0,behavior:"smooth"});
   }
   async function checkReadiness() {
     setReadError("");
@@ -68,6 +75,7 @@ function Launchpad() {
     const p=await pqPrepareLaunch({data:{passport:signed}}); if(!p.ok) throw new Error(p.error);
     const r=await signSubmitConfirm(kind,p.data,{coSign:[mint.current],onStatus:setBusy});
     setDone({signature:r.signature,hash:signed.manifestHash}); mint.current=null;
+    if(usedProposal) {await pqSetProposalStatus({data:{id:usedProposal,status:"launched"}}); setUsedProposal(null);}
     toast.success(r.detail); await refresh();
   }
   async function migrate(kind:WalletKind,id:string) {
