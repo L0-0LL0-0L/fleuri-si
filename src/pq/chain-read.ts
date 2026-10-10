@@ -1,7 +1,7 @@
 // Isomorphic Solana/Meteora chain readers. No secrets: the server passes its configured RPC
 // connection; the standalone browser verifier passes a caller-selected RPC connection.
 import { Connection, PublicKey } from "@solana/web3.js";
-import { DynamicBondingCurveClient, deriveDbcPoolAddress, deriveMintMetadata, METAPLEX_PROGRAM_ID, DAMM_V2_MIGRATION_FEE_ADDRESS, DAMM_V2_PROGRAM_ID, deriveDammV2PoolAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import { DynamicBondingCurveClient, deriveDbcPoolAuthority, deriveDbcTokenVaultAddress, deriveDbcEventAuthority, deriveDbcPoolAddress, deriveMintMetadata, METAPLEX_PROGRAM_ID, DAMM_V2_MIGRATION_FEE_ADDRESS, DAMM_V2_PROGRAM_ID, deriveDammV2PoolAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { getMint, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { Buffer } from "buffer";
 import { domainHash, sha256Hex } from "./canonical";
@@ -222,4 +222,19 @@ export async function readAnyMint(conn: Connection, mint: string) {
   const d = Buffer.from(info.data);
   const opt = (o: number) => (d.readUInt32LE(o) === 1 ? new PublicKey(d.subarray(o + 4, o + 36)).toBase58() : null);
   return { program: owner === T22 ? "token-2022" : "spl-token", mintAuthority: opt(0), supply: d.readBigUInt64LE(36), decimals: d[44], initialized: d[45] === 1, freezeAuthority: opt(46), extensionsBytes: Math.max(0, d.length - 82) };
+}
+
+export function deriveInitAccounts(mint: string, pool: string) {
+  const m = new PublicKey(mint), p = new PublicKey(pool);
+  return { mintMetadata: deriveMintMetadata(m).toBase58(), poolAuthority: deriveDbcPoolAuthority().toBase58(), baseVault: deriveDbcTokenVaultAddress(p, m).toBase58(), quoteVault: deriveDbcTokenVaultAddress(p, new PublicKey(SOL_MINT)).toBase58(), eventAuthority: deriveDbcEventAuthority().toBase58() };
+}
+/** Minimal VirtualPool read for portable verification: owner check + config/baseMint/creator. */
+export async function readPoolLinks(conn: Connection, pool: string) {
+  const info = await conn.getAccountInfo(new PublicKey(pool));
+  if (!info) return null;
+  if (info.owner.toBase58() !== DBC_PROGRAM_ID) throw new Error("Pool account is not owned by Meteora DBC.");
+  const client = new DynamicBondingCurveClient(conn, "confirmed");
+  const st: any = await client.state.getPool(new PublicKey(pool));
+  const ps = st?.poolState ?? st; if (!ps?.config) throw new Error("Unsupported DBC pool layout.");
+  return { config: ps.config.toBase58(), baseMint: ps.baseMint.toBase58(), creator: ps.creator.toBase58() };
 }

@@ -1,7 +1,7 @@
 // Builds an EvidenceReader from any Solana RPC + IPFS gateway. Used by the browser verifier
 // (direct to the caller's RPC; credentials never reach Fleuri) and the CLI.
 import { Connection } from "@solana/web3.js";
-import { derivePool, readConfirmedTxEx, readDbcConfig, readTokenMetadata, readTokenMint } from "./chain-read";
+import { deriveInitAccounts, readPoolLinks, derivePool, readConfirmedTxEx, readDbcConfig, readTokenMetadata, readTokenMint } from "./chain-read";
 import { gatewayFetch, type EvidenceReader } from "./evidence";
 
 export function connectionReader(conn: Connection, gateway: string): EvidenceReader {
@@ -12,6 +12,8 @@ export function connectionReader(conn: Connection, gateway: string): EvidenceRea
     metadata: (m) => readTokenMetadata(conn, m),
     mint: (m) => readTokenMint(conn, m),
     derivePool,
+    pool: (a) => readPoolLinks(conn, a),
+    derived: deriveInitAccounts,
     ipfs: (u, max) => gatewayFetch(gateway, u, max),
   };
 }
