@@ -50,6 +50,13 @@
       "when": 1791640902294,
       "tag": "0006_harden_new_table_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791641695469,
+      "tag": "0007_persist_owner_permission_restrictions",
+      "breakpoints": true
     }
   ]
 }
