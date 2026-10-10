@@ -2,14 +2,13 @@ import "@/lib/buffer-global";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ComputeBudgetProgram, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
-import { createTransferCheckedInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { encodePaymentSignatureHeader, decodePaymentRequiredHeader } from "@x402/core/http";
 import { PageHeader } from "@/components/bits";
 import { CheckList, Panel, WalletButtons, downloadBlob, explorerTx, useWallets } from "@/components/pq/ui";
 import { botanistInfo } from "@/lib/pq.functions";
 import { connectWallet, walletSignTransaction, type WalletKind } from "@/services/wallet";
 import { b64 } from "@/pq/canonical";
-import { USDC_DECIMALS } from "@/pq/botanist";
+import { USDC_DECIMALS, createTransferCheckedInstruction, getAssociatedTokenAddressSync } from "@/pq/botanist";
 
 export const Route = createFileRoute("/botanist")({
   head: () => ({ meta: [

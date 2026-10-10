@@ -1,7 +1,16 @@
 // Botanist field report: x402 V2 "exact" SVM payment rules, enforced locally before and after
 // facilitator settlement. Pure and testable; no network.
-import { PublicKey, VersionedTransaction } from "@solana/web3.js";
-import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { PublicKey, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
+
+// Minimal SPL helpers so the browser bundle avoids @solana/spl-token (global Buffer at import).
+export const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+export const getAssociatedTokenAddressSync = (mint: PublicKey, owner: PublicKey, _allowOffCurve = true) =>
+  PublicKey.findProgramAddressSync([owner.toBytes(), TOKEN_PROGRAM_ID.toBytes(), mint.toBytes()], ATA_PROGRAM)[0];
+export function createTransferCheckedInstruction(source: PublicKey, mint: PublicKey, dest: PublicKey, owner: PublicKey, amount: bigint, decimals: number) {
+  const data = new Uint8Array(10); data[0] = 12; new DataView(data.buffer).setBigUint64(1, amount, true); data[9] = decimals;
+  return new TransactionInstruction({ programId: TOKEN_PROGRAM_ID, keys: [{ pubkey: source, isSigner: false, isWritable: true }, { pubkey: mint, isSigner: false, isWritable: false }, { pubkey: dest, isSigner: false, isWritable: true }, { pubkey: owner, isSigner: true, isWritable: false }], data: data as any });
+}
 import { canonicalize, fromB64, sha256Hex, utf8 } from "./canonical";
 import { USDC_MINT } from "./pollen";
 

@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { ComputeBudgetProgram, Keypair, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
-import { createTransferCheckedInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { createTransferCheckedInstruction as splTransfer, getAssociatedTokenAddressSync as splAta } from "@solana/spl-token";
+import { createTransferCheckedInstruction, getAssociatedTokenAddressSync } from "./botanist";
 import { b64 } from "./canonical";
 import { BOTANIST_ASSET, X402_NETWORK, receipt, sameRequirement, settledCredit, verifyExactTransaction, type Requirement } from "./botanist";
 
@@ -20,6 +21,12 @@ function build(o: { amount?: bigint; mint?: string; to?: string; memo?: string; 
 }
 
 describe("x402 exact SVM verification", () => {
+  it("local SPL helpers match @solana/spl-token byte for byte", () => {
+    const m = new PublicKey(BOTANIST_ASSET), o = payer.publicKey;
+    expect(getAssociatedTokenAddressSync(m, o).toBase58()).toBe(splAta(m, o).toBase58());
+    const a = createTransferCheckedInstruction(o, m, o, o, 5n, 6), b = splTransfer(o, m, o, o, 5n, 6);
+    expect(Buffer.from(a.data).toString("hex")).toBe(b.data.toString("hex")); expect(a.keys).toEqual(b.keys);
+  });
   it("accepts the exact transfer and binds the payer and a stable payment hash", () => {
     const t = build(); const r = verifyExactTransaction(t, req);
     expect(r.payer).toBe(payer.publicKey.toBase58()); expect(verifyExactTransaction(t, req).paymentHash).toBe(r.paymentHash);
