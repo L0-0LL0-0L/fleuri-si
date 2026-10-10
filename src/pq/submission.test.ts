@@ -11,9 +11,10 @@ import { DBC_PROGRAM_ID } from "./passport";
 const mock=vi.hoisted(()=>({prep:null as any,launch:null as any,pool:null as any,events:[] as string[],failSend:false,raw:[] as Uint8Array[],height:1,confirmed:null as any,tables:[] as string[]}));
 vi.mock("@/integrations/supabase/client.server",()=>({supabaseAdmin:{
   from:(table:string)=>{mock.tables.push(table);const q:any={select:()=>q,eq:()=>q,update:(p:any)=>{if(table==="chain_preparations")mock.prep={...mock.prep,...p};else mock.events.push("publish");return q;},single:async()=>({data:mock.launch,error:null}),maybeSingle:async()=>({data:mock.prep,error:null}),then:(resolve:any)=>resolve({data:mock.prep,error:null})};return q;},
-  rpc:async(_name:string,args:any)=>{
+  rpc:async(name:string,args:any)=>{
     mock.events.push("persist");
     const p=mock.prep;
+    if(name==="record_launch_confirmation") return {data:"passport-id",error:null};
     if(p.submitted_at && (p.signature!==args._signature || p.signed_transaction_b64!==args._transaction)) return {error:{message:"Different transaction"}};
     mock.prep={...p,submitted_at:new Date().toISOString(),signature:args._signature,signed_transaction_b64:args._transaction};
     return {data:mock.prep,error:null};
