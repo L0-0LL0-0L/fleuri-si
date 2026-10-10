@@ -118,6 +118,7 @@ export type Database = {
       }
       botanist_jobs: {
         Row: {
+          accepted: Json | null
           amount: number
           asset: string
           candidate_signature: string | null
@@ -140,6 +141,7 @@ export type Database = {
           report_digest: string | null
           request_hash: string
           resource: string | null
+          resource_info: Json | null
           settle_signature: string | null
           settled_at: string | null
           settled_slot: number | null
@@ -147,6 +149,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          accepted?: Json | null
           amount: number
           asset: string
           candidate_signature?: string | null
@@ -169,6 +172,7 @@ export type Database = {
           report_digest?: string | null
           request_hash: string
           resource?: string | null
+          resource_info?: Json | null
           settle_signature?: string | null
           settled_at?: string | null
           settled_slot?: number | null
@@ -176,6 +180,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          accepted?: Json | null
           amount?: number
           asset?: string
           candidate_signature?: string | null
@@ -198,6 +203,7 @@ export type Database = {
           report_digest?: string | null
           request_hash?: string
           resource?: string | null
+          resource_info?: Json | null
           settle_signature?: string | null
           settled_at?: string | null
           settled_slot?: number | null
@@ -1035,6 +1041,7 @@ export type Database = {
           _tx: string
         }
         Returns: {
+          accepted: Json | null
           amount: number
           asset: string
           candidate_signature: string | null
@@ -1057,6 +1064,7 @@ export type Database = {
           report_digest: string | null
           request_hash: string
           resource: string | null
+          resource_info: Json | null
           settle_signature: string | null
           settled_at: string | null
           settled_slot: number | null
@@ -1073,6 +1081,7 @@ export type Database = {
       botanist_mark_failed: {
         Args: { _id: string; _reason: string }
         Returns: {
+          accepted: Json | null
           amount: number
           asset: string
           candidate_signature: string | null
@@ -1095,6 +1104,7 @@ export type Database = {
           report_digest: string | null
           request_hash: string
           resource: string | null
+          resource_info: Json | null
           settle_signature: string | null
           settled_at: string | null
           settled_slot: number | null
@@ -1111,6 +1121,7 @@ export type Database = {
       botanist_mark_settled: {
         Args: { _id: string; _sig: string; _slot: number }
         Returns: {
+          accepted: Json | null
           amount: number
           asset: string
           candidate_signature: string | null
@@ -1133,6 +1144,7 @@ export type Database = {
           report_digest: string | null
           request_hash: string
           resource: string | null
+          resource_info: Json | null
           settle_signature: string | null
           settled_at: string | null
           settled_slot: number | null
@@ -1149,6 +1161,7 @@ export type Database = {
       botanist_record_candidate: {
         Args: { _id: string; _sig: string }
         Returns: {
+          accepted: Json | null
           amount: number
           asset: string
           candidate_signature: string | null
@@ -1171,6 +1184,7 @@ export type Database = {
           report_digest: string | null
           request_hash: string
           resource: string | null
+          resource_info: Json | null
           settle_signature: string | null
           settled_at: string | null
           settled_slot: number | null
@@ -1187,6 +1201,7 @@ export type Database = {
       botanist_store_report: {
         Args: { _digest: string; _id: string; _report: Json }
         Returns: {
+          accepted: Json | null
           amount: number
           asset: string
           candidate_signature: string | null
@@ -1209,6 +1224,7 @@ export type Database = {
           report_digest: string | null
           request_hash: string
           resource: string | null
+          resource_info: Json | null
           settle_signature: string | null
           settled_at: string | null
           settled_slot: number | null

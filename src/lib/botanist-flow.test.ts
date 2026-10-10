@@ -23,7 +23,7 @@ const landed = (vt: VersionedTransaction, j: Job, slot = 77) => { const c = veri
 
 /** In-memory model of the atomic SQL transitions (the real SQL is covered by botanist-db.test). */
 function world(j0: Job, o: Partial<{ verify: any; settle: () => Promise<any>; chain: Map<string, any>; rpcDown: () => boolean; reportFails: () => boolean }> = {}) {
-  let j = { ...j0 }; const calls: string[] = []; const chain = o.chain ?? new Map<string, any>();
+  let j = { ...j0 }; const calls: string[] = []; const settles: { url: string; key: string; body: string }[] = []; const chain = o.chain ?? new Map<string, any>();
   const d: FlowDeps = {
     rpc: async (fn, a: any) => {
       calls.push(fn);
@@ -35,14 +35,14 @@ function world(j0: Job, o: Partial<{ verify: any; settle: () => Promise<any>; ch
       return j;
     },
     noteError: async () => {},
-    facilitator: () => ({ verify: async () => { calls.push("verify"); return o.verify ?? { isValid: true }; }, settle: async () => { calls.push("settle"); return o.settle ? o.settle() : { success: false, errorReason: "unknown" }; } }),
+    facilitator: (url, key) => ({ verify: async () => { calls.push("verify"); return o.verify ?? { isValid: true }; }, settle: async (p: any, r: any) => { calls.push("settle"); settles.push({ url, key, body: JSON.stringify({ p, r }) }); return o.settle ? o.settle() : { success: false, errorReason: "unknown" }; } }),
     defaultFacilitator: "https://fac.test",
     getTx: async (s) => { if (o.rpcDown?.()) throw new Error("RPC timeout"); return chain.get(s) ?? null; },
     findByMessage: async () => null,
     buildReport: async (mint) => { if (o.reportFails?.()) throw new Error("rpc"); return { format: "fleuri.botanist.report/v1", mint, supply: "1" }; },
     sleep: async () => {}, confirmPolls: 2,
   };
-  return { d, calls, get job() { return j; }, chain };
+  return { d, calls, settles, get job() { return j; }, chain };
 }
 
 describe("botanist payment orchestration", () => {
@@ -73,6 +73,24 @@ describe("botanist payment orchestration", () => {
     const r2 = await settleAndDeliver(w.d, w.job, header(j, tx)); // same saved bytes resent
     expect(r2.status).toBe(200); expect(w.calls.slice(before)).toEqual(["botanist_mark_settled", "botanist_store_report"]);
     const r3 = await settleAndDeliver(w.d, w.job, null); expect(r3.body.report).toEqual(r2.body.report); // repeat delivery, no regeneration
+  });
+  it("settle succeeded but response lost → same-job retry replays /settle with the SAME body and Idempotency-Key, never re-verifies, recovers the receipt", async () => {
+    const j = { ...mkJob(), request_hash: "rh-1" } as Job; const { b64: tx, vt } = payTx(j); const chain = new Map(); let n = 0;
+    const w = world(j, { chain, settle: async () => { chain.set("SIG9", landed(vt, j)); if (n++ === 0) throw new Error("socket hang up"); return { success: true, transaction: "SIG9" }; } });
+    const r1 = await settleAndDeliver(w.d, j, header(j, tx));
+    expect(r1.status).toBe(202); expect(w.job.settle_signature).toBeUndefined();
+    const before = w.calls.length;
+    const r2 = await settleAndDeliver(w.d, w.job, header(j, tx));
+    expect(r2.status).toBe(200); expect(r2.body.receipt.payment.transaction).toBe("SIG9");
+    expect(w.calls.slice(before)).not.toContain("verify"); expect(w.calls.slice(before)).not.toContain("botanist_claim_payment");
+    expect(w.settles).toHaveLength(2); expect(w.settles[0]).toEqual(w.settles[1]); expect(w.settles[0].key).toBe("rh-1");
+  });
+  it("frozen accepted requirement/resource/facilitator are reused even if defaults change after the quote", async () => {
+    const base = mkJob(); const frozen = { ...requirementOf(base), maxTimeoutSeconds: 123 };
+    const j = { ...base, request_hash: "rh-2", accepted: frozen, resource_info: { url: base.resource, description: "frozen", mimeType: "application/json" }, facilitator: "https://frozen.fac" } as any;
+    const { b64: tx } = payTx(j); const w = world(j); w.d.defaultFacilitator = "https://changed.fac";
+    await settleAndDeliver(w.d, j, header(j, tx));
+    expect(w.settles[0].url).toBe("https://frozen.fac"); expect(JSON.parse(w.settles[0].body).r.maxTimeoutSeconds).toBe(123); expect(JSON.parse(w.settles[0].body).p.resource.description).toBe("frozen");
   });
   it("settlement_pending with a signature is persisted and treated as pending", async () => {
     const j = mkJob(); const w = world(j, { settle: async () => ({ success: false, errorReason: "settlement_pending", transaction: "SIG3" }) });

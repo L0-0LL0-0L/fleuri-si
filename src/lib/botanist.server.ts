@@ -5,7 +5,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { HTTPFacilitatorClient } from "@x402/core/http";
-import { r402, requirementOf, resolveHeaderJob, settleAndDeliver, type FlowDeps, type Out } from "./botanist-flow";
+import { r402, requirementOf, resourceOf, resolveHeaderJob, settleAndDeliver, type FlowDeps, type Out } from "./botanist-flow";
 import { buildReport, type ReportDeps } from "./botanist-report";
 import { hex, sha256Hex, utf8 } from "@/pq/canonical";
 import { BOTANIST_ASSET, DEFAULT_PRICE, QUOTE_TTL_S, USDC_DECIMALS, X402_NETWORK, jobMemo, requestHash, settledCredit } from "@/pq/botanist";
@@ -77,7 +77,7 @@ function flowDeps(admin: any): FlowDeps {
   return {
     rpc: async (fn, args) => { const { data, error } = await admin.rpc(fn, args); if (error) throw new Error(error.message); return data; },
     noteError: async (id, e) => { await admin.from("botanist_jobs").update({ error: e.slice(0, 300) }).eq("id", id); },
-    facilitator: (url) => new HTTPFacilitatorClient({ url }) as any,
+    facilitator: (url, key) => new HTTPFacilitatorClient({ url, createAuthHeaders: async () => ({ settle: { "Idempotency-Key": key } }) }) as any,
     defaultFacilitator: botanistEnv().facilitator,
     getTx,
     findByMessage: async (j) => {
@@ -142,7 +142,8 @@ export async function handleBotanist(request: Request): Promise<Response> {
   const id = crypto.randomUUID(); const tokenBytes = crypto.getRandomValues(new Uint8Array(32)); const token = hex(tokenBytes);
   const nonce = hex(crypto.getRandomValues(new Uint8Array(16)));
   const memo = jobMemo(id, nonce); const resource = `${sol.solEnv().origin}/api/public/botanist/report`;
-  const row = { id, request_hash: requestHash(id, mint, ready.price, ready.payTo, memo, resource), capability_hash: sha256Hex(utf8(token)), client_hash: clientHash, mint, network: X402_NETWORK, asset: BOTANIST_ASSET, amount: ready.price, pay_to: ready.payTo, memo, fee_payer: ready.feePayer, facilitator: ready.facilitator, resource, quote_expires_at: new Date(Date.now() + QUOTE_TTL_S * 1000).toISOString() };
+  const row = { id, request_hash: requestHash(id, mint, ready.price, ready.payTo, memo, resource), capability_hash: sha256Hex(utf8(token)), client_hash: clientHash, mint, network: X402_NETWORK, asset: BOTANIST_ASSET, amount: ready.price, pay_to: ready.payTo, memo, fee_payer: ready.feePayer, facilitator: ready.facilitator, resource, quote_expires_at: new Date(Date.now() + QUOTE_TTL_S * 1000).toISOString() } as any;
+  row.accepted = requirementOf(row); row.resource_info = resourceOf(row);
   const { data: j, error } = await admin.from("botanist_jobs").insert(row).select("*").single();
   if (error) return json(500, { error: "Could not create quote." });
   const o = r402(j); return json(402, { ...o.body, token }, o.headers);
