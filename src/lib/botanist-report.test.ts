@@ -15,7 +15,7 @@ function deps(o: Partial<ReportDeps> = {}): ReportDeps {
     getSlot: async () => 321, now: () => "2026-10-10T00:00:00.000Z", cluster: "mainnet-beta", dbcProgram: "dbcij3LWUppWqq96dh6gJWwBifmcgFLSB5D4DuSMaqN",
     readAnyMint: async () => ({ program: "spl-token", decimals: 9, supply: 1_000_000_000n, mintAuthority: null, freezeAuthority: null, extensions: [] }),
     readTokenMetadata: async () => ({ name: "Strange Bloom", symbol: "BLOOM", uri: "ipfs://x", updateAuthority: "11111111111111111111111111111111", isMutable: false }),
-    readUpgradeAuthority: async () => ({ status: "ok", upgradeable: true, authority: new PublicKey(addr()), slot: 5n }),
+    readUpgradeAuthority: async () => ({ status: "ok", loader: "BPFLoaderUpgradeab1e11111111111111111111111", programData: addr(), immutable: false, authority: addr(), slot: 5 }),
     largestAccounts: async () => [{ address: addr(), amount: "600000000" }, { address: addr(), amount: "100000000" }],
     findLaunch: async () => launch,
     // Real SDK reader shapes: BigInt reserves/threshold and nested terms with BN/strings.
@@ -37,7 +37,7 @@ describe("botanist report", () => {
     expect(r.facts.dbcConfig.migrationQuoteThresholdLamports).toBe("85000000000");
     expect(r.facts.mint.supply).toBe("1000000000");
     expect(r.facts.holders.top10ShareBps).toBe(7000);
-    expect(typeof r.facts.dbcProgram.authority).toBe("string"); expect(r.facts.dbcProgram.slot).toBe("5");
+    expect(typeof r.facts.dbcProgram.authority).toBe("string"); expect(r.facts.dbcProgram.immutable).toBe(false);
     expect(r.observedSlot).toBe(321);
   });
   it("labels absent pool, missing metadata and non-fleuri mints unavailable with explicit nulls", async () => {
