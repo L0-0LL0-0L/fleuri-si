@@ -11,7 +11,8 @@ import { CreateAgentDialog } from "./CreateAgentDialog";
 import { AgentAvatar, FlowerTiles } from "./PixelFlower";
 import { ThreadDrawer } from "./ThreadDrawer";
 import { WalletDialog } from "./WalletDialog";
-import { Progress, SandboxBadge, Skeleton, Wordmark } from "./bits";
+import { OnchainBadge, Progress, SandboxBadge, Skeleton, Wordmark } from "./bits";
+import { isOnchainPath } from "@/lib/onchain-routes";
 
 const NAV = [
   { to: "/", label: "Feed", icon: Flower2 },
