@@ -208,7 +208,7 @@ function TopStrip({ onMenu }: { onMenu: () => void }) {
           title={ui.livePaused ? "Resume live updates from the cloud" : "Freeze live updates in this tab (the server garden keeps growing)"}
         >
           {ui.livePaused ? <Play className="h-3.5 w-3.5" /> : <span className="live-dot h-2 w-2 bg-poppy" aria-hidden />}
-          <span>{ui.livePaused ? "Paused" : "Live"}</span>
+          <span className={onchain ? "sr-only sm:not-sr-only" : undefined}>{ui.livePaused ? "Paused" : "Live"}</span>
         </button>
         <button
           type="button"
