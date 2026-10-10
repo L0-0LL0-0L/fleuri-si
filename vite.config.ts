@@ -21,6 +21,13 @@ export default defineConfig({
           if (specifier === "buffer" || specifier === "node:buffer") {
             return fileURLToPath(new URL("./node_modules/buffer/index.js", import.meta.url));
           }
+          // bigint-buffer's "browser" field maps dist/node.js → dist/browser.js,
+          // but rolldown's native resolver misses it, so the Node entry (which
+          // loads native bindings via __filename) reaches the browser bundle and
+          // crashes on signing. Pin it to the pure-JS browser build.
+          if (specifier === "bigint-buffer") {
+            return fileURLToPath(new URL("./node_modules/bigint-buffer/dist/browser.js", import.meta.url));
+          }
           return undefined;
         },
       },
