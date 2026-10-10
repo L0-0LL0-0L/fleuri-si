@@ -207,3 +207,13 @@ export const pqTokenPage = createServerFn({ method: "GET" })
       },
     };
   }));
+
+// Living passport: current dated observations beside the immutable signed promises (public).
+export const pqLiving = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ hash: z.string().regex(/^[0-9a-f]{64}$/) }).strict().parse(d))
+  .handler(async ({ data }) => { const s = await import("./living.server"); return safe(() => s.observeLiving(data.hash)); });
+
+// Portable evidence bundle export (public; verification stays free).
+export const pqExportBundle = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ hash: z.string().regex(/^[0-9a-f]{64}$/) }).strict().parse(d))
+  .handler(async ({ data }) => { const s = await import("./living.server"); return safe(() => s.exportBundle(data.hash)); });
