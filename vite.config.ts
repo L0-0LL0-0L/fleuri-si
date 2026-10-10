@@ -9,8 +9,22 @@ import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   vite: {
+    plugins: [
+      // The browser build must never stub Node's built-in `buffer`: rolldown's
+      // native resolver externalizes `node:buffer` before aliases apply, which
+      // used to emit an empty module and crash safe-buffer/bs58/Solana SDKs.
+      // A pre resolveId hook pins every buffer import to the real package.
+      {
+        name: "buffer-shim",
+        enforce: "pre",
+        resolveId(specifier) {
+          if (specifier === "buffer" || specifier === "node:buffer") {
+            return fileURLToPath(new URL("./node_modules/buffer/index.js", import.meta.url));
+          }
+        },
+      },
+    ],
     resolve: { alias: [
-      { find: "node:buffer", replacement: fileURLToPath(new URL("./node_modules/buffer/index.js", import.meta.url)) },
       { find: /^@coral-xyz\/anchor$/, replacement: fileURLToPath(new URL("./node_modules/@coral-xyz/anchor/dist/browser/index.js", import.meta.url)) },
     ] },
     environments: {
