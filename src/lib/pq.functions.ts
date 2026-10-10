@@ -168,3 +168,42 @@ export const pqSetProposalStatus = createServerFn({ method: "POST" })
     const r = await (supabaseAdmin as any).from("launch_proposals").update({ status: data.status }).eq("id", data.id).eq("status", "pending");
     return r.error ? { ok: false as const, error: r.error.message } : { ok: true as const, data: true };
   });
+
+// Public live data for a real launched token (read from chain; never sandbox data).
+export const pqTokenPage = createServerFn({ method: "GET" })
+  .inputValidator((d) => z.object({ mint: addr }).parse(d))
+  .handler(async ({ data }) => safe(async () => {
+    const { createClient } = await import("@supabase/supabase-js");
+    const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
+    const pub = createClient(process.env["SUPABASE_URL"]!, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: (input, init) => { const h = new Headers(init?.headers); if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`) h.delete("Authorization"); h.set("apikey", key); return fetch(input, { ...init, headers: h }); } },
+    });
+    const r = await (pub as any).from("launches").select("id,pool,base_mint,lifecycle,cluster,creator_wallet,signature,created_at,damm_v2_pool,passports(manifest_hash,manifest,metadata_uri)").eq("base_mint", data.mint).maybeSingle();
+    if (r.error) throw new Error(r.error.message);
+    if (!r.data) return { launch: null };
+    const { connection, readPool, readTokenMint } = await import("./solana.server");
+    const { PublicKey } = await import("@solana/web3.js");
+    const conn = connection();
+    const [pool, mint, largest] = await Promise.all([
+      readPool(conn, r.data.pool).catch(() => null),
+      readTokenMint(conn, data.mint).catch(() => null),
+      conn.getTokenLargestAccounts(new PublicKey(data.mint)).then((x) => x.value).catch(() => []),
+    ]);
+    let curvePriceSol: number | null = null;
+    if (pool?.sqrtPrice && mint) { const sp = Number(BigInt(pool.sqrtPrice)) / 2 ** 64; curvePriceSol = sp * sp * 10 ** (mint.decimals - 9); }
+    let usdPrice: number | null = null;
+    try { const j: any = await (await fetch(`https://lite-api.jup.ag/price/v3?ids=${data.mint}`, { signal: AbortSignal.timeout(6000) })).json(); usdPrice = j?.[data.mint]?.usdPrice ?? null; } catch { /* price unavailable */ }
+    const supply = mint ? Number(mint.supply) / 10 ** mint.decimals : null;
+    return {
+      launch: r.data,
+      chain: {
+        readable: !!pool,
+        curvePriceSol, usdPrice, supply, decimals: mint?.decimals ?? null,
+        raisedSol: pool ? Number(pool.quoteReserve) / 1e9 : null,
+        thresholdSol: pool ? Number(pool.migrationQuoteThreshold) / 1e9 : null,
+        isMigrated: pool?.isMigrated === 1, dammV2Pool: pool?.dammV2Confirmed ? pool.dammV2Pool : null,
+        topHolders: largest.slice(0, 10).map((a: any) => ({ address: a.address.toBase58(), amount: Number(a.uiAmount ?? 0) })),
+      },
+    };
+  }));

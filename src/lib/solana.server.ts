@@ -227,6 +227,7 @@ export async function readPool(conn: Connection, pool: string) {
     isMigrated: n(state.isMigrated),
     migrationProgress: n(state.migrationProgress),
     quoteReserve: BigInt(s(state.quoteReserve)),
+    sqrtPrice: s(state.sqrtPrice),
     migrationQuoteThreshold: BigInt(s(cfg?.migrationQuoteThreshold)),
     dammV2Pool: dammV2Pool?.toBase58() ?? null,
     dammConfig: dammConfig?.toBase58() ?? null,
