@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Keypair } from "@solana/web3.js";
-import { USDC_MINT, WSOL_MINT, claimable, fundDelta, compareVault, dbcPartnerRouting, parseAmount, parseTerms } from "./pollen";
+import { USDC_MINT, WSOL_MINT, claimable, percentToBps, pdaProblems, dfsEvents, fundDelta, compareVault, dbcPartnerRouting, parseAmount, parseTerms } from "./pollen";
 const w = () => Keypair.generate().publicKey.toBase58();
 
 describe("pollen allocation rules", () => {
@@ -50,5 +50,26 @@ describe("pollen allocation rules", () => {
     expect(claimable(3333n, fps, cp)).toBe(166_650n);
     expect(claimable(6667n, fps, 0n) + claimable(3333n, fps, 0n)).toBeLessThanOrEqual(1_500_001n);
     expect(() => claimable(1n, 0n, 1n)).toThrow();
+  });
+  it("parses exact two-decimal shares and rejects extra precision", () => {
+    expect(percentToBps("33.33")).toBe(3333); expect(percentToBps("50")).toBe(5000); expect(percentToBps("0.01")).toBe(1);
+    for (const bad of ["33.333", "0", "100.01", "-5", "1e2", ""]) expect(() => percentToBps(bad)).toThrow();
+  });
+  it("bounds amounts to u64", () => {
+    expect(() => parseAmount("18446744073709.551616", 6)).toThrow(/u64/);
+    expect(parseAmount("18446744073709.551615", 6)).toBe(18446744073709551615n);
+  });
+  it("allows DBC routing only into derived PDA vaults", () => {
+    expect(pdaProblems({ feeVaultType: 0, derived: "a", address: "a" })[0]).toMatch(/non-PDA/);
+    expect(pdaProblems({ feeVaultType: 1, derived: "a", address: "b" })[0]).toMatch(/derived/);
+    expect(pdaProblems({ feeVaultType: 1, derived: "a", address: "a" })).toEqual([]);
+  });
+  it("attributes amounts only from this transaction's DFS events", () => {
+    const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
+    const tag = [228, 69, 165, 46, 81, 203, 154, 29];
+    const fund = new Uint8Array(16 + 32 + 32 + 8 + 16 + 4); fund.set(tag); fund.set([15, 14, 233, 140, 19, 195, 163, 7], 8); fund.fill(7, 48, 80); new DataView(fund.buffer).setBigUint64(80, 1234n, true);
+    const claim = new Uint8Array(16 + 32 + 32 + 1 + 8); claim.set(tag); claim.set([6, 36, 88, 232, 53, 193, 253, 98], 8); claim.fill(7, 16, 48); claim.fill(9, 48, 80); new DataView(claim.buffer).setBigUint64(81, 55n, true);
+    const ev = dfsEvents([fund, claim, new Uint8Array([1, 2, 3])], hex);
+    expect(ev).toEqual([{ kind: "fund", vault: "07".repeat(32), amount: 1234n }, { kind: "claim", vault: "07".repeat(32), user: "09".repeat(32), amount: 55n }]);
   });
 });
