@@ -139,6 +139,8 @@ function units(raw:string,decimals:number) { const padded=raw.padStart(decimals+
 export function PassportTerms({manifest:m}:{manifest:PassportManifest}) {
   const values:[string,string][]=[
     ["Token",`${m.token.name} · $${m.token.symbol}`], ["Supply cap",`${units(m.token.totalSupply,m.token.decimals)} · ${m.token.decimals} decimals`],
+    ...(m.token.website?[["Website",m.token.website] as [string,string]]:[]),
+    ...(m.token.twitter?[["Twitter / X",m.token.twitter] as [string,string]]:[]),
     ["Initial base fee (rounded)",`${m.fees.baseFeeBps} bps · dynamic fees ${m.fees.dynamicFeeEnabled?"enabled":"off"}`],
     ["Trading split after protocol",`creator ${m.fees.creatorTradingFeePercent}% · partner ${m.fees.partnerTradingFeePercent}%`],
     ["Pool creation fee",`${units(m.fees.poolCreationFeeLamports,9)} SOL + network/rent costs`],
