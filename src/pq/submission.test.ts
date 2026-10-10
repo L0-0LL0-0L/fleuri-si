@@ -85,4 +85,29 @@ describe("server submission recovery",()=>{
     const r=await confirmPrepared(owner,id);expect(r.status).toBe("confirmed");expect(r.detail).toContain("Migrate again");
     expect(mock.prep.confirmed_at).toBeTruthy();expect(mock.events).not.toContain("publish");expect(mock.tables).not.toContain("passports");
   });
+  it("confirms a launch whose pool creator lawfully changed after the create instruction",async()=>{
+    await submitPrepared(owner,id,signed);
+    const creator=new PublicKey(mock.prep.wallet),mint=Keypair.generate(),config=Keypair.generate().publicKey;
+    const pool=new PublicKey(derivePool(mint.publicKey.toBase58(),config.toBase58()));
+    const uri="ipfs://bafyexample",name="Bloom",symbol="BLOOM";
+    const d=deriveInitAccounts(mint.publicKey.toBase58(),pool.toBase58());const P=(s:string)=>new PublicKey(s);
+    const program=createDbcProgram(new Connection("http://127.0.0.1:1")).program as any;
+    const ix=await program.methods.initializeVirtualPoolWithSplToken({name,symbol,uri}).accountsPartial({
+      config,poolAuthority:P(d.poolAuthority),creator,baseMint:mint.publicKey,quoteMint:P("So11111111111111111111111111111111111111112"),pool,
+      baseVault:P(d.baseVault),quoteVault:P(d.quoteVault),mintMetadata:P(d.mintMetadata),metadataProgram:P("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"),
+      payer:creator,tokenQuoteProgram:P("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),tokenProgram:P("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),systemProgram:P("11111111111111111111111111111111"),
+    }).instruction();
+    const terms={fees:{feeBps:100},lp:{locked:100},migration:{quoteThresholdLamports:"1"},authority:{revoked:true}};
+    const manifest={config:{address:config.toBase58(),snapshotHash:"h",snapshot:{}},creatorWallet:creator.toBase58(),
+      token:{baseMint:mint.publicKey.toBase58(),name,symbol,decimals:6,totalSupply:"1000"},pool:{address:pool.toBase58()},...terms};
+    mock.prep.kind="launch";mock.prep.payload={...mock.prep.payload,baseMint:manifest.token.baseMint,config:manifest.config.address,pool:manifest.pool.address,metadataUri:uri,passport:{manifest}};
+    mock.confirmed={serialized:mock.prep._testMessage,signers:[creator.toBase58(),mint.publicKey.toBase58()],ixs:[{program:DBC_PROGRAM_ID,data:new Uint8Array(ix.data),accounts:ix.keys.map((k:any)=>k.pubkey.toBase58())}],slot:42,err:null};
+    // The pool's current creator changed after launch; authorship is proven by the decoded create instruction.
+    mock.pool={baseMint:manifest.token.baseMint,config:manifest.config.address,creator:Keypair.generate().publicKey.toBase58(),migrationProgress:0};
+    mock.meta={uri,name,symbol,isMutable:false,updateAuthority:PublicKey.default.toBase58()};
+    mock.mint={decimals:6,supply:1000n,mintAuthority:null,freezeAuthority:null};
+    mock.dbcConfig={problems:[],snapshotHash:"h",snapshot:{},terms:{...terms,decimals:6,totalSupply:"1000"}};
+    const r=await confirmPrepared(owner,id);
+    expect(r.status).toBe("confirmed");expect(r.id).toBe("passport-id");
+  });
 });
