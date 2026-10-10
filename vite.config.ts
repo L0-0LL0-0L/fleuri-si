@@ -7,6 +7,8 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { fileURLToPath } from "node:url";
 
+let isBuild = false;
+
 export default defineConfig({
   vite: {
     plugins: [
@@ -17,10 +19,11 @@ export default defineConfig({
       {
         name: "buffer-shim",
         enforce: "pre",
+        configResolved(c) { isBuild = c.command === "build"; },
         resolveId(specifier): string | undefined {
           // Build only: in dev the raw CommonJS file has no ESM `Buffer` export; there the
           // dependency optimizer pre-bundles `buffer` (optimizeDeps.include below).
-          if ((specifier === "buffer" || specifier === "node:buffer") && this.environment?.mode === "build") {
+          if ((specifier === "buffer" || specifier === "node:buffer") && isBuild) {
             return fileURLToPath(new URL("./node_modules/buffer/index.js", import.meta.url));
           }
           // bigint-buffer's "browser" field maps dist/node.js → dist/browser.js,
