@@ -32,6 +32,7 @@ export async function observeLiving(hash: string) {
   if (e.cluster !== m.cluster) return { facts, history: [], slot: null, observedAt: null, note: `Server reads ${e.cluster ?? "no network"}; passport is for ${m.cluster}.` };
   const conn = sol.connection();
   await sol.assertGenesis(conn, m.cluster);
+  // Reads span several slots; this is the slot when the observation STARTED, not an event slot.
   const slot = await conn.getSlot("confirmed");
   const observedAt = new Date().toISOString();
   const ev: { kind: string; facts: Record<string, unknown> }[] = [];
@@ -45,7 +46,7 @@ export async function observeLiving(hash: string) {
   } catch (err) { add({ id: "mint-authority", group: "promise-kept", label: "Mint and freeze authorities", status: "unavailable", detail: (err as Error).message }); }
   try {
     const meta = await sol.readTokenMetadata(conn, m.token.baseMint);
-    snap.metadataUri = meta?.uri; snap.metadataMutable = meta?.isMutable; snap.updateAuthority = meta?.updateAuthority;
+    snap.metadataAvailable = !!meta; snap.metadataUri = meta?.uri ?? null; snap.metadataMutable = meta?.isMutable ?? null; snap.updateAuthority = meta?.updateAuthority ?? null;
     const ok = !!meta && !meta.isMutable && meta.updateAuthority === SYSTEM_PROGRAM && meta.uri === rec.metadata_uri;
     add({ id: "metadata", group: "promise-kept", label: "Metadata immutable", status: meta ? (ok ? "pass" : "fail") : "unavailable", detail: !meta ? "Metadata account not found." : ok ? "Immutable; still points to the pinned passport metadata." : `Mutable=${meta.isMutable}, update authority ${meta.updateAuthority}, URI ${meta.uri}`, evidence: m.token.baseMint });
   } catch (err) { add({ id: "metadata", group: "promise-kept", label: "Metadata immutable", status: "unavailable", detail: (err as Error).message }); }
@@ -75,6 +76,7 @@ export async function observeLiving(hash: string) {
   for (const [id, label, prog] of [["dbc-upgrade", "Meteora DBC program", DBC_PROGRAM_ID], ["damm-upgrade", "Meteora DAMM v2 program", DAMM_V2_PROGRAM_ID.toBase58()]] as const) {
     try {
       const u = await readUpgradeAuthority(conn, prog);
+      if (u.status !== "ok") { add({ id, group: "program", label: `${label} upgrade authority`, status: "unavailable", detail: u.reason }); continue; }
       snap[id] = u.authority;
       add({ id, group: "program", label: `${label} upgrade authority`, status: "pass", detail: u.immutable ? "Immutable — code cannot change." : `Upgradeable by ${u.authority} (last deployed slot ${u.slot}). The program owner can change its code.`, evidence: u.programData ?? prog });
     } catch (err) { add({ id, group: "program", label: `${label} upgrade authority`, status: "unavailable", detail: (err as Error).message }); }
@@ -85,7 +87,7 @@ export async function observeLiving(hash: string) {
   const rows = [{ kind: "snapshot", facts: snap }, ...ev].map((x) => ({ launch_id: launch.id, kind: x.kind, observed_slot: slot, observed_at: observedAt, facts: x.facts, digest: sha256Hex(new TextEncoder().encode(canonicalize(x.facts as any))) }));
   try { await d.from("passport_observations").upsert(rows, { onConflict: "launch_id,kind,digest", ignoreDuplicates: true }); } catch { /* history is best-effort */ }
   const history = must(await d.from("passport_observations").select("kind,observed_slot,observed_at,facts").eq("launch_id", launch.id).neq("kind", "snapshot").order("observed_slot", { ascending: true }).limit(50));
-  return { facts, history, slot, observedAt, note: null };
+  return { facts, history, slot, slotLabel: "observation started at slot", observedAt, note: null };
 }
 
 export async function exportBundle(hash: string) {

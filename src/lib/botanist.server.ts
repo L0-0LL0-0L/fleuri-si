@@ -94,6 +94,8 @@ export async function handleBotanist(request: Request): Promise<Response> {
   if (!isSolanaAddress(mint)) return json(400, { error: "Enter a valid Solana mint address." });
   const ready = await botanistReadiness();
   if (!ready.ready || !ready.payTo || !ready.feePayer) return json(503, { error: "Botanist checkout is not ready.", checks: ready.checks });
+  // Validate before quoting so nobody pays for a non-mint or uninitialized account.
+  try { await readAnyMint(sol.connection(), mint); } catch (e) { return json(422, { error: `Not an inspectable SPL mint: ${(e as Error).message}` }); }
   const clientHash = sha256Hex(utf8(`${request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for") ?? "?"}:botanist`));
   const { count } = await admin.from("botanist_jobs").select("id", { count: "exact", head: true }).eq("client_hash", clientHash).gte("created_at", new Date(Date.now() - 3600_000).toISOString());
   if ((count ?? 0) >= RATE_PER_HOUR) return json(429, { error: "Too many quotes this hour." });
@@ -172,10 +174,10 @@ export async function buildReport(conn: any, mint: string, _o: { slotHint?: numb
   const slot = await conn.getSlot("confirmed"); const at = new Date().toISOString();
   const facts: Record<string, any> = {}; const unavailable: Record<string, string> = {};
   const m = await readAnyMint(conn, mint);
-  facts.mint = { address: mint, program: m.program, decimals: m.decimals, supply: m.supply.toString(), mintAuthority: m.mintAuthority, freezeAuthority: m.freezeAuthority, mintAuthorityRevoked: !m.mintAuthority, freezeAuthorityRevoked: !m.freezeAuthority, token2022ExtensionBytes: m.extensionsBytes };
+  facts.mint = { address: mint, program: m.program, decimals: m.decimals, supply: m.supply.toString(), mintAuthority: m.mintAuthority, freezeAuthority: m.freezeAuthority, mintAuthorityRevoked: !m.mintAuthority, freezeAuthorityRevoked: !m.freezeAuthority, token2022Extensions: m.extensions };
   try { const md: any = await readTokenMetadata(conn, mint); facts.metadata = md ? { name: md.name, symbol: md.symbol, uri: md.uri, updateAuthority: md.updateAuthority, isMutable: md.isMutable } : null; if (!md) unavailable.metadata = "No Metaplex metadata account."; }
   catch (e) { unavailable.metadata = (e as Error).message; }
-  try { const tp = await readUpgradeAuthority(conn, m.program === "token-2022" ? "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" : "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"); facts.tokenProgram = tp; } catch (e) { unavailable.tokenProgram = (e as Error).message; }
+  try { const tp = await readUpgradeAuthority(conn, m.program === "token-2022" ? "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" : "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"); if (tp.status === "ok") facts.tokenProgram = tp; else unavailable.tokenProgram = tp.reason; } catch (e) { unavailable.tokenProgram = (e as Error).message; }
   try {
     const largest = await conn.getTokenLargestAccounts(new PublicKey(mint));
     const top = largest.value.slice(0, 10).map((a: any) => ({ account: a.address.toBase58(), amount: a.amount }));
@@ -188,7 +190,7 @@ export async function buildReport(conn: any, mint: string, _o: { slotHint?: numb
     facts.fleuri = { passport: launch.passports?.manifest_hash, launchTx: launch.signature, recordedLifecycle: launch.lifecycle, signedCreator: launch.creator_wallet };
     try { const p: any = await readPool(conn, launch.pool); facts.dbc = { pool: launch.pool, currentCreator: p.creator, creatorChanged: p.creator !== launch.creator_wallet, migrated: p.isMigrated ?? null, quoteReserve: p.quoteReserve ?? null }; } catch (e) { unavailable.dbcPool = (e as Error).message; }
     try { const c: any = await readDbcConfig(conn, launch.config); facts.dbcConfig = { address: launch.config, feeClaimer: c.feeClaimer, signedFeeClaimer: sig?.fees?.feeClaimer, matchesSigned: c.feeClaimer === sig?.fees?.feeClaimer, migrationQuoteThreshold: c.migrationQuoteThreshold?.toString?.() ?? null }; } catch (e) { unavailable.dbcConfig = (e as Error).message; }
-    try { facts.dbcProgram = await readUpgradeAuthority(conn, DBC_PROGRAM_ID); } catch (e) { unavailable.dbcProgram = (e as Error).message; }
+    try { const u = await readUpgradeAuthority(conn, DBC_PROGRAM_ID); if (u.status === "ok") facts.dbcProgram = u; else unavailable.dbcProgram = u.reason; } catch (e) { unavailable.dbcProgram = (e as Error).message; }
   } else unavailable.protocol = "Not a fleuri launch: DBC config, signed promises and graduation are not applicable.";
   unavailable.lp = "LP position and lock state are not proven by this report; Meteora position accounts were not decoded.";
   return { format: "fleuri.botanist.report/v1", observedSlot: slot, observedAt: at, mint, facts, unavailable, disclaimer: "Point-in-time chain observations. Not an audit, not a safety rating and not financial advice." };
