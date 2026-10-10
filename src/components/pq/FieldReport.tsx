@@ -31,7 +31,7 @@ export function FieldReport({ result }: { result: { jobId: string; report: any; 
       <Row k="Mint authority" tone={f.mint?.mintAuthorityRevoked ? "good" : "warn"}>{f.mint?.mintAuthorityRevoked ? "Revoked — no more tokens can be minted" : <>Active: <A a={f.mint?.mintAuthority} cluster={cl} /></>}</Row>
       <Row k="Freeze authority" tone={f.mint?.freezeAuthorityRevoked ? "good" : "warn"}>{f.mint?.freezeAuthorityRevoked ? "Revoked — accounts cannot be frozen" : <>Active: <A a={f.mint?.freezeAuthority} cluster={cl} /></>}</Row>
       <Row k="Token program">{f.mint?.program} · {f.mint?.decimals} decimals · supply {f.mint?.supply}{f.mint?.token2022Extensions?.length ? ` · extensions: ${f.mint.token2022Extensions.join(", ")}` : ""}</Row>
-      <Row k="Token program upgrade" tone={f.tokenProgram ? undefined : "na"}>{f.tokenProgram ? (f.tokenProgram.upgradeable ? <>Upgradeable by <A a={f.tokenProgram.authority} cluster={cl} /></> : "Immutable") : un.tokenProgram}</Row>
+      <UpgradeRow k="Token program upgrade" info={f.tokenProgram} reason={un.tokenProgram} cluster={cl} />
     </Section>
     <Section title="Metadata">
       {f.metadata ? <>
@@ -60,7 +60,7 @@ export function FieldReport({ result }: { result: { jobId: string; report: any; 
           <Row k="Fee claimer" tone={f.dbcConfig.matchesSigned === false ? "warn" : f.dbcConfig.matchesSigned ? "good" : undefined}><A a={f.dbcConfig.feeClaimer} cluster={cl} />{f.dbcConfig.matchesSigned === false ? " — differs from the signed passport" : f.dbcConfig.matchesSigned ? " — matches the signed passport" : ""}</Row>
           <Row k="Graduation">{sol(f.dbcConfig.migrationQuoteThresholdLamports)} → {f.dbcConfig.migrationTarget}, migrated pool fee {f.dbcConfig.migratedPoolFeeBps} bps</Row>
         </> : <Row k="DBC config" tone="na">{un.dbcConfig}</Row>}
-        <Row k="DBC program upgrade" tone={f.dbcProgram ? undefined : "na"}>{f.dbcProgram ? (f.dbcProgram.upgradeable ? <>Upgradeable by <A a={f.dbcProgram.authority} cluster={cl} /></> : "Immutable") : un.dbcProgram}</Row>
+        <UpgradeRow k="DBC program upgrade" info={f.dbcProgram} reason={un.dbcProgram} cluster={cl} />
       </> : <Row k="Protocol" tone="na">{un.protocol}</Row>}
     </Section>
     <Section title="Not proven by this report">
@@ -78,4 +78,13 @@ export function FieldReport({ result }: { result: { jobId: string; report: any; 
     </div>
     <details className="hair bg-paper-light p-2"><summary className="cursor-pointer font-mono text-xs uppercase">Raw report JSON</summary><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-[0.7rem]">{JSON.stringify(r, null, 2)}</pre></details>
   </div>;
+}
+
+/** Renders only from the validated `immutable` flag; a missing/non-boolean flag is never treated as immutable. */
+export function UpgradeRow({ k, info, reason, cluster }: { k: string; info: any; reason?: string; cluster: any }) {
+  const ok = info && info.status === "ok";
+  if (ok && info.immutable === true) return <Row k={k} tone="good">Immutable — no upgrade authority</Row>;
+  if (ok && info.immutable === false && typeof info.authority === "string" && info.authority)
+    return <Row k={k} tone="warn">Upgradeable by <A a={info.authority} cluster={cluster} /></Row>;
+  return <Row k={k} tone="na">{reason || "Unavailable — upgrade status could not be decoded."}</Row>;
 }
