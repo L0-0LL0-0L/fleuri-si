@@ -151,7 +151,9 @@ export async function confirmPrepared(ownerId: string, preparationId: string): P
     if (ixProblems.length) throw new Error(`Launch instruction does not match the passport: ${ixProblems.slice(0, 2).join("; ")}`);
     const pool = await sol.readPool(conn, p.pool);
     if (!pool) return { status: "pending", detail: "Pool account not visible yet…" };
-    if (pool.baseMint !== p.baseMint || pool.config !== p.config || pool.creator !== prep.wallet) throw new Error("On-chain pool does not match the passport terms.");
+    // Original authorship is proven by the decoded create instruction above; a
+    // lawful creator change after launch must not block resuming confirmation.
+    if (pool.baseMint !== p.baseMint || pool.config !== p.config) throw new Error("On-chain pool does not match the passport terms.");
     const meta = await sol.readTokenMetadata(conn, p.baseMint);
     if (!meta || meta.uri !== p.metadataUri || meta.name !== p.passport.manifest.token.name || meta.symbol !== p.passport.manifest.token.symbol || meta.isMutable || meta.updateAuthority !== PublicKey.default.toBase58()) throw new Error("On-chain immutable metadata does not match the passport.");
     const mint = await sol.readTokenMint(conn,p.baseMint);
