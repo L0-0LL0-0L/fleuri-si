@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Keypair } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { createDbcProgram } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import { deriveInitAccounts, derivePool } from "./chain-read";
 import bs58 from "bs58";
 import { b64 } from "./canonical";
 import { messageHash } from "./chain-pure";
