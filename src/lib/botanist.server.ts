@@ -5,7 +5,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { HTTPFacilitatorClient } from "@x402/core/http";
-import { r402, requirementOf, resolveHeaderJob, settleAndDeliver, type FlowDeps, type Out } from "./botanist-flow";
+import { r402, requirementOf, resourceOf, resolveHeaderJob, settleAndDeliver, type FlowDeps, type Out } from "./botanist-flow";
 import { buildReport, type ReportDeps } from "./botanist-report";
 import { hex, sha256Hex, utf8 } from "@/pq/canonical";
 import { BOTANIST_ASSET, DEFAULT_PRICE, QUOTE_TTL_S, USDC_DECIMALS, X402_NETWORK, jobMemo, requestHash, settledCredit } from "@/pq/botanist";
