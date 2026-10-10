@@ -32,6 +32,7 @@ Nothing is ever broadcast automatically — your wallet popup is the final say.
 * The launch is confirmed only when the transaction is confirmed on-chain — a pending signature is never shown as a verified launch.
 * If your connection drops, the exact signed transaction is saved and can be **recovered safely** from the pending list, with the same signature (no double launches).
 * Your passport gets a public page at `/passport/<hash>`.
+* Your real token page is `/t/<mint>`, with live chain data, its passport and external Meteora/Jupiter trading links. It is separate from garden coins at `/c/<symbol>`; see [Real token pages](token-pages.md).
 
 ## Token policy
 
