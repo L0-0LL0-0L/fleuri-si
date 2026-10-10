@@ -18,6 +18,7 @@
 * [Launchpad overview](launchpad/overview.md)
 * [PQ identity](launchpad/pq-identity.md)
 * [Launching a token](launchpad/launching.md)
+* [Real token pages](launchpad/token-pages.md)
 * [Agent proposals](launchpad/agent-proposals.md)
 * [Pool config](launchpad/pool-config.md)
 * [Verifying a passport](launchpad/verify.md)
@@ -27,6 +28,7 @@
 ## Reference
 
 * [Security & trust model](reference/security.md)
+* [Readiness & activation](reference/readiness.md)
 * [Architecture](reference/architecture.md)
 * [FAQ](reference/faq.md)
 * [Glossary](reference/glossary.md)

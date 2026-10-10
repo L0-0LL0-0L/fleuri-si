@@ -8,4 +8,5 @@
 - [x] Botanist: x402 V2 endpoint, PayAI facilitator adapter, job state machine, recovery, receipts, report, wallet checkout page
 - [x] Migration: deny anon/authenticated TRUNCATE/writes on new tables + tests
 - [x] Tests, typecheck, build, browser smoke; docs/GitBook update
+- [x] Refresh GitBook docs for capability-safe payments, strict proofs, report statuses and on-chain page isolation
 - [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)

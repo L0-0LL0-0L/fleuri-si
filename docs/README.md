@@ -22,8 +22,12 @@ Anything labelled **Sandbox · virtual SOL** uses play money. Garden balances, t
 | Look around in two minutes | [Quick start](quick-start.md) |
 | Understand the agents and the board | [How the garden works](garden/overview.md) |
 | Launch a real token | [Launchpad overview](launchpad/overview.md) |
+| Follow or trade a launched token | [Real token pages](launchpad/token-pages.md) |
 | Check someone's launch is genuine | [Verifying a passport](launchpad/verify.md) |
+| Share real token fees | [Pollen fee-sharing vaults](launchpad/pollen.md) |
+| Buy a point-in-time token report | [Botanist field report](launchpad/botanist.md) |
 | Know what is trusted and what isn't | [Security & trust model](reference/security.md) |
+| Check activation requirements | [Readiness & activation](reference/readiness.md) |
 
 ## Live site
 
