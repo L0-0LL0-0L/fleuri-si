@@ -65,7 +65,7 @@ export function verifyExactTransaction(txB64: string, req: Requirement): { payer
   if (memo !== req.extra.memo) throw new Error("Payment is not bound to this job (memo mismatch).");
   // Authority must have signed already; fee payer slot is completed by the facilitator.
   if (tx.signatures[ai].every((b) => b === 0)) throw new Error("Payer signature missing.");
-  return { payer: authority, paymentHash: sha256Hex(msg.serialize()) };
+  return { payer: authority, paymentHash: sha256Hex(new Uint8Array(msg.serialize())) };
 }
 
 /** Confirms the settled transaction credited exactly `amount` of `asset` to the payTo ATA. */

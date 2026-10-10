@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { ComputeBudgetProgram, Keypair, PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { createTransferCheckedInstruction, getAssociatedTokenAddressSync } from "@solana/spl-token";
