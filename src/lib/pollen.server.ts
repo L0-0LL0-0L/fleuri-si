@@ -1,3 +1,4 @@
+import bs58 from "bs58";
 // Pollen: real Meteora Dynamic Fee Sharing vaults. Builds reviewed, simulated, unsigned SDK
 // transactions; the owner's wallet signs (plus a browser-generated base key for PDA creation).
 import { PublicKey, type Connection } from "@solana/web3.js";
@@ -5,7 +6,7 @@ import BN from "bn.js";
 import { DynamicFeeSharingClient, deriveFeeVaultPdaAddress } from "@meteora-ag/dynamic-fee-sharing-sdk";
 import { DynamicBondingCurveClient } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { DFS_PROGRAM_ID, POLLEN_MINTS, claimable, compareVault, dbcPartnerRouting, parseAmount, parseTerms, type PollenTermsT } from "@/pq/pollen";
+import { DFS_PROGRAM_ID, POLLEN_MINTS, claimable, pdaProblems, dfsEvents, compareVault, dbcPartnerRouting, parseAmount, parseTerms, type PollenTermsT } from "@/pq/pollen";
 import { isSolanaAddress } from "@/pq/registration";
 import { DBC_PROGRAM_ID } from "@/pq/passport";
 import * as sol from "./solana.server";
@@ -48,6 +49,7 @@ export async function readVault(conn: Connection, address: string) {
   const b = { totalFundedFee: v.totalFundedFee.toString(), totalClaimedFee: totalClaimed.toString(), totalUnclaimedFee: totalUnclaimed.toString() };
   return {
     address, mint, supported: !!supported, symbol: POLLEN_MINTS[mint]?.symbol ?? "unsupported", decimals: POLLEN_MINTS[mint]?.decimals ?? null,
+    feeVaultType: Number(v.feeVaultType), pdaIssues: pdaProblems({ feeVaultType: Number(v.feeVaultType), derived: deriveFeeVaultPdaAddress(v.base, v.tokenMint).toBase58(), address }),
     owner: v.owner.toBase58(), base: v.base.toBase58(), tokenVault: v.tokenVault.toBase58(), totalShare: Number(v.totalShare),
     funded: b.totalFundedFee, claimed: b.totalClaimedFee, unclaimed: b.totalUnclaimedFee, dust: (BigInt(b.totalFundedFee) - BigInt(b.totalClaimedFee) - BigInt(b.totalUnclaimedFee)).toString(), feePerShare: fps.toString(),
     recipients: users,
@@ -111,7 +113,7 @@ export async function routingFor(conn: Connection, launch: { pool: string; confi
   const dbc = new DynamicBondingCurveClient(conn, "confirmed");
   const cfg: any = await dbc.state.getPoolConfig(new PublicKey(launch.config));
   const pool = await sol.readPool(conn, launch.pool);
-  return { vault: v, ...dbcPartnerRouting({ feeClaimer: cfg.feeClaimer.toBase58(), quoteMint: cfg.quoteMint.toBase58(), collectFeeMode: Number(cfg.collectFeeMode), vault: vaultAddr, vaultMint: v.mint, signer, recipients: v.recipients.map((r) => r.address), migrated: pool?.isMigrated === 1 }) };
+  return { vault: v, ...dbcPartnerRouting({ feeClaimer: cfg.feeClaimer.toBase58(), quoteMint: cfg.quoteMint.toBase58(), collectFeeMode: Number(cfg.collectFeeMode), vault: vaultAddr, vaultMint: v.mint, signer, recipients: v.recipients.map((r) => r.address), migrated: pool?.isMigrated === 1, pdaIssues: v.pdaIssues }) };
 }
 
 export async function prepareRoute(savePrep: SavePrep, ownerId: string, input: { wallet: string; vault: string; launchId: string }) {
@@ -142,18 +144,21 @@ export async function confirmPollen(prep: any, tx: { slot: number; ixs: { progra
     must(await d.from("pollen_vaults").upsert({ address: v.address, cluster: prep.cluster, mint: v.mint, owner_wallet: v.owner, base: v.base, created_signature: prep.signature, recorded_by: ownerId, recipients: v.recipients.map((r) => ({ address: r.address, bps: r.share })) }, { onConflict: "address", ignoreDuplicates: true }));
     return done(`Vault ${v.address} created in slot ${tx.slot}; allocations match exactly and are now fixed.`);
   }
+  // Attribute only this transaction's own DFS events (emit_cpi), never a global counter delta.
+  const t = await conn.getTransaction(prep.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
+  if (!t?.meta) return { status: "pending" as const, detail: "Waiting for the confirmed transaction…" };
+  if (t.meta.err) throw new Error(`Transaction failed on chain: ${JSON.stringify(t.meta.err)}`);
+  const keys = t.transaction.message.getAccountKeys({ accountKeysFromLookups: t.meta.loadedAddresses ?? undefined });
+  const inner = (t.meta.innerInstructions ?? []).flatMap((g) => g.instructions).filter((ix) => keys.get(ix.programIdIndex)?.toBase58() === DFS_PROGRAM_ID).map((ix) => bs58.decode(ix.data));
+  const evs = dfsEvents(inner, (b) => bs58.encode(b)).filter((e) => e.vault === prep.subject);
   if (prep.kind === "pollen_fund" || prep.kind === "pollen_route") {
-    if (BigInt(v.funded) <= BigInt(prep.payload.fundedBefore)) return { status: "pending" as const, detail: "Waiting for the vault's funded total to update…" };
-    // fundFee moves min(max_amount, source balance); report what the chain actually moved, not the draft.
-    const t = await conn.getTransaction(prep.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
-    const bal = (a: any[] | null | undefined) => BigInt(a?.find((b: any) => b.mint === v.mint && b.owner === v.address)?.uiTokenAmount?.amount ?? "0");
-    const moved = t?.meta ? bal(t.meta.postTokenBalances) - bal(t.meta.preTokenBalances) : null;
-    return done(`Confirmed in slot ${tx.slot}: ${moved === null ? "amount unavailable from RPC" : `${moved} base units actually funded`}${prep.kind === "pollen_fund" && moved !== null && moved.toString() !== prep.payload.amount ? ` (requested ${prep.payload.amount}; the program caps at your balance)` : ""}. Vault total funded: ${v.funded}.`);
+    const f = evs.find((e) => e.kind === "fund");
+    const extra = prep.kind === "pollen_fund" && f && f.amount.toString() !== prep.payload.amount ? ` (requested ${prep.payload.amount}; the program funds min(requested, your balance))` : "";
+    return done(f ? `Confirmed in slot ${tx.slot}: this transaction funded ${f.amount} base units${extra}. Vault total now ${v.funded}.` : `Confirmed in slot ${tx.slot}; the funding event could not be decoded, so no amount is attributed to this transaction. Vault total now ${v.funded}.`);
   }
   if (prep.kind === "pollen_claim") {
-    const me = v.recipients.find((r) => r.address === prep.wallet);
-    if (!me || BigInt(me.claimed) <= BigInt(prep.payload.claimedBefore)) return { status: "pending" as const, detail: "Waiting for the claim to show in vault accounting…" };
-    return done(`Claimed in slot ${tx.slot}; your total claimed is ${me.claimed} base units.`);
+    const c = evs.find((e) => e.kind === "claim" && e.user === prep.wallet);
+    return done(c ? `Claimed ${c.amount} base units in slot ${tx.slot}.` : `Confirmed in slot ${tx.slot}; the claim event could not be decoded, so no amount is attributed.`);
   }
   throw new Error("Unknown Pollen action.");
 }

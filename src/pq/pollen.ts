@@ -37,6 +37,7 @@ export function parseAmount(text: string, decimals: number): bigint {
   if (f.length > decimals) throw new Error(`At most ${decimals} decimal places.`);
   const v = BigInt(w + f.padEnd(decimals, "0"));
   if (v <= 0n) throw new Error("Amount must be greater than zero.");
+  if (v > 0xffff_ffff_ffff_ffffn) throw new Error("Amount exceeds the u64 limit.");
   return v;
 }
 export const formatUnits = (v: bigint | string, decimals: number) => { const s = BigInt(v).toString().padStart(decimals + 1, "0"); const f = s.slice(-decimals).replace(/0+$/, ""); return s.slice(0, -decimals) + (f ? "." + f : ""); };
@@ -53,8 +54,39 @@ export function compareVault(onchain: { mint: string; owner: string; users: { ad
 
 export type RoutingEligibility = { eligible: boolean; reasons: string[] };
 /** DBC partner-fee routing into a vault is only possible when the immutable config already names the vault. */
-export function dbcPartnerRouting(p: { feeClaimer: string; quoteMint: string; collectFeeMode: number; vault: string; vaultMint: string; signer: string; recipients: string[]; migrated: boolean }): RoutingEligibility {
-  const reasons: string[] = [];
+/** Exact two-decimal percent -> bps ("33.33" -> 3333). Rejects more precision instead of rounding. */
+export function percentToBps(text: string): number {
+  const t = text.trim();
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(t)) throw new Error("Use a percentage with at most two decimals.");
+  const [w, f = ""] = t.split("."); const bps = Number(w) * 100 + Number(f.padEnd(2, "0"));
+  if (bps <= 0 || bps > 10_000) throw new Error("Each share must be between 0.01% and 100%.");
+  return bps;
+}
+
+/** Vault eligibility as a DBC source-fee target: only PDA vaults derived from (base, mint). */
+export function pdaProblems(v: { feeVaultType: number; derived: string; address: string }): string[] {
+  if (v.feeVaultType !== 1) return ["This is a non-PDA (keypair) vault: it can be funded manually and claimed, but cannot receive DBC partner fees."];
+  if (v.derived !== v.address) return ["Vault address does not equal the PDA derived from its base and mint."];
+  return [];
+}
+
+const EVENT_IX_TAG = [228, 69, 165, 46, 81, 203, 154, 29];
+const EVT_FUND = [15, 14, 233, 140, 19, 195, 163, 7], EVT_CLAIM = [6, 36, 88, 232, 53, 193, 253, 98];
+/** Parses Anchor emit_cpi DFS events from a transaction's inner instructions (self-CPI data). */
+export function dfsEvents(inner: Uint8Array[], b58: (b: Uint8Array) => string) {
+  const out: ({ kind: "fund"; vault: string; amount: bigint } | { kind: "claim"; vault: string; user: string; amount: bigint })[] = [];
+  const eq = (d: Uint8Array, o: number, t: number[]) => t.every((x, i) => d[o + i] === x);
+  for (const d of inner) {
+    if (d.length < 16 || !eq(d, 0, EVENT_IX_TAG)) continue;
+    const dv = new DataView(d.buffer, d.byteOffset, d.length);
+    if (eq(d, 8, EVT_FUND) && d.length >= 16 + 72) out.push({ kind: "fund", vault: b58(d.subarray(48, 80)), amount: dv.getBigUint64(80, true) });
+    else if (eq(d, 8, EVT_CLAIM) && d.length >= 16 + 73) out.push({ kind: "claim", vault: b58(d.subarray(16, 48)), user: b58(d.subarray(48, 80)), amount: dv.getBigUint64(81, true) });
+  }
+  return out;
+}
+
+export function dbcPartnerRouting(p: { feeClaimer: string; quoteMint: string; collectFeeMode: number; vault: string; vaultMint: string; signer: string; recipients: string[]; migrated: boolean; pdaIssues?: string[] }): RoutingEligibility {
+  const reasons: string[] = [...(p.pdaIssues ?? [])];
   if (p.feeClaimer !== p.vault) reasons.push("The DBC config's fee claimer is not this vault. Configs are immutable, so an existing pool cannot be retrofitted; a new config must name the vault.");
   if (p.quoteMint !== p.vaultMint) reasons.push("The vault token differs from the pool's quote token.");
   if (p.collectFeeMode !== 0) reasons.push("The pool does not collect fees in the quote token only.");
