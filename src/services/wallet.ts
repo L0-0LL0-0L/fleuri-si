@@ -19,7 +19,10 @@ export function getProvider(kind: WalletKind): InjectedProvider | null {
     const p = w.phantom?.solana ?? (w.solana?.isPhantom ? w.solana : null);
     return p ?? null;
   }
-  return w.solflare?.isSolflare ? w.solflare : null;
+  // Solflare injects window.solflare, but some versions only set window.solana.
+  if (w.solflare?.isSolflare) return w.solflare;
+  if (w.solana?.isSolflare) return w.solana;
+  return null;
 }
 
 export const WALLET_URLS: Record<WalletKind, string> = {
