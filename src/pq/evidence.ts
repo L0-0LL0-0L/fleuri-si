@@ -7,6 +7,7 @@ import { canonicalize, sha256Hex, utf8 } from "./canonical";
 import { DBC_PROGRAM_ID, verifyPassportOffline, type Check, type PassportManifest, type SignedPassportT } from "./passport";
 import { GENESIS, anchorMemo, validateIdentityProof, type Cluster } from "./registration";
 import type { ReadTx } from "./chain-read";
+import { decodeInitSpl } from "./dbc-ix";
 
 export const BUNDLE_FORMAT = "fleuri.evidence-bundle/v1";
 export const MAX_BUNDLE_BYTES = 120_000;
@@ -43,6 +44,10 @@ export interface EvidenceReader {
   metadata(mint: string): Promise<{ name: string; symbol: string; uri: string; isMutable: boolean; updateAuthority: string } | null>;
   mint(mint: string): Promise<{ decimals: number; supply: bigint; mintAuthority: string | null; freezeAuthority: string | null }>;
   derivePool(mint: string, config: string): string;
+  /** DBC-owned VirtualPool or null when absent; throws when owned by another program. */
+  pool(address: string): Promise<{ config: string; baseMint: string; creator: string } | null>;
+  /** Canonical derived accounts for the init instruction (metadata PDA, pool authority, vaults, event authority). */
+  derived(mint: string, pool: string): { mintMetadata: string; poolAuthority: string; baseVault: string; quoteVault: string; eventAuthority: string };
   ipfs(uri: string, maxBytes: number): Promise<Uint8Array>;
 }
 
@@ -55,10 +60,22 @@ export function configTermsMatch(r: { problems: string[]; terms: any; snapshot: 
   return r.problems.length === 0 && canonicalize(expected) === canonicalize(got);
 }
 
-const contains = (hay: Uint8Array, needle: Uint8Array) => {
-  outer: for (let i = 0; i + needle.length <= hay.length; i++) { for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer; return true; }
-  return false;
-};
+const METAPLEX = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
+const TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const SOL = "So11111111111111111111111111111111111111112";
+/** Exact semantic check of the launch transaction. Returns problems; empty = matches. */
+export function launchIxProblems(tx: ReadTx, m: PassportManifest, metadataUri: string, d: ReturnType<EvidenceReader["derived"]>): string[] {
+  if (tx.err) return ["Transaction failed on chain."];
+  const dbc = tx.ixs.filter((x) => x.program === DBC_PROGRAM_ID);
+  if (dbc.length !== 1) return [`Expected exactly one DBC instruction, found ${dbc.length}.`];
+  let ix; try { ix = decodeInitSpl(dbc[0].data, dbc[0].accounts); } catch (e) { return [(e as Error).message]; }
+  const a = ix.accounts; const p: string[] = [];
+  const want: [string, string, string][] = [["config", a.config, m.config.address], ["creator", a.creator, m.creatorWallet], ["base_mint", a.base_mint, m.token.baseMint], ["quote_mint", a.quote_mint, SOL], ["pool", a.pool, m.pool.address], ["pool_authority", a.pool_authority, d.poolAuthority], ["base_vault", a.base_vault, d.baseVault], ["quote_vault", a.quote_vault, d.quoteVault], ["mint_metadata", a.mint_metadata, d.mintMetadata], ["metadata_program", a.metadata_program, METAPLEX], ["token_quote_program", a.token_quote_program, TOKEN], ["token_program", a.token_program, TOKEN], ["system_program", a.system_program, SYSTEM_PROGRAM], ["event_authority", a.event_authority, d.eventAuthority], ["program", a.program, DBC_PROGRAM_ID]];
+  for (const [k, got, exp] of want) if (got !== exp) p.push(`${k} is ${got}, expected ${exp}`);
+  if (ix.name !== m.token.name) p.push("Decoded token name differs."); if (ix.symbol !== m.token.symbol) p.push("Decoded symbol differs."); if (ix.uri !== metadataUri) p.push("Decoded metadata URI differs.");
+  for (const s of [m.creatorWallet, m.token.baseMint, a.payer]) if (!tx.signers.includes(s)) p.push(`Required signer ${s} did not sign.`);
+  return p;
+}
 
 export function parseBundle(raw: unknown): EvidenceBundleT {
   if (utf8(canonicalize(raw)).length > MAX_BUNDLE_BYTES) throw new Error("Evidence bundle too large.");
@@ -130,11 +147,20 @@ export async function verifyBundle(raw: unknown, reader: EvidenceReader): Promis
       if (r.status === "missing") add("transaction", "Launch transaction", "unavailable", "Launch transaction not available from this RPC.");
       else if (r.status === "unsupported") add("transaction", "Launch transaction", "unavailable", r.reason);
       else {
-        const ix = r.tx.ixs.find((x) => x.program === DBC_PROGRAM_ID && x.accounts.includes(m.token.baseMint) && x.accounts.includes(pool) && x.accounts.includes(m.config.address));
-        const ok = !r.tx.err && r.tx.signers.includes(m.creatorWallet) && r.tx.signers.includes(m.token.baseMint) && !!ix && contains(ix.data, utf8(b.metadata.uri));
-        add("transaction", "Launch transaction", ok ? "pass" : "fail", ok ? `Creator-signed DBC instruction creating this mint, config and pool with this metadata URI, confirmed in slot ${r.tx.slot}.` : "Transaction instructions, signers or metadata URI do not match the passport.");
+        const probs = launchIxProblems(r.tx, m, b.metadata.uri, reader.derived(m.token.baseMint, pool));
+        add("transaction", "Launch transaction", probs.length ? "fail" : "pass", probs.length ? probs.slice(0, 3).join("; ") : `Decoded initialize_virtual_pool_with_spl_token: creator, mint, SOL quote, config, pool, derived vaults/metadata and name/symbol/URI all match; confirmed in slot ${r.tx.slot}.`);
       }
     } catch (e) { add("transaction", "Launch transaction", "unavailable", (e as Error).message.slice(0, 160)); }
+  }
+
+  if (!net) chainSkip("poolstate", "DBC pool account");
+  else {
+    try {
+      const ps = await reader.pool(pool);
+      if (!ps) add("poolstate", "DBC pool account", "fail", "No pool account exists at the signed address.");
+      else if (ps.config !== m.config.address || ps.baseMint !== m.token.baseMint) add("poolstate", "DBC pool account", "fail", "Pool account links to a different mint or config.");
+      else add("poolstate", "DBC pool account", "pass", ps.creator === m.creatorWallet ? "DBC-owned pool links this mint and config; creator unchanged." : `DBC-owned pool links this mint and config. Pool creator has since changed to ${ps.creator}; the original signed authorship is unaffected.`);
+    } catch (e) { const msg = (e as Error).message; add("poolstate", "DBC pool account", /not owned/i.test(msg) ? "fail" : "unavailable", msg.slice(0, 160)); }
   }
 
   if (!net) chainSkip("terms", "Signed economics vs config");
@@ -171,9 +197,22 @@ export async function gatewayFetch(gateway: string, uri: string, maxBytes: numbe
   const cid = uri.match(/(?:^ipfs:\/\/|\/ipfs\/)([A-Za-z0-9]{46,100})$/)?.[1];
   if (!cid) throw new Error("Not an immutable IPFS URI.");
   const g = new URL(gateway); if (g.protocol !== "https:" && g.hostname !== "localhost") throw new Error("Gateway must be https.");
-  const r = await fetch(g.href.replace(/\/?$/, "/") + cid, { signal: AbortSignal.timeout(20_000) });
+  if (g.username || g.password) throw new Error("Gateway URL must not contain credentials.");
+  const r = await fetch(g.origin + g.pathname.replace(/\/?$/, "/") + cid, { signal: AbortSignal.timeout(20_000), credentials: "omit" });
   if (!r.ok) throw new Error(`gateway returned ${r.status}`);
-  const buf = new Uint8Array(await r.arrayBuffer());
-  if (buf.length > maxBytes) throw new Error("Document too large.");
-  return buf;
+  return readBounded(r, maxBytes);
+}
+
+/** Reads a response body while streaming, cancelling as soon as it exceeds maxBytes. */
+export async function readBounded(r: Response, maxBytes: number) {
+  const len = Number(r.headers.get("content-length") ?? "0");
+  if (len > maxBytes) { await r.body?.cancel(); throw new Error("Document too large."); }
+  if (!r.body) return new Uint8Array(0);
+  const reader = r.body.getReader(); const parts: Uint8Array[] = []; let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read(); if (done) break;
+    n += value.length; if (n > maxBytes) { await reader.cancel(); throw new Error("Document too large."); }
+    parts.push(value);
+  }
+  const out = new Uint8Array(n); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; } return out;
 }
