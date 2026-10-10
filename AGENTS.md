@@ -18,3 +18,4 @@
 - All colors/fonts come from tokens and `@utility` classes in `src/styles.css`; flower motion is CSS keyed to a wall-clock `--fl-delay` so every tile sways in phase.
 
 - Meteora DBC configs are created through `/launch-config` as an owner-reviewed, wallet-signed `chain_preparations` kind `config`; the config key is browser-generated and confirmation compares the on-chain account to the reviewed draft — no custodial wallet or silent recipient.
+- The client build must never stub Node builtins: rolldown's native resolver externalizes `node:buffer` before `resolve.alias` applies, so `vite.config.ts` pins `buffer`/`node:buffer` to the real feross `buffer` package with a pre `resolveId` hook — without it safe-buffer/bs58/Solana SDK crash on hydration in production.
