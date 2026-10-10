@@ -57,7 +57,7 @@ function Botanist() {
         new TransactionInstruction({ programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"), keys: [], data: new TextEncoder().encode(req.extra.memo) as any }));
       setBusy("Approve in your wallet…");
       const signed = await walletSignTransaction(kind, tx);
-      const header = encodePaymentSignatureHeader({ x402Version: 2, resource: { url: location.origin + ENDPOINT, description: "Botanist field report", mimeType: "application/json" }, accepted: req, payload: { transaction: b64(signed.serialize({ requireAllSignatures: false, verifySignatures: false })) } } as any);
+      const header = encodePaymentSignatureHeader({ x402Version: 2, resource: { url: location.origin + ENDPOINT, description: "Botanist field report", mimeType: "application/json" }, accepted: req, payload: { transaction: b64(new Uint8Array(signed.serialize({ requireAllSignatures: false, verifySignatures: false }))) } } as any);
       setBusy("Settling and confirming on chain…");
       await finish(post({ jobId: quote.jobId, token: quote.token }, { "PAYMENT-SIGNATURE": header }));
     } catch (e) { setMsg((e as Error).message); } finally { setBusy(null); }

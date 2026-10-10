@@ -15,7 +15,7 @@ function build(o: { amount?: bigint; mint?: string; to?: string; memo?: string; 
     new TransactionInstruction({ programId: MEMO, keys: [], data: Buffer.from(o.memo ?? req.extra.memo) }));
   if (o.extra) tx.add(o.extra);
   if (o.sign !== false) tx.partialSign(auth);
-  return b64(tx.serialize({ requireAllSignatures: false, verifySignatures: false }));
+  return b64(new Uint8Array(tx.serialize({ requireAllSignatures: false, verifySignatures: false })));
 }
 
 describe("x402 exact SVM verification", () => {
