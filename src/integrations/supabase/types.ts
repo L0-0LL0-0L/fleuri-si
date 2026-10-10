@@ -120,10 +120,12 @@ export type Database = {
         Row: {
           amount: number
           asset: string
+          candidate_signature: string | null
           capability_hash: string
           client_hash: string
           created_at: string
           error: string | null
+          facilitator: string | null
           fee_payer: string | null
           id: string
           memo: string
@@ -147,10 +149,12 @@ export type Database = {
         Insert: {
           amount: number
           asset: string
+          candidate_signature?: string | null
           capability_hash: string
           client_hash: string
           created_at?: string
           error?: string | null
+          facilitator?: string | null
           fee_payer?: string | null
           id?: string
           memo: string
@@ -174,10 +178,12 @@ export type Database = {
         Update: {
           amount?: number
           asset?: string
+          candidate_signature?: string | null
           capability_hash?: string
           client_hash?: string
           created_at?: string
           error?: string | null
+          facilitator?: string | null
           fee_payer?: string | null
           id?: string
           memo?: string
@@ -1031,10 +1037,50 @@ export type Database = {
         Returns: {
           amount: number
           asset: string
+          candidate_signature: string | null
           capability_hash: string
           client_hash: string
           created_at: string
           error: string | null
+          facilitator: string | null
+          fee_payer: string | null
+          id: string
+          memo: string
+          mint: string
+          network: string
+          pay_to: string
+          payer: string | null
+          payment_hash: string | null
+          payment_tx_b64: string | null
+          quote_expires_at: string
+          report: Json | null
+          report_digest: string | null
+          request_hash: string
+          resource: string | null
+          settle_signature: string | null
+          settled_at: string | null
+          settled_slot: number | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "botanist_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      botanist_mark_failed: {
+        Args: { _id: string; _reason: string }
+        Returns: {
+          amount: number
+          asset: string
+          candidate_signature: string | null
+          capability_hash: string
+          client_hash: string
+          created_at: string
+          error: string | null
+          facilitator: string | null
           fee_payer: string | null
           id: string
           memo: string
@@ -1067,10 +1113,50 @@ export type Database = {
         Returns: {
           amount: number
           asset: string
+          candidate_signature: string | null
           capability_hash: string
           client_hash: string
           created_at: string
           error: string | null
+          facilitator: string | null
+          fee_payer: string | null
+          id: string
+          memo: string
+          mint: string
+          network: string
+          pay_to: string
+          payer: string | null
+          payment_hash: string | null
+          payment_tx_b64: string | null
+          quote_expires_at: string
+          report: Json | null
+          report_digest: string | null
+          request_hash: string
+          resource: string | null
+          settle_signature: string | null
+          settled_at: string | null
+          settled_slot: number | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "botanist_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      botanist_record_candidate: {
+        Args: { _id: string; _sig: string }
+        Returns: {
+          amount: number
+          asset: string
+          candidate_signature: string | null
+          capability_hash: string
+          client_hash: string
+          created_at: string
+          error: string | null
+          facilitator: string | null
           fee_payer: string | null
           id: string
           memo: string
@@ -1103,10 +1189,12 @@ export type Database = {
         Returns: {
           amount: number
           asset: string
+          candidate_signature: string | null
           capability_hash: string
           client_hash: string
           created_at: string
           error: string | null
+          facilitator: string | null
           fee_payer: string | null
           id: string
           memo: string
