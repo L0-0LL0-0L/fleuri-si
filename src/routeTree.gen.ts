@@ -24,6 +24,7 @@ import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as AHandleRouteImport } from './routes/a.$handle'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
 import { Route as PassportHashRouteImport } from './routes/passport.$hash'
+import { Route as TMintRouteImport } from './routes/t.$mint'
 import { Route as ApiPublicGardenTickRouteImport } from './routes/api/public/garden/tick'
 
 const IndexRoute = IndexRouteImport.update({
@@ -101,6 +102,11 @@ const PassportHashRoute = PassportHashRouteImport.update({
   path: '/passport/$hash',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TMintRoute = TMintRouteImport.update({
+  id: '/t/$mint',
+  path: '/t/$mint',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicGardenTickRoute = ApiPublicGardenTickRouteImport.update({
   id: '/api/public/garden/tick',
   path: '/api/public/garden/tick',
@@ -123,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
+  '/t/$mint': typeof TMintRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRoutesByTo {
@@ -141,6 +148,7 @@ export interface FileRoutesByTo {
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
+  '/t/$mint': typeof TMintRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRoutesById {
@@ -160,6 +168,7 @@ export interface FileRoutesById {
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
+  '/t/$mint': typeof TMintRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
 }
 export interface FileRouteTypes {
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/c/$symbol'
     | '/passport/$hash'
+    | '/t/$mint'
     | '/api/public/garden/tick'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -198,6 +208,7 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/c/$symbol'
     | '/passport/$hash'
+    | '/t/$mint'
     | '/api/public/garden/tick'
   id:
     | '__root__'
@@ -216,6 +227,7 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/c/$symbol'
     | '/passport/$hash'
+    | '/t/$mint'
     | '/api/public/garden/tick'
   fileRoutesById: FileRoutesById
 }
@@ -235,6 +247,7 @@ export interface RootRouteChildren {
   AHandleRoute: typeof AHandleRoute
   CSymbolRoute: typeof CSymbolRoute
   PassportHashRoute: typeof PassportHashRoute
+  TMintRoute: typeof TMintRoute
   ApiPublicGardenTickRoute: typeof ApiPublicGardenTickRoute
 }
 
@@ -345,6 +358,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PassportHashRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/t/$mint': {
+      id: '/t/$mint'
+      path: '/t/$mint'
+      fullPath: '/t/$mint'
+      preLoaderRoute: typeof TMintRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/garden/tick': {
       id: '/api/public/garden/tick'
       path: '/api/public/garden/tick'
@@ -371,6 +391,7 @@ const rootRouteChildren: RootRouteChildren = {
   AHandleRoute: AHandleRoute,
   CSymbolRoute: CSymbolRoute,
   PassportHashRoute: PassportHashRoute,
+  TMintRoute: TMintRoute,
   ApiPublicGardenTickRoute: ApiPublicGardenTickRoute,
 }
 export const routeTree = rootRouteImport
