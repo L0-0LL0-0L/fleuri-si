@@ -116,6 +116,84 @@ export type Database = {
         }
         Relationships: []
       }
+      botanist_jobs: {
+        Row: {
+          amount: number
+          asset: string
+          capability_hash: string
+          client_hash: string
+          created_at: string
+          error: string | null
+          id: string
+          memo: string
+          mint: string
+          network: string
+          pay_to: string
+          payer: string | null
+          payment_hash: string | null
+          payment_tx_b64: string | null
+          quote_expires_at: string
+          report: Json | null
+          report_digest: string | null
+          request_hash: string
+          settle_signature: string | null
+          settled_at: string | null
+          settled_slot: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          asset: string
+          capability_hash: string
+          client_hash: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          memo: string
+          mint: string
+          network: string
+          pay_to: string
+          payer?: string | null
+          payment_hash?: string | null
+          payment_tx_b64?: string | null
+          quote_expires_at: string
+          report?: Json | null
+          report_digest?: string | null
+          request_hash: string
+          settle_signature?: string | null
+          settled_at?: string | null
+          settled_slot?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          asset?: string
+          capability_hash?: string
+          client_hash?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          memo?: string
+          mint?: string
+          network?: string
+          pay_to?: string
+          payer?: string | null
+          payment_hash?: string | null
+          payment_tx_b64?: string | null
+          quote_expires_at?: string
+          report?: Json | null
+          report_digest?: string | null
+          request_hash?: string
+          settle_signature?: string | null
+          settled_at?: string | null
+          settled_slot?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       chain_preparations: {
         Row: {
           cluster: string
@@ -567,6 +645,44 @@ export type Database = {
         }
         Relationships: []
       }
+      passport_observations: {
+        Row: {
+          digest: string
+          facts: Json
+          id: number
+          kind: string
+          launch_id: string
+          observed_at: string
+          observed_slot: number
+        }
+        Insert: {
+          digest: string
+          facts: Json
+          id?: never
+          kind: string
+          launch_id: string
+          observed_at?: string
+          observed_slot: number
+        }
+        Update: {
+          digest?: string
+          facts?: Json
+          id?: never
+          kind?: string
+          launch_id?: string
+          observed_at?: string
+          observed_slot?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "passport_observations_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       passports: {
         Row: {
           base_mint: string
@@ -616,6 +732,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pollen_associations: {
+        Row: {
+          created_at: string
+          id: string
+          launch_id: string
+          owner_id: string
+          vault: string
+          wallet: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          launch_id: string
+          owner_id: string
+          vault: string
+          wallet: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          launch_id?: string
+          owner_id?: string
+          vault?: string
+          wallet?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pollen_associations_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pollen_associations_vault_fkey"
+            columns: ["vault"]
+            isOneToOne: false
+            referencedRelation: "pollen_vaults"
+            referencedColumns: ["address"]
+          },
+        ]
+      }
+      pollen_vaults: {
+        Row: {
+          address: string
+          base: string | null
+          cluster: string
+          created_at: string
+          created_signature: string | null
+          mint: string
+          owner_wallet: string
+          recipients: Json
+          recorded_by: string | null
+        }
+        Insert: {
+          address: string
+          base?: string | null
+          cluster: string
+          created_at?: string
+          created_signature?: string | null
+          mint: string
+          owner_wallet: string
+          recipients: Json
+          recorded_by?: string | null
+        }
+        Update: {
+          address?: string
+          base?: string | null
+          cluster?: string
+          created_at?: string
+          created_signature?: string | null
+          mint?: string
+          owner_wallet?: string
+          recipients?: Json
+          recorded_by?: string | null
+        }
+        Relationships: []
       }
       pq_challenges: {
         Row: {
@@ -820,6 +1014,114 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      botanist_claim_payment: {
+        Args: {
+          _cap: string
+          _id: string
+          _payer: string
+          _payment_hash: string
+          _tx: string
+        }
+        Returns: {
+          amount: number
+          asset: string
+          capability_hash: string
+          client_hash: string
+          created_at: string
+          error: string | null
+          id: string
+          memo: string
+          mint: string
+          network: string
+          pay_to: string
+          payer: string | null
+          payment_hash: string | null
+          payment_tx_b64: string | null
+          quote_expires_at: string
+          report: Json | null
+          report_digest: string | null
+          request_hash: string
+          settle_signature: string | null
+          settled_at: string | null
+          settled_slot: number | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "botanist_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      botanist_mark_settled: {
+        Args: { _id: string; _sig: string; _slot: number }
+        Returns: {
+          amount: number
+          asset: string
+          capability_hash: string
+          client_hash: string
+          created_at: string
+          error: string | null
+          id: string
+          memo: string
+          mint: string
+          network: string
+          pay_to: string
+          payer: string | null
+          payment_hash: string | null
+          payment_tx_b64: string | null
+          quote_expires_at: string
+          report: Json | null
+          report_digest: string | null
+          request_hash: string
+          settle_signature: string | null
+          settled_at: string | null
+          settled_slot: number | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "botanist_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      botanist_store_report: {
+        Args: { _digest: string; _id: string; _report: Json }
+        Returns: {
+          amount: number
+          asset: string
+          capability_hash: string
+          client_hash: string
+          created_at: string
+          error: string | null
+          id: string
+          memo: string
+          mint: string
+          network: string
+          pay_to: string
+          payer: string | null
+          payment_hash: string | null
+          payment_tx_b64: string | null
+          quote_expires_at: string
+          report: Json | null
+          report_digest: string | null
+          request_hash: string
+          settle_signature: string | null
+          settled_at: string | null
+          settled_slot: number | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "botanist_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       claim_chain_submission: {
         Args: {
           _hash: string
