@@ -86,5 +86,5 @@ export function UpgradeRow({ k, info, reason, cluster }: { k: string; info: any;
   if (ok && info.immutable === true) return <Row k={k} tone="good">Immutable — no upgrade authority</Row>;
   if (ok && info.immutable === false && typeof info.authority === "string" && info.authority)
     return <Row k={k} tone="warn">Upgradeable by <A a={info.authority} cluster={cluster} /></Row>;
-  return <Row k={k} tone="na">{reason || "Unavailable — upgrade status could not be decoded."}</Row>;
+  return <Row k={k} tone="na">{info ? "Unavailable — the recorded upgrade status is malformed." : reason || "Unavailable — upgrade status could not be decoded."}</Row>;
 }
