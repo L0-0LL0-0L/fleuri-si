@@ -19,7 +19,10 @@ export function getProvider(kind: WalletKind): InjectedProvider | null {
     const p = w.phantom?.solana ?? (w.solana?.isPhantom ? w.solana : null);
     return p ?? null;
   }
-  return w.solflare?.isSolflare ? w.solflare : null;
+  // Solflare injects window.solflare, but some versions only set window.solana.
+  if (w.solflare?.isSolflare) return w.solflare;
+  if (w.solana?.isSolflare) return w.solana;
+  return null;
 }
 
 export const WALLET_URLS: Record<WalletKind, string> = {
@@ -60,12 +63,21 @@ export async function verifyEd25519(address: string, message: Uint8Array, signat
   }
 }
 
+/** Reads the public key after connect(); some wallets populate it a beat later. */
+async function readPublicKey(p: InjectedProvider): Promise<string> {
+  for (let i = 0; i < 10; i++) {
+    const pk = p.publicKey?.toString();
+    if (pk) return pk;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  throw new Error("The wallet did not share a public key. Unlock it and try again.");
+}
+
 export async function connectAndSign(kind: WalletKind, ownerId: string) {
   const p = getProvider(kind);
   if (!p) throw new Error(`${kind === "phantom" ? "Phantom" : "Solflare"} is not installed in this browser.`);
   const res = await p.connect();
-  const pk = (res && "publicKey" in res ? res.publicKey : p.publicKey)?.toString();
-  if (!pk) throw new Error("The wallet did not share a public key.");
+  const pk = (res && "publicKey" in res ? res.publicKey?.toString() : undefined) ?? (await readPublicKey(p));
   const text = `Fleuri sandbox sign-in\nworkspace: ${ownerId}\nnonce: ${crypto.randomUUID()}\nThis signature links your wallet to a sandbox session. It costs nothing and moves no funds.`;
   const msg = new TextEncoder().encode(text);
   const out = await p.signMessage(msg, "utf8");
@@ -87,9 +99,7 @@ export async function connectWallet(kind: WalletKind) {
   const p = getProvider(kind);
   if (!p) throw new Error(`${kind === "phantom" ? "Phantom" : "Solflare"} is not installed in this browser.`);
   const res = await p.connect();
-  const pk = (res && "publicKey" in res ? res.publicKey : p.publicKey)?.toString();
-  if (!pk) throw new Error("The wallet did not share a public key.");
-  return pk;
+  return (res && "publicKey" in res ? res.publicKey?.toString() : undefined) ?? (await readPublicKey(p));
 }
 
 /** Asks the wallet to sign exact message bytes (Ed25519). */

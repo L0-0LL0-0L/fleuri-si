@@ -43,8 +43,12 @@ export function Panel({ title, children, className }: { title: string; children:
 export function useWallets() {
   const [avail, setAvail] = useState<Record<WalletKind, boolean>>({ phantom: false, solflare: false });
   useEffect(() => {
-    const t = setTimeout(() => setAvail({ phantom: !!getProvider("phantom"), solflare: !!getProvider("solflare") }), 300);
-    return () => clearTimeout(t);
+    // Wallets inject asynchronously; poll for a few seconds so late injectors are found.
+    const check = () => setAvail({ phantom: !!getProvider("phantom"), solflare: !!getProvider("solflare") });
+    check();
+    const t = setInterval(check, 500);
+    const stop = setTimeout(() => clearInterval(t), 5000);
+    return () => { clearInterval(t); clearTimeout(stop); };
   }, []);
   return avail;
 }
@@ -91,7 +95,7 @@ export async function signSubmitConfirm(
 
 export function WalletButtons({ avail, busy, disabled, action, onPick }: { avail: Record<WalletKind, boolean>; busy: string | null; disabled?: boolean; action: string; onPick: (k: WalletKind) => void }) {
   return <div className="flex flex-wrap items-center gap-2">
-    {(["phantom", "solflare"] as const).map(k => <button key={k} type="button" className="btn btn-red" disabled={!avail[k] || !!busy || disabled} onClick={() => onPick(k)}>{busy ?? `${action} ${k === "phantom" ? "Phantom" : "Solflare"}`}</button>)}
+    {(["phantom", "solflare"] as const).map(k => <button key={k} type="button" className="btn btn-red" disabled={!avail[k] || !!busy || disabled} onClick={() => onPick(k)}>{busy && avail[k] ? busy : `${action} ${k === "phantom" ? "Phantom" : "Solflare"}`}</button>)}
     {!avail.phantom && !avail.solflare && <p className="text-xs text-ink-soft">No Solana wallet detected. Install Phantom or Solflare, then reload. Fleuri never asks for a seed phrase.</p>}
   </div>;
 }

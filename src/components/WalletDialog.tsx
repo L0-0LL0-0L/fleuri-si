@@ -11,10 +11,13 @@ export function WalletDialog() {
   const [busy, setBusy] = useState<WalletKind | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    if (ui.walletOpen) {
-      setErr(null);
-      setAvail({ phantom: !!getProvider("phantom"), solflare: !!getProvider("solflare") });
-    }
+    if (!ui.walletOpen) return;
+    setErr(null);
+    const check = () => setAvail({ phantom: !!getProvider("phantom"), solflare: !!getProvider("solflare") });
+    check();
+    const t = setInterval(check, 500);
+    const stop = setTimeout(() => clearInterval(t), 5000);
+    return () => { clearInterval(t); clearTimeout(stop); };
   }, [ui.walletOpen]);
   const owner = state?.owner;
 
