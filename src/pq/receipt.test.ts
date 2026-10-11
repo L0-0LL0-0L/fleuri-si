@@ -9,21 +9,8 @@ import { RECEIPT_BUNDLE_FORMAT, buildManifest, receiptHash, receiptMemo, receipt
 import { buildSeed } from "@/domain/seed";
 import { bundleFromStored, contentHash, freezeMarket, inputHash, makeInput, outputHash, runTrial, snapshotPolicy } from "@/domain/greenhouse";
 
-const DOMAIN = "https://fleuri.test";
+import { DOMAIN, identityFor, runFixture } from "./receipt-fixtures";
 let kp: PqKeypair, wallet: Keypair, identity: IdentityProof, run: any;
-export function identityFor(k: PqKeypair, w: Keypair, cluster: "devnet" | "mainnet-beta" = "devnet"): IdentityProof {
-  const owner = "11111111-1111-4111-8111-111111111111", now = Date.parse("2026-10-01T00:00:00Z");
-  const fields = { domain: DOMAIN, cluster, genesisHash: GENESIS[cluster], ownerId: owner, wallet: w.publicKey.toBase58(), pqKeyHash: pqKeyHash(k.publicKey), challengeId: "22222222-2222-4222-8222-222222222222", nonce: "a".repeat(32), issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + CHALLENGE_TTL_MS).toISOString() };
-  const statement = buildStatement(fields); const msg = utf8(statement);
-  return { owner_id: owner, wallet: fields.wallet, cluster, genesis_hash: GENESIS[cluster], public_key: b64(k.publicKey), key_hash: fields.pqKeyHash, statement, registration_hash: registrationHash(statement), wallet_signature: b64(ed25519.sign(msg, w.secretKey.subarray(0, 32))), pq_signature: b64(pqSign(k.secretKey, msg, CTX_REGISTRATION)) };
-}
-export function runFixture() {
-  const s = buildSeed(1_800_000_000_000);
-  const agents = Object.values(s.agents).slice(0, 2);
-  const input = makeInput({ agentIds: agents.map((a) => a.id), seed: 9, repetitions: 1, cycles: 5, scenarios: ["control", "sell_pressure"] }, freezeMarket(s, 1_800_000_000_000), agents.map(snapshotPolicy));
-  const out = runTrial(input); const ih = inputHash(input), oh = outputHash(out);
-  return { id: "33333333-3333-4333-8333-333333333333", created_at: "2026-10-11T00:00:00Z", finished_at: "2026-10-11T00:00:02Z", input, output: out, input_hash: ih, output_hash: oh, content_hash: contentHash(ih, oh) };
-}
 function make(over: { run?: any; id?: IdentityProof } = {}) {
   const r = over.run ?? run, idt = over.id ?? identity;
   const experiment = bundleFromStored(r);
