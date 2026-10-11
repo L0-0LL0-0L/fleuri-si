@@ -43,7 +43,7 @@ export function AttachEvidence({ proposalId, originId, runs, onDone }: { proposa
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   if (!originId) return <p className="text-xs text-ink-soft">The drafting agent is unknown, so no trial can be attached.</p>;
-  if (!eligible.length) return <p className="text-xs"><Link to="/greenhouse" search={{ agent: undefined }} className="underline">Run a greenhouse trial</Link> that includes this agent to attach evidence.</p>;
+  if (!eligible.length) return <p className="text-xs"><Link to="/greenhouse" className="underline">Run a greenhouse trial</Link> that includes this agent to attach evidence.</p>;
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <select aria-label="Trial to attach" className="field" value={run} onChange={(e) => setRun(e.target.value)}>
