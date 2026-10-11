@@ -90,11 +90,11 @@ describe("research receipts", () => {
   it("anchor check never trusts the hint and distinguishes missing/failed/wrong memo", async () => {
     const b = make(); const m = b.manifest, h = b.manifestHash;
     const memo = (s: string) => ({ program: "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr", data: utf8(s) });
-    const reader = (tx: any, g = GENESIS.devnet) => ({ genesis: async () => g, tx: async () => tx });
+    const reader = (tx: any, g: string = GENESIS.devnet) => ({ genesis: async () => g, tx: async () => tx });
     const sig = { signature: "5".repeat(88) };
     const ok = { status: "ok", tx: { slot: 9, err: null, signers: [m.issuer.wallet], ixs: [memo(receiptMemo(h))] } };
     expect((await verifyAnchor(m, h, sig, reader(ok) as any)).status).toBe("pass");
-    expect((await verifyAnchor(m, h, sig, reader(ok, GENESIS["mainnet-beta"]) as any)).status).toBe("fail");
+    expect((await verifyAnchor(m, h, sig, reader(ok, GENESIS["mainnet-beta"] as string) as any)).status).toBe("fail");
     expect((await verifyAnchor(m, h, sig, reader({ status: "missing" }) as any)).status).toBe("unavailable");
     expect((await verifyAnchor(m, h, sig, reader({ ...ok, tx: { ...ok.tx, err: { x: 1 } } }) as any)).status).toBe("fail");
     expect((await verifyAnchor(m, h, sig, reader({ ...ok, tx: { ...ok.tx, ixs: [memo(receiptMemo("0".repeat(64)))] } }) as any)).status).toBe("fail");
