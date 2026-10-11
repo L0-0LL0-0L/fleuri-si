@@ -104,7 +104,7 @@ function ReceiptDetail({ row, reload, owner }: { row: any; reload: () => Promise
     walletCtrl.current?.abort(); const ctrl = new AbortController(); walletCtrl.current = ctrl;
     return act("Preparing…", async (live) => {
       const r = await signSubmitConfirm(k, prep, { onStatus: (s) => live() && setBusy(s), guard: () => scope.live(scopeKey) && !ctrl.signal.aborted && anchorRef.current?.preparationId === prep.preparationId && Date.parse(prep.expiresAt) > Date.now(), signal: ctrl.signal });
-      if (!live()) return;
+      if (!live() || ctrl.signal.aborted || anchorRef.current?.preparationId !== prep.preparationId) return; // cancelled or replaced
       setAnchor(null); toast.success(r.detail); await reload(); await loadPreps();
     });
   };
