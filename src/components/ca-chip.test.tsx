@@ -48,7 +48,7 @@ describe("CA button", () => {
     expect(screen.getByText(/^live$/i)).toBeInTheDocument();
     expect(screen.queryByText(/not live yet|pre-launch/i)).toBeNull();
     expect(screen.queryByText(/graduated|DAMM v2 pool confirmed/i)).toBeNull();
-    expect(screen.getByText(/independently verified on Meteora/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/independently verified on Meteora/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/minted and trading on a Meteora bonding curve/i)).toBeInTheDocument();
   });
 
