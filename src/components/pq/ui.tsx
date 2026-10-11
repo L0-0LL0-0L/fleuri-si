@@ -5,6 +5,8 @@ import type { Check, PassportManifest, SignedPassportT } from "@/pq/passport";
 import { pqConfirm, pqSubmit, pqRetry } from "@/lib/pq.functions";
 import { connectWallet, getProvider, walletSignTransaction, type WalletKind } from "@/services/wallet";
 import { cn } from "@/lib/utils";
+import { guardedSignSubmit } from "@/pq/wallet-flow";
+export { ScopeChangedError } from "@/pq/wallet-flow";
 
 export function RealBadge({ cluster, className }: { cluster?: string; className?: string }) {
   return (
@@ -72,25 +74,23 @@ export const explorerAddr = (a: string, cluster: string) => `https://explorer.so
 export async function signSubmitConfirm(
   kind: WalletKind,
   prep: { preparationId: string; transaction: string },
-  opts: { coSign?: { publicKey: unknown; secretKey: Uint8Array }[]; onStatus?: (s: string) => void } = {},
+  opts: { coSign?: { publicKey: unknown; secretKey: Uint8Array }[]; onStatus?: (s: string) => void; guard?: () => boolean; signal?: AbortSignal } = {},
 ) {
-  const tx = Transaction.from(fromB64(prep.transaction));
-  const wallet = await connectWallet(kind);
-  if (wallet !== tx.feePayer?.toBase58()) throw new Error("Switch to the wallet named in this prepared transaction.");
-  if (opts.coSign?.length) tx.partialSign(...(opts.coSign as any));
-  opts.onStatus?.("Waiting for your wallet to sign…");
-  const signed = await walletSignTransaction(kind, tx);
-  opts.onStatus?.("Submitting the exact prepared transaction…");
-  const sub = await pqSubmit({ data: { preparationId: prep.preparationId, transaction: b64(signed.serialize()) } });
-  if (!sub.ok) throw new Error(sub.error);
-  for (let i = 0; i < 40; i++) {
-    opts.onStatus?.("Waiting for on-chain confirmation…");
-    const c = await pqConfirm({ data: { preparationId: prep.preparationId } });
-    if (!c.ok) throw new Error(c.error);
-    if (c.data.status === "confirmed") return { signature: sub.data.signature as string, id: c.data.id as string | undefined, detail: c.data.detail as string };
-    await new Promise((r) => setTimeout(r, 2500));
-  }
-  throw new Error(`Submitted ${sub.data.signature} but confirmation timed out. Re-check later — confirmation is idempotent.`);
+  return guardedSignSubmit<Transaction>(prep, {
+    decode: (t) => Transaction.from(fromB64(t)),
+    feePayer: (tx) => tx.feePayer?.toBase58(),
+    connect: () => connectWallet(kind),
+    coSign: opts.coSign?.length ? (tx) => tx.partialSign(...(opts.coSign as any)) : undefined,
+    sign: (tx) => walletSignTransaction(kind, tx),
+    serialize: (tx) => b64(tx.serialize()),
+    submit: (transaction) => pqSubmit({ data: { preparationId: prep.preparationId, transaction } }) as any,
+    confirm: () => pqConfirm({ data: { preparationId: prep.preparationId } }) as any,
+    watchAccount: (cb) => {
+      const p = getProvider(kind) as any; if (!p?.on) return () => {};
+      p.on("accountChanged", cb); p.on("disconnect", cb);
+      return () => { const off = (p.off ?? p.removeListener)?.bind(p); off?.("accountChanged", cb); off?.("disconnect", cb); };
+    },
+  }, { onStatus: opts.onStatus, guard: opts.guard, signal: opts.signal });
 }
 
 export function WalletButtons({ avail, busy, disabled, action, onPick }: { avail: Record<WalletKind, boolean>; busy: string | null; disabled?: boolean; action: string; onPick: (k: WalletKind) => void }) {
