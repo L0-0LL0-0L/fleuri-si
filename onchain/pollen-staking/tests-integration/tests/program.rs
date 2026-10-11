@@ -383,3 +383,22 @@ fn vault_custody_is_checked_everywhere() {
     let ix = Instruction { program_id: ps::ID, data: ps::instruction::Claim {}.data(), accounts: ps::accounts::Claim { owner: alice.pubkey(), pool: e.pool, position: position(&e, alice.pubkey()), owner_reward: ar, reward_vault: e.principal, token_program: spl_token::id() }.to_account_metas(None) };
     assert!(send(&mut e.svm, ix, &[&alice]).is_err());
 }
+
+#[test]
+fn first_staker_gets_held_rewards_without_extra_calls() {
+    let mut e = ready();
+    let f = e.admin.insecure_clone(); let (fv, tv) = (e.fee_vault, e.fee_token_vault);
+    dfs_fund(&mut e.svm, fv, tv, &f, 2_000_000);
+    { let ix = harvest_ix(&e, f.pubkey(), ps::DFS_PROGRAM_ID); send(&mut e.svm, ix, &[&f]) }.unwrap();
+    let s = t0(&e); let funded = ledger(&e).dfs_funded_total;
+    now(&mut e.svm, s + 8 * DAY); // whole window passes with nobody staked
+    let (alice, at, ar) = user(&mut e, 10);
+    stake(&mut e, &alice, at, 10).unwrap();
+    let l = ledger(&e);
+    assert_eq!(l.unallocated, 0, "stake resumed held rewards automatically");
+    assert_eq!(l.stream_end, s + 8 * DAY + 7 * DAY);
+    assert!(claim(&mut e, &alice, ar).is_err(), "nothing released yet at join time");
+    now(&mut e.svm, s + 15 * DAY);
+    claim(&mut e, &alice, ar).unwrap();
+    assert!(bal(&e.svm, ar) + 1 >= funded && bal(&e.svm, ar) <= funded);
+}

@@ -1,11 +1,11 @@
 {
-  "address": "59vLvCAQFHcZg3eYC4ehKQQKeWysUPTS1iQANPzJHQmk",
+  "address": "\"59vLvCAQFHcZg3eYC4ehKQQKeWysUPTS1iQANPzJHQmk\"",
   "metadata": {
     "name": "pollen_staking",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Fleuri Pollen Staking: stake a fixed SPL mint, earn actually collected wSOL fees",
-    "note": "Generated from source with `cargo test --features idl-build __anchor_private_print_idl`; address is a local placeholder, not a deployment."
+    "description": "Fleuri Pollen Staking: stake a fixed SPL mint, earn Pollen-funded wSOL",
+    "note": "Generated with scripts/idl.py from `cargo test --features idl-build __anchor_private_print_idl`."
   },
   "instructions": [
     {
@@ -321,7 +321,7 @@
     {
       "name": "fund_treasury",
       "docs": [
-        "Treasury funding: tracked separately and never labelled as verified Meteora fees."
+        "Treasury funding: tracked separately from Pollen (DFS) funding."
       ],
       "discriminator": [
         71,
@@ -411,384 +411,6 @@
         247,
         208
       ]
-    }
-  ],
-  "types": [
-    {
-      "name": "Pool",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "initializer",
-            "type": "pubkey"
-          },
-          {
-            "name": "stake_mint",
-            "type": "pubkey"
-          },
-          {
-            "name": "reward_mint",
-            "type": "pubkey"
-          },
-          {
-            "name": "principal_vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "reward_vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "fee_vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "fee_token_vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "recipient_index",
-            "type": "u8"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
-            "name": "ledger",
-            "type": {
-              "defined": {
-                "name": "Ledger"
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "name": "Position",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "pool",
-            "type": "pubkey"
-          },
-          {
-            "name": "owner",
-            "type": "pubkey"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
-            "name": "state",
-            "type": {
-              "defined": {
-                "name": "PositionState"
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "name": "Ledger",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "duration",
-            "type": "i64"
-          },
-          {
-            "name": "cooldown",
-            "type": "i64"
-          },
-          {
-            "name": "total_active",
-            "type": "u64"
-          },
-          {
-            "name": "acc_per_share",
-            "type": "u128"
-          },
-          {
-            "name": "carry",
-            "type": "u128"
-          },
-          {
-            "name": "stream_amount",
-            "type": "u64"
-          },
-          {
-            "name": "stream_start",
-            "type": "i64"
-          },
-          {
-            "name": "stream_end",
-            "type": "i64"
-          },
-          {
-            "name": "stream_released",
-            "type": "u64"
-          },
-          {
-            "name": "unallocated",
-            "type": "u64"
-          },
-          {
-            "name": "last_update",
-            "type": "i64"
-          },
-          {
-            "name": "dfs_funded_total",
-            "type": "u64"
-          },
-          {
-            "name": "treasury_total",
-            "type": "u64"
-          },
-          {
-            "name": "distributed_total",
-            "type": "u64"
-          },
-          {
-            "name": "claimed_total",
-            "type": "u64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "PositionState",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "active",
-            "type": "u64"
-          },
-          {
-            "name": "checkpoint",
-            "type": "u128"
-          },
-          {
-            "name": "frac",
-            "type": "u128"
-          },
-          {
-            "name": "owed",
-            "type": "u64"
-          },
-          {
-            "name": "pending_amount",
-            "type": "u64"
-          },
-          {
-            "name": "unlock_ts",
-            "type": "i64"
-          },
-          {
-            "name": "claimed_total",
-            "type": "u64"
-          }
-        ]
-      }
-    },
-    {
-      "name": "Claimed",
-      "type": {
-        "fields": [
-          {
-            "name": "pool",
-            "type": "pubkey"
-          },
-          {
-            "name": "owner",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "FeesHarvested",
-      "type": {
-        "fields": [
-          {
-            "name": "pool",
-            "type": "pubkey"
-          },
-          {
-            "name": "fee_vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "PoolInitialized",
-      "type": {
-        "fields": [
-          {
-            "name": "pool",
-            "type": "pubkey"
-          },
-          {
-            "name": "stake_mint",
-            "type": "pubkey"
-          },
-          {
-            "name": "fee_vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "release_duration",
-            "type": "i64"
-          },
-          {
-            "name": "cooldown",
-            "type": "i64"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "Staked",
-      "type": {
-        "fields": [
-          {
-            "name": "pool",
-            "type": "pubkey"
-          },
-          {
-            "name": "owner",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "active",
-            "type": "u64"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "TreasuryFunded",
-      "type": {
-        "fields": [
-          {
-            "name": "pool",
-            "type": "pubkey"
-          },
-          {
-            "name": "funder",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "UnallocatedReleased",
-      "type": {
-        "fields": [
-          {
-            "name": "pool",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "UnstakeCancelled",
-      "type": {
-        "fields": [
-          {
-            "name": "pool",
-            "type": "pubkey"
-          },
-          {
-            "name": "owner",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "UnstakeRequested",
-      "type": {
-        "fields": [
-          {
-            "name": "pool",
-            "type": "pubkey"
-          },
-          {
-            "name": "owner",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          },
-          {
-            "name": "unlock_ts",
-            "type": "i64"
-          }
-        ],
-        "kind": "struct"
-      }
-    },
-    {
-      "name": "Withdrawn",
-      "type": {
-        "fields": [
-          {
-            "name": "pool",
-            "type": "pubkey"
-          },
-          {
-            "name": "owner",
-            "type": "pubkey"
-          },
-          {
-            "name": "amount",
-            "type": "u64"
-          }
-        ],
-        "kind": "struct"
-      }
     }
   ],
   "events": [
@@ -1010,6 +632,384 @@
       "code": 6019,
       "name": "Overflow",
       "msg": "Arithmetic overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "Claimed",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "FeesHarvested",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "Ledger",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duration",
+            "type": "i64"
+          },
+          {
+            "name": "cooldown",
+            "type": "i64"
+          },
+          {
+            "name": "total_active",
+            "type": "u64"
+          },
+          {
+            "name": "acc_per_share",
+            "type": "u128"
+          },
+          {
+            "name": "carry",
+            "type": "u128"
+          },
+          {
+            "name": "stream_amount",
+            "type": "u64"
+          },
+          {
+            "name": "stream_start",
+            "type": "i64"
+          },
+          {
+            "name": "stream_end",
+            "type": "i64"
+          },
+          {
+            "name": "stream_released",
+            "type": "u64"
+          },
+          {
+            "name": "unallocated",
+            "type": "u64"
+          },
+          {
+            "name": "last_update",
+            "type": "i64"
+          },
+          {
+            "name": "dfs_funded_total",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_total",
+            "type": "u64"
+          },
+          {
+            "name": "distributed_total",
+            "type": "u64"
+          },
+          {
+            "name": "claimed_total",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "initializer",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "reward_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "principal_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "reward_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_token_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient_index",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "ledger",
+            "type": {
+              "defined": {
+                "name": "Ledger"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolInitialized",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "release_duration",
+            "type": "i64"
+          },
+          {
+            "name": "cooldown",
+            "type": "i64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "Position",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "state",
+            "type": {
+              "defined": {
+                "name": "PositionState"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PositionState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "active",
+            "type": "u64"
+          },
+          {
+            "name": "checkpoint",
+            "type": "u128"
+          },
+          {
+            "name": "frac",
+            "type": "u128"
+          },
+          {
+            "name": "owed",
+            "type": "u64"
+          },
+          {
+            "name": "pending_amount",
+            "type": "u64"
+          },
+          {
+            "name": "unlock_ts",
+            "type": "i64"
+          },
+          {
+            "name": "claimed_total",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Staked",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "active",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "TreasuryFunded",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "funder",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "UnallocatedReleased",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "UnstakeCancelled",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "UnstakeRequested",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "unlock_ts",
+            "type": "i64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "Withdrawn",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
     }
   ]
 }

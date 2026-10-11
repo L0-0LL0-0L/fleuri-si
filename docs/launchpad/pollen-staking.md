@@ -15,9 +15,9 @@ Stake $FLEURI and earn a share of the **wrapped SOL the pool actually received**
 | Part | State |
 | --- | --- |
 | Program source (`onchain/pollen-staking`, Anchor 0.32.1) | Implemented |
-| Accounting unit tests (Rust, host) | Passing (13) |
-| Program tests: compiled SBF program and Meteora's real fee-sharing bytecode, run in LiteSVM | Passing (10) |
-| App decoders, account checks, readiness, confirmation and recovery tests (TypeScript) | Passing (48) |
+| Accounting unit tests (Rust, host) | Passing (14) |
+| Program tests: compiled SBF program and Meteora's real fee-sharing bytecode, run in LiteSVM | Passing (11) |
+| App decoders, account checks, readiness, confirmation, recovery and page tests (TypeScript) | Passing (56) |
 | `/staking` page, transaction prepare/sign/recover flow | Implemented; blocked until deployed |
 | Deployed program on mainnet or devnet | **None** |
 | Fee routing from the existing $FLEURI pool | **Not available.** That pool uses a Meteora config fleuri does not control, and configs are immutable. |
@@ -31,7 +31,7 @@ Stake $FLEURI and earn a share of the **wrapped SOL the pool actually received**
   Tokens sent straight to the reward vault are not counted.
 * **Release window that can't be delayed.** The first funding opens a 7-day window (the proposed default, fixed at initialization). Funds added while a window is open join it and release by **the same deadline**. A fresh 7-day window starts only after the old one has ended. So repeated 1-lamport top-ups can't push anyone's rewards later. Released amounts are cumulative integer vests, and rewards that already accrued never change.
 * **Exact shares.** Accounting is integer Q64 fixed-point. Rounding remainders are kept per position and per pool, so nothing is lost or over-paid. A late joiner earns nothing from before they joined.
-* **No stakers.** Rewards released while nobody is staked are set aside as *unallocated*. Anyone can re-release them once stake exists (`release_unallocated`). This follows the same window rule.
+* **No stakers.** Rewards released while nobody is staked are set aside as *unallocated*. When stake goes from zero to positive (a first **stake** or a **cancel unstake**), the program automatically puts them back into the release window, following the same deadline rule. The new staker earns only what is released after they joined. No separate step is needed. `release_unallocated` remains as a permissionless fallback.
 
 ## Staking and unstaking
 
@@ -39,6 +39,8 @@ Stake $FLEURI and earn a share of the **wrapped SOL the pool actually received**
 * **Request unstake** stops earning at once and starts the cooldown (proposed default 7 days). You can have only one pending withdrawal at a time, so an existing cooldown is never silently extended.
 * **Cancel** puts the pending amount back into active stake.
 * **Withdraw** works after the cooldown and needs your wallet signature.
+* **Collect Pollen rewards** on the page prepares the permissionless harvest. It is enabled only when the program and fee source pass and the pool has a positive claimable balance in the Pollen vault. You review and sign it in your own wallet.
+* Every prepared action is saved to your workspace. After a reload or an uncertain submission, *Pending transactions* on `/staking` resends the exact same signed bytes and never builds a new transaction.
 * Unstaking and withdrawing never call Meteora, so a fee-collection problem cannot trap your exit.
 * No admin instruction can move staked principal or accrued rewards.
 
@@ -98,7 +100,7 @@ These are server settings. They are public, read-only identifiers, never keys.
 ## Devnet / localnet acceptance
 
 1. Build and run the program tests. The steps are in `onchain/pollen-staking/README.md`.
-2. Generate your own program keypair, run `anchor keys sync`, then rebuild with `solana-verify build`.
+2. Generate your own program keypair. Run `anchor keys sync`, or `python3 scripts/sync-program-id.py <program id>` from `onchain/pollen-staking`. Then rebuild with `solana-verify build` and regenerate the IDL with `scripts/idl.py build`.
 3. Deploy to devnet. Record the hash with the script above.
 4. Create a devnet stake mint with **both authorities revoked**.
 5. Create a DFS vault with `initialize_fee_vault_pda` (SDK 1.1.0) for wSOL, naming the derived pool PDA as one recipient.
