@@ -30,6 +30,12 @@ export default defineConfig({
           // but rolldown's native resolver misses it, so the Node entry (which
           // loads native bindings via __filename) reaches the browser bundle and
           // crashes on signing. Pin it to the pure-JS browser build.
+          // base64-js is CommonJS-only (no exports map); buffer requires it and
+          // the native resolver fails to load it in the browser bundle, which
+          // surfaced as "No such module base64-js" when connecting a wallet.
+          if (specifier === "base64-js" && isBuild) {
+            return fileURLToPath(new URL("./node_modules/base64-js/index.js", import.meta.url));
+          }
           if (specifier === "bigint-buffer") {
             return fileURLToPath(new URL("./node_modules/bigint-buffer/dist/browser.js", import.meta.url));
           }
@@ -37,7 +43,7 @@ export default defineConfig({
         },
       },
     ],
-    optimizeDeps: { include: ["buffer"] },
+    optimizeDeps: { include: ["buffer", "base64-js"] },
     resolve: { alias: [
       { find: /^@coral-xyz\/anchor$/, replacement: fileURLToPath(new URL("./node_modules/@coral-xyz/anchor/dist/browser/index.js", import.meta.url)) },
     ] },
