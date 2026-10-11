@@ -62,6 +62,14 @@ function Docs() {
         <p className="text-sm">This release requires claimable and permanently locked LP shares totaling 100%. Configs with separate LP vesting allocations are rejected before launch; token vesting escrow is supported. Fixed DAMM v2 fees come from the chosen fee preset, while custom configs use their signed custom fee.</p>
         <p className="text-sm">After a network error, use Pending transactions to check confirmation or retry the exact signed bytes. Keep the encrypted backup and its password somewhere safe. A restored key can verify and sign offline; cloud owner controls also require the original workspace account.</p>
       </section>
+      <section className="hair space-y-3 bg-paper-light p-4" aria-labelledby="docs-receipts">
+        <h2 id="docs-receipts" className="display text-xl">research receipts. signed by a human.</h2>
+        <p className="text-sm">A <Link to="/receipts" className="underline">research receipt</Link> is a person's signed statement that they reviewed one of their own completed <Link to="/greenhouse" className="underline">Greenhouse</Link> trials. It freezes the full experiment — settings, policies, every decision and outcome — with the original numbers and checksums. You review it, acknowledge what it does and does not claim, and sign it with your ML-DSA-65 key. It is not AI training, an agent signature, a safety certification or proof of real trading.</p>
+        <p className="text-sm">A registered <Link to="/identity" className="underline">PQ identity</Link> is enough; anchoring that identity on chain is optional for receipts. If you leave before signing, the same frozen draft reopens exactly, and a signature already made is resent unchanged.</p>
+        <p className="text-sm">Download the receipt as a file. Anyone can check it offline in the receipt verifier: signatures, checksums and, for supported engine versions, a full replay of the trial. Any edited field fails.</p>
+        <p className="text-sm">Receipts are private by default. Publishing shows the receipt, your wallet and your identity registration to anyone with the link. Making it private again hides the page but cannot recall copies already downloaded.</p>
+        <p className="text-sm">Optionally, your wallet can record the receipt's hash in a Memo transaction after you review the exact fee and content. Verifiers re-check that transaction on a network they choose. The chain stores the hash; it does not check ML-DSA. Receipts attached to a launch proposal stay frozen as advisory evidence during review and approval.</p>
+      </section>
       <FlowerTiles count={8} cols={4} />
     </article>
   );
