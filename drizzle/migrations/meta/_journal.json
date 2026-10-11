@@ -78,6 +78,13 @@
       "when": 1791731946586,
       "tag": "0010_allow_staking_preparations",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791738639216,
+      "tag": "0011_greenhouse_trials",
+      "breakpoints": true
     }
   ]
 }
