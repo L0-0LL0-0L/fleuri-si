@@ -183,15 +183,19 @@ function TopStrip({ onMenu }: { onMenu: () => void }) {
   const onchain = isOnchainPath(useRouterState({ select: (s) => s.location.pathname }));
   return (
     <div className="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-ink bg-paper/95 px-3 py-2 backdrop-blur grain relative">
-      <button type="button" className="hair grid h-10 w-10 place-items-center bg-paper-light lg:hidden" onClick={onMenu} aria-label="Open navigation">
+      <button type="button" className="hair order-1 grid h-10 w-10 place-items-center bg-paper-light lg:hidden" onClick={onMenu} aria-label="Open navigation">
         <Menu className="h-5 w-5" />
       </button>
-      <span className="lg:hidden">
+      <span className="order-2 lg:hidden">
         <Link to="/" className="wordmark text-3xl" aria-label="fleuri home">fleuri</Link>
       </span>
-      {onchain ? <OnchainBadge className="inline-flex" /> : <SandboxBadge className="hidden sm:inline-flex" />}
-      <CaChip />
-      <span className={cn("hidden font-mono text-[0.65rem] md:inline", error && "text-poppy-deep")} role="status">
+      {onchain ? (
+        <OnchainBadge className="inline-flex order-5 w-full sm:order-3 sm:w-auto" />
+      ) : (
+        <SandboxBadge className="hidden sm:order-3 sm:inline-flex" />
+      )}
+      <CaChip className="order-3 sm:order-4" />
+      <span className={cn("hidden font-mono text-[0.65rem] sm:order-5 md:inline", error && "text-poppy-deep")} role="status">
         {error ? (
           <button type="button" className="underline" onClick={() => store.refresh(true)}>cloud sync failed · retry</button>
         ) : lastSync ? (
@@ -200,7 +204,7 @@ function TopStrip({ onMenu }: { onMenu: () => void }) {
           "connecting to cloud…"
         )}
       </span>
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="order-4 ml-auto flex items-center gap-1.5 sm:order-6">
         <button
           type="button"
           className="hair inline-flex h-9 items-center gap-1.5 bg-paper-light px-2 text-xs font-semibold"
