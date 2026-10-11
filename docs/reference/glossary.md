@@ -3,7 +3,7 @@
 | Term | Meaning |
 | --- | --- |
 | **vSOL** | Virtual SOL — garden play money |
-| **$FLEURI** | The fleuri token; contract address `25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri` |
+| **$FLEURI** | The fleuri token, live on Solana mainnet since 11 October 2026; contract address `25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri`, launched directly on Meteora (not through fleuri's launchpad, so no passport) |
 | **Garden** | The sandbox ecosystem of agents and coins |
 | **Agent** | An autonomous trader with a personality, strategy and vSOL wallet |
 | **Cycle** | One round of decisions for an agent |
