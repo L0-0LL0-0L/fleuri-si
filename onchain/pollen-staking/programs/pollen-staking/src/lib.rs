@@ -8,7 +8,7 @@
 //! * Fee harvest is a single whitelisted CPI to Meteora Dynamic Fee Sharing `claim_fee`, signed
 //!   by the pool PDA, crediting only the measured reward-vault increase.
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{instruction::{AccountMeta, Instruction}, program::invoke_signed};
+use anchor_lang::solana_program::{instruction::{AccountMeta, Instruction}, program::invoke_signed, program_pack::Pack};
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 pub mod math;
@@ -41,7 +41,7 @@ pub mod pollen_staking {
     pub fn initialize_pool(ctx: Context<InitializePool>, release_duration: i64, cooldown: i64, recipient_index: u8) -> Result<()> {
         require!((MIN_TERM..=MAX_TERM).contains(&release_duration) && (MIN_TERM..=MAX_TERM).contains(&cooldown), E::BadTerms);
         let pool_key = ctx.accounts.pool.key();
-        check_fee_vault(&ctx.accounts.fee_vault, &ctx.accounts.fee_token_vault.key(), &pool_key, recipient_index)?;
+        check_fee_vault(&ctx.accounts.fee_vault.to_account_info(), &ctx.accounts.fee_token_vault.key(), &pool_key, recipient_index)?;
         let now = Clock::get()?.unix_timestamp;
         let p = &mut ctx.accounts.pool;
         p.initializer = ctx.accounts.authority.key();
@@ -110,8 +110,10 @@ pub mod pollen_staking {
     pub fn harvest_fees(ctx: Context<Harvest>) -> Result<()> {
         let pool_key = ctx.accounts.pool.key();
         let (stake_mint, bump, idx) = (ctx.accounts.pool.stake_mint, ctx.accounts.pool.bump, ctx.accounts.pool.recipient_index);
-        check_fee_vault(&ctx.accounts.fee_vault, &ctx.accounts.fee_token_vault.key(), &pool_key, idx)?;
-        let before = ctx.accounts.reward_vault.amount;
+        check_fee_vault(&ctx.accounts.fee_vault.to_account_info(), &ctx.accounts.fee_token_vault.key(), &pool_key, idx)?;
+        let rv = ctx.accounts.pool.reward_vault;
+        // Custody check BEFORE the external call...
+        let before = check_vault(&ctx.accounts.reward_vault.to_account_info(), &rv, &WSOL_MINT, &pool_key)?;
         let a = &ctx.accounts;
         let ix = Instruction {
             program_id: DFS_PROGRAM_ID,
@@ -130,8 +132,11 @@ pub mod pollen_staking {
         };
         let seeds: &[&[u8]] = &[POOL_SEED, stake_mint.as_ref(), &[bump]];
         invoke_signed(&ix, &[a.fee_vault.to_account_info(), a.dfs_fee_vault_authority.to_account_info(), a.fee_token_vault.to_account_info(), a.reward_mint.to_account_info(), a.reward_vault.to_account_info(), a.pool.to_account_info(), a.token_program.to_account_info(), a.dfs_event_authority.to_account_info(), a.dfs_program.to_account_info()], &[seeds])?;
-        ctx.accounts.reward_vault.reload()?;
-        let got = ctx.accounts.reward_vault.amount.checked_sub(before).ok_or(E::Overflow)?;
+        // ...and immediately AFTER: any change to mint/authority/delegate/close/state or a balance
+        // decrease aborts the whole transaction, rolling back every CPI effect.
+        let after = check_vault(&ctx.accounts.reward_vault.to_account_info(), &rv, &WSOL_MINT, &pool_key)?;
+        require!(after >= before, E::BadVault);
+        let got = after - before;
         require!(got > 0, E::NothingToHarvest);
         let now = Clock::get()?.unix_timestamp;
         ctx.accounts.pool.ledger.fund(got, true, now).map_err(err)?;
@@ -139,7 +144,7 @@ pub mod pollen_staking {
         Ok(())
     }
 
-    /// Treasury funding: tracked separately and never labelled as verified Meteora fees.
+    /// Treasury funding: tracked separately from Pollen (DFS) funding.
     pub fn fund_treasury(ctx: Context<FundTreasury>, amount: u64) -> Result<()> {
         require!(amount > 0, E::ZeroAmount);
         let now = Clock::get()?.unix_timestamp;
@@ -162,20 +167,45 @@ fn err(e: MathError) -> Error {
     match e { MathError::Overflow => E::Overflow, MathError::Zero => E::ZeroAmount, MathError::Insufficient => E::InsufficientBalance, MathError::PendingExists => E::PendingExists, MathError::NoPending => E::NoPending, MathError::Cooling => E::Cooling, MathError::NoStake => E::NoStake, MathError::Nothing => E::NothingToClaim }.into()
 }
 
-/// Validates the DFS fee vault: owner program, discriminator, wSOL mint, token vault, and that
-/// `users[index]` is exactly this pool PDA with a positive share.
-pub fn check_fee_vault(fv: &UncheckedAccount, fee_token_vault: &Pubkey, pool: &Pubkey, index: u8) -> Result<()> {
+/// Validates the DFS fee vault byte-for-byte (FeeVault, bytemuck, +8 discriminator):
+/// owner program, discriminator, SPL-token flag (104 == 0), PDA vault type (105 == 1), wSOL mint,
+/// canonical PDA `["fee_vault", base@152, WSOL]` using the stored bump (106), canonical token vault
+/// `["token_vault", fee_vault]`, total_share > 0, and `users[index]` == pool PDA with share > 0.
+pub fn check_fee_vault(fv: &AccountInfo, fee_token_vault: &Pubkey, pool: &Pubkey, index: u8) -> Result<()> {
     require_keys_eq!(*fv.owner, DFS_PROGRAM_ID, E::BadFeeVault);
     let d = fv.try_borrow_data()?;
     require!(d.len() >= FEE_VAULT_LEN && d[..8] == DFS_FEE_VAULT_DISC, E::BadFeeVault);
     let key = |o: usize| Pubkey::try_from(&d[o..o + 32]).unwrap();
+    let u32at = |o: usize| u32::from_le_bytes(d[o..o + 4].try_into().unwrap());
     require_keys_eq!(key(40), WSOL_MINT, E::BadFeeVault);
+    require!(d[104] == 0, E::BadFeeVault); // token_flag: SPL Token
+    require!(d[105] == 1, E::BadFeeVault); // fee_vault_type: PDA (not keypair)
+    let base = key(152);
+    let pda = Pubkey::create_program_address(&[b"fee_vault", base.as_ref(), WSOL_MINT.as_ref(), &[d[106]]], &DFS_PROGRAM_ID).map_err(|_| E::BadFeeVault)?;
+    require_keys_eq!(pda, fv.key(), E::BadFeeVault);
+    let (tv, _) = Pubkey::find_program_address(&[b"token_vault", fv.key.as_ref()], &DFS_PROGRAM_ID);
+    require_keys_eq!(tv, *fee_token_vault, E::BadFeeVault);
     require_keys_eq!(key(72), *fee_token_vault, E::BadFeeVault);
+    require!(u32at(120) > 0, E::BadFeeVault);
     require!(index < 5, E::BadRecipient);
     let u = 248 + index as usize * 80;
     require_keys_eq!(key(u), *pool, E::BadRecipient);
-    require!(u32::from_le_bytes(d[u + 32..u + 36].try_into().unwrap()) > 0, E::BadRecipient);
+    require!(u32at(u + 32) > 0, E::BadRecipient);
     Ok(())
+}
+
+/// Full custody check for a pool-owned vault: canonical address, SPL Token owner, initialized and
+/// not frozen, expected mint, pool authority, no delegate and no close authority.
+pub fn check_vault(acc: &AccountInfo, expected: &Pubkey, mint: &Pubkey, pool: &Pubkey) -> Result<u64> {
+    require_keys_eq!(acc.key(), *expected, E::BadVault);
+    require_keys_eq!(*acc.owner, token::ID, E::BadVault);
+    let d = acc.try_borrow_data()?;
+    let t = anchor_spl::token::spl_token::state::Account::unpack(&d).map_err(|_| E::BadVault)?;
+    require!(t.state == anchor_spl::token::spl_token::state::AccountState::Initialized, E::BadVault);
+    require_keys_eq!(t.mint, *mint, E::BadVault);
+    require_keys_eq!(t.owner, *pool, E::BadVault);
+    require!(t.delegate.is_none() && t.close_authority.is_none(), E::BadVault);
+    Ok(t.amount)
 }
 
 #[account]
@@ -238,7 +268,7 @@ pub struct Stake<'info> {
     pub position: Account<'info, Position>,
     #[account(mut, token::mint = pool.stake_mint, token::authority = owner)]
     pub owner_token: Account<'info, TokenAccount>,
-    #[account(mut, address = pool.principal_vault @ E::BadVault)]
+    #[account(mut, seeds = [PRINCIPAL_SEED, pool.key().as_ref()], bump, address = pool.principal_vault @ E::BadVault, token::mint = pool.stake_mint, token::authority = pool, constraint = principal_vault.delegate.is_none() && principal_vault.close_authority.is_none() && !principal_vault.is_frozen() @ E::BadVault)]
     pub principal_vault: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -262,7 +292,7 @@ pub struct Withdraw<'info> {
     pub position: Account<'info, Position>,
     #[account(mut, token::mint = pool.stake_mint, token::authority = owner, constraint = owner_token.delegate.is_none() && owner_token.close_authority.is_none() @ E::DelegatedDestination)]
     pub owner_token: Account<'info, TokenAccount>,
-    #[account(mut, address = pool.principal_vault @ E::BadVault)]
+    #[account(mut, seeds = [PRINCIPAL_SEED, pool.key().as_ref()], bump, address = pool.principal_vault @ E::BadVault, token::mint = pool.stake_mint, token::authority = pool, constraint = principal_vault.delegate.is_none() && principal_vault.close_authority.is_none() && !principal_vault.is_frozen() @ E::BadVault)]
     pub principal_vault: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
@@ -276,7 +306,7 @@ pub struct Claim<'info> {
     pub position: Account<'info, Position>,
     #[account(mut, token::mint = WSOL_MINT, token::authority = owner, constraint = owner_reward.delegate.is_none() && owner_reward.close_authority.is_none() @ E::DelegatedDestination)]
     pub owner_reward: Account<'info, TokenAccount>,
-    #[account(mut, address = pool.reward_vault @ E::BadVault)]
+    #[account(mut, seeds = [REWARD_SEED, pool.key().as_ref()], bump, address = pool.reward_vault @ E::BadVault, token::mint = WSOL_MINT, token::authority = pool, constraint = reward_vault.delegate.is_none() && reward_vault.close_authority.is_none() && !reward_vault.is_frozen() @ E::BadVault)]
     pub reward_vault: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
@@ -286,7 +316,7 @@ pub struct Harvest<'info> {
     pub caller: Signer<'info>,
     #[account(mut, seeds = [POOL_SEED, pool.stake_mint.as_ref()], bump = pool.bump)]
     pub pool: Account<'info, Pool>,
-    #[account(mut, address = pool.reward_vault @ E::BadVault)]
+    #[account(mut, seeds = [REWARD_SEED, pool.key().as_ref()], bump, address = pool.reward_vault @ E::BadVault, token::mint = WSOL_MINT, token::authority = pool, constraint = reward_vault.delegate.is_none() && reward_vault.close_authority.is_none() && !reward_vault.is_frozen() @ E::BadVault)]
     pub reward_vault: Account<'info, TokenAccount>,
     #[account(address = WSOL_MINT @ E::BadMint)]
     pub reward_mint: Account<'info, Mint>,
@@ -315,7 +345,7 @@ pub struct FundTreasury<'info> {
     pub pool: Account<'info, Pool>,
     #[account(mut, token::mint = WSOL_MINT, token::authority = funder)]
     pub funder_token: Account<'info, TokenAccount>,
-    #[account(mut, address = pool.reward_vault @ E::BadVault)]
+    #[account(mut, seeds = [REWARD_SEED, pool.key().as_ref()], bump, address = pool.reward_vault @ E::BadVault, token::mint = WSOL_MINT, token::authority = pool, constraint = reward_vault.delegate.is_none() && reward_vault.close_authority.is_none() && !reward_vault.is_frozen() @ E::BadVault)]
     pub reward_vault: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
