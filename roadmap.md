@@ -13,5 +13,6 @@
 - [x] CA button in the top bar of every page: press to reveal and copy the $FLEURI address, with its live status and the independent-verification warning
 - [x] $FLEURI confirmed live on a Meteora bonding curve (mainnet) — token page, CA panel and docs state live figures and that it was not launched through fleuri's launchpad
 - [x] Pollen Staking: Anchor program source, accounting + SBF program tests (with real DFS bytecode), IDL, client, /staking page, prepare/sign/recover flow, docs
+- [x] Pollen Staking review fixes: non-delayable release window, harvest custody checks, PDA fee-vault validation, strict server account checks, Pollen-funded naming, hash normalization
 - [ ] Pollen Staking deployment: deploy keypair, verified build hash, DFS vault naming the pool PDA, routed fee source — waits on owner
 - [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)

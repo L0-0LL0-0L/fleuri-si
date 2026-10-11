@@ -1,9 +1,13 @@
 # Pollen Staking
 
-Stake $FLEURI and earn a share of the **wrapped SOL that was actually collected**. The wSOL comes from one fixed [Pollen](pollen.md) fee-sharing vault. There are no new FLEURI emissions and no fixed APY. If no fees arrive, nothing is paid.
+Stake $FLEURI and earn a share of the **wrapped SOL the pool actually received** from one fixed [Pollen](pollen.md) fee-sharing vault. These are **Pollen-funded rewards**. There are no new FLEURI emissions and no fixed APY. If nothing arrives, nothing is paid.
 
 {% hint style="warning" %}
 **Status: not deployed.** The program source, client and tests are done. No Pollen Staking program is deployed, so the **Stake** button on `/staking` stays blocked.
+{% endhint %}
+
+{% hint style="info" %}
+**Where the wSOL comes from.** A Pollen (Meteora Dynamic Fee Sharing) vault accepts trading-fee routing *and* manual funding by anyone. A received claim proves the wSOL came **from the Pollen vault**. It does **not** prove that it came from DBC or DAMM trading fees. Trading origin stays unverified unless each route's funding is proven separately. Treasury top-ups are tracked as a third, separate total.
 {% endhint %}
 
 ## What exists today
@@ -11,23 +15,23 @@ Stake $FLEURI and earn a share of the **wrapped SOL that was actually collected*
 | Part | State |
 | --- | --- |
 | Program source (`onchain/pollen-staking`, Anchor 0.32.1) | Implemented |
-| Accounting unit tests (Rust) | Passing (12) |
-| Program tests: compiled program and Meteora's real fee-sharing program, run in a local Solana VM | Passing (6) |
-| App client, decoders and readiness checks, cross-checked against the Rust layout and the IDL | Passing (24) |
+| Accounting unit tests (Rust, host) | Passing (13) |
+| Program tests: compiled SBF program and Meteora's real fee-sharing bytecode, run in LiteSVM | Passing (10) |
+| App decoders, account checks, readiness, confirmation and recovery tests (TypeScript) | Passing (48) |
 | `/staking` page, transaction prepare/sign/recover flow | Implemented; blocked until deployed |
 | Deployed program on mainnet or devnet | **None** |
 | Fee routing from the existing $FLEURI pool | **Not available.** That pool uses a Meteora config fleuri does not control, and configs are immutable. |
 
 ## How rewards work
 
-* **Rewards are fees only.** Rewards come only from wSOL the program actually received. Two sources count:
-  * a permissionless **harvest**. The pool claims its share from the one configured fee-sharing vault, and only the measured balance increase is counted.
-  * **Treasury funding**, which is labelled separately and never shown as Meteora fees.
+* **Funded rewards only.** Rewards come only from wSOL the program actually received:
+  * a permissionless **harvest** from the one configured Pollen vault. Only the measured balance increase of the reward vault counts (`dfs_funded_total`). A harvest that receives nothing fails and changes nothing, including timing.
+  * **Treasury top-ups** (`treasury_total`), labelled separately.
 
   Tokens sent straight to the reward vault are not counted.
-* **Release over seven days.** Each new batch of rewards, plus whatever is still unreleased, is released evenly over a fixed period. The proposed default is 7 days. Rewards that have already accrued are never changed by a refill.
-* **Exact shares.** Accounting is integer fixed-point. Rounding remainders are kept per position and per pool, so nothing is lost or over-paid. A late joiner earns nothing from before they joined.
-* **No stakers.** Rewards released while nobody is staked are set aside as *unallocated*. Anyone can re-release them once stake exists (`release_unallocated`).
+* **Release window that can't be delayed.** The first funding opens a 7-day window (the proposed default, fixed at initialization). Funds added while a window is open join it and release by **the same deadline**. A fresh 7-day window starts only after the old one has ended. So repeated 1-lamport top-ups can't push anyone's rewards later. Released amounts are cumulative integer vests, and rewards that already accrued never change.
+* **Exact shares.** Accounting is integer Q64 fixed-point. Rounding remainders are kept per position and per pool, so nothing is lost or over-paid. A late joiner earns nothing from before they joined.
+* **No stakers.** Rewards released while nobody is staked are set aside as *unallocated*. Anyone can re-release them once stake exists (`release_unallocated`). This follows the same window rule.
 
 ## Staking and unstaking
 
@@ -38,33 +42,48 @@ Stake $FLEURI and earn a share of the **wrapped SOL that was actually collected*
 * Unstaking and withdrawing never call Meteora, so a fee-collection problem cannot trap your exit.
 * No admin instruction can move staked principal or accrued rewards.
 
-## Safety checks
+## Safety checks in the program
 
 * Only the program's upgrade authority can initialize a pool, and only once.
-* At initialization:
-  * the stake mint must have **no mint authority and no freeze authority**.
-  * the reward mint must be wSOL.
-  * the fee vault must be a Meteora DFS wSOL vault that names the pool as a recipient.
-* The terms are fixed after initialization.
-* The program code itself is upgradeable until its authority is revoked. The page shows this.
+* At initialization the stake mint must have **no mint authority and no freeze authority**. The reward mint must be wSOL.
+* The fee vault is checked byte for byte. It must be:
+  * owned by Meteora DFS, with the FeeVault discriminator.
+  * an SPL Token vault (`token_flag` = 0).
+  * a **PDA vault** (`fee_vault_type` = 1). Keypair vaults are rejected.
+  * the canonical PDA `["fee_vault", base, wSOL]` using its stored bump.
+  * paired with the canonical token vault `["token_vault", fee_vault]`.
+  * set up so that recipient `index` is exactly the pool PDA, with a share above zero and a total share above zero.
+* Principal and reward vaults are checked in every instruction: canonical PDA address, SPL Token owner, initialized and not frozen, correct mint, pool authority, no delegate and no close authority.
+* **Harvest custody.** The reward vault gets the full custody check before **and** right after the Meteora call, and its balance can never decrease. Any change aborts the whole transaction, which rolls back every effect of the call. The principal vault is never passed to an external program.
+* The terms are fixed after initialization. The program code itself stays upgradeable until its authority is revoked, and the page shows this.
 
 ## Deposit readiness on `/staking`
 
-Every check below must pass before deposits open:
+Every check must pass before deposits open:
 
 1. The server is on mainnet, with a matching genesis hash.
 2. The RPC is fresh.
 3. A program ID is configured and is not the placeholder.
 4. The program is executable.
-5. Its bytecode matches the verified build hash.
+5. Its ELF hash matches the configured `POLLEN_STAKING_PROGRAM_SHA256`.
 6. The upgrade authority is readable.
-7. The mint is the correct FLEURI mint.
+7. The mint is the correct FLEURI mint: SPL Token, exactly 82 bytes, initialized, 6 decimals.
 8. The mint and freeze authorities are revoked.
 9. The pool exists.
-10. The principal and reward vaults are separate and canonical.
-11. The fee source is verified.
+10. Both vaults pass the full custody check.
+11. The Pollen fee source passes the same byte checks as the program, plus the Pollen PDA checks.
 
-Unstake, cancel, withdraw and claim don't need the mint or fee-source checks.
+**Exits use only checks 1–5, 9 and 10.** Unstake, cancel, withdraw and claim never depend on the mint-authority or fee-source checks. The server and the page use the same rule.
+
+## Program hash
+
+`POLLEN_STAKING_PROGRAM_SHA256` is the SHA-256 of the ELF with **all trailing zero bytes removed**. The loader zero-pads ProgramData, so the server trims it the same way. To compute it for a local `.so`:
+
+```
+bun scripts/staking-elf-hash.ts target/deploy/pollen_staking.so
+```
+
+A match proves only that the on-chain code equals the configured hash. It is **not** proof of a reproducible build. For that, build with `solana-verify build` and compare independently. So far no reproducible build has been made. The local development build in this sandbox (platform-tools v1.48, placeholder program ID) hashed to `dd38abb6…5c1a7f`. That build is not deployable and must not be configured.
 
 ## Public configuration
 
@@ -73,20 +92,23 @@ These are server settings. They are public, read-only identifiers, never keys.
 | Setting | Meaning |
 | --- | --- |
 | `POLLEN_STAKING_PROGRAM_ID` | The deployed program |
-| `POLLEN_STAKING_PROGRAM_SHA256` | SHA-256 of the verified build's ELF |
-| `POLLEN_STAKING_FEE_VAULT` | The one Meteora DFS wSOL vault |
+| `POLLEN_STAKING_PROGRAM_SHA256` | Expected ELF hash (normalization above) |
+| `POLLEN_STAKING_FEE_VAULT` | The one Meteora DFS **PDA** wSOL vault |
 
 ## Devnet / localnet acceptance
 
 1. Build and run the program tests. The steps are in `onchain/pollen-staking/README.md`.
-2. Deploy to devnet with your own keypair, after `anchor keys sync`.
-3. Create a devnet stake mint with **both authorities revoked**, and a DFS wSOL vault whose recipient is the derived pool PDA.
-4. Initialize the pool with the upgrade-authority wallet.
-5. Set the three settings. Point the server at devnet (`SOLANA_CLUSTER=devnet`). The page will still say "wrong network", because deposits open only on mainnet. Drive the actions through the program tests or the CLI.
-6. Fund the DFS vault, then harvest. Confirm that the reward vault rose by exactly the pool's share.
-7. Stake from two wallets at different times. Check that the claims match the expected split. Then request unstake, wait for the cooldown, and withdraw.
+2. Generate your own program keypair, run `anchor keys sync`, then rebuild with `solana-verify build`.
+3. Deploy to devnet. Record the hash with the script above.
+4. Create a devnet stake mint with **both authorities revoked**.
+5. Create a DFS vault with `initialize_fee_vault_pda` (SDK 1.1.0) for wSOL, naming the derived pool PDA as one recipient.
+6. Initialize the pool with the upgrade-authority wallet, passing that recipient index.
+7. Set the three settings. Point the server at devnet (`SOLANA_CLUSTER=devnet`). The page will still say "wrong network", because deposits open only on mainnet. Drive the actions through the program tests or the CLI.
+8. Fund the DFS vault, then harvest. Confirm that the reward vault rose by exactly the pool's share, and that `dfs_funded_total` rose by the same amount.
+9. Stake from two wallets at different times and check that the claims match the expected split. Then request unstake, wait for the cooldown and withdraw.
 
 ## Real blockers before mainnet
 
-* No deployed program, verified build hash or upgrade-authority policy.
-* No mainnet DFS vault naming the pool PDA, and no trading pool whose immutable config routes fees into that vault.
+* No deployed program, reproducible build hash or upgrade-authority policy.
+* No mainnet DFS PDA vault naming the pool PDA.
+* No trading pool whose immutable config routes fees into that vault. Even once one exists, manual DFS funding remains possible, so trading origin needs separate proof.

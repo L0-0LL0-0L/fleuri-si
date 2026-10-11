@@ -7,14 +7,14 @@ import { stakingPrepare, stakingState } from "@/lib/pq.functions";
 import { connectWallet, type WalletKind } from "@/services/wallet";
 import { useGarden } from "@/store/garden";
 import { formatUnits } from "@/pq/pollen";
-import { DEFAULT_TERM_SECONDS } from "@/pq/staking";
+import { DEFAULT_TERM_SECONDS, blockers } from "@/pq/staking";
 
 export const Route = createFileRoute("/staking")({
   head: () => ({ meta: [
-    { title: "Pollen Staking · stake $FLEURI for collected fees — fleuri" },
-    { name: "description", content: "Stake $FLEURI and share wrapped SOL that was actually collected as Meteora fees. No emissions, no fixed APY. Deposits open only after every chain check passes." },
+    { title: "Pollen Staking · stake $FLEURI for Pollen-funded wSOL — fleuri" },
+    { name: "description", content: "Stake $FLEURI and share Pollen-funded wrapped SOL rewards. No emissions, no fixed APY. Deposits open only after every chain check passes." },
     { property: "og:title", content: "Pollen Staking — fleuri" },
-    { property: "og:description", content: "Stake $FLEURI for a share of actually collected wSOL fees. Live chain checks, no fabricated yields." },
+    { property: "og:description", content: "Stake $FLEURI for a share of Pollen-funded wSOL. Live chain checks, no fabricated yields." },
     { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
   ] }),
   component: StakingPage,
@@ -53,15 +53,15 @@ function StakingPage() {
   void tick;
   const pos = st?.position; const L = st?.pool?.ledger;
   const pendingLeft = pos && Number(pos.pendingAmount) > 0 && chainNow ? Number(pos.unlockTs) - chainNow : null;
-  const exitsOk = st?.checks?.filter((c: any) => ["cluster", "rpc", "configured", "program", "code", "pool", "vaults"].includes(c.id)).every((c: any) => c.ok);
+  const exitsOk = !!st?.checks && blockers("withdraw", st.checks).length === 0; // exits ignore deposit-only checks
   const wrongNet = st && st.cluster !== "mainnet-beta";
   const notDeployed = st && (!st.programId || st.programId === st.placeholder);
   const stale = st && st.checks?.find((c: any) => c.id === "rpc" && !c.ok);
 
   return <div className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
-    <PageHeader title="pollen staking" kicker="Stake $FLEURI · share collected fees"><RealBadge cluster={st?.cluster} /></PageHeader>
+    <PageHeader title="pollen staking" kicker="Stake $FLEURI · share Pollen-funded wSOL"><RealBadge cluster={st?.cluster} /></PageHeader>
     <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-      <p className="max-w-prose text-sm">Stake $FLEURI to share <strong>wrapped SOL that was actually collected</strong> into one fixed <Link to="/pollen" className="underline">Pollen</Link> fee-sharing vault. There are no new FLEURI emissions and no fixed APY: if no fees arrive, nothing is paid. Collected fees are released evenly over {days(DEFAULT_TERM_SECONDS)} (proposed default), and unstaking has a {days(DEFAULT_TERM_SECONDS)} cooldown. This layer extends Pollen's 2–5 recipient cap to any number of stakers.</p>
+      <p className="max-w-prose text-sm">Stake $FLEURI to share <strong>wrapped SOL actually received</strong> from one fixed <Link to="/pollen" className="underline">Pollen</Link> fee-sharing vault. There are no new FLEURI emissions and no fixed APY: if nothing arrives, nothing is paid. Received funds are released over {days(DEFAULT_TERM_SECONDS)} (proposed default); top-ups during an open window finish by that same deadline, so nobody can delay rewards. Unstaking has a {days(DEFAULT_TERM_SECONDS)} cooldown. This layer extends Pollen's 2–5 recipient cap to any number of stakers.</p>
       <FlowerTiles count={4} cols={4} className="w-40" />
     </div>
 
@@ -92,18 +92,18 @@ function StakingPage() {
             <dt>Reward</dt><dd>wrapped SOL</dd>
             <dt>Program</dt><dd className="font-mono text-xs [overflow-wrap:anywhere]">{st.programId ?? "not configured"}</dd>
             <dt>Upgrade</dt><dd className="[overflow-wrap:anywhere]">{st.facts.programUpgradeable === null ? "unknown" : st.facts.programUpgradeable ? `upgradeable by ${st.facts.upgradeAuthority}` : "immutable"}</dd>
-            {L && <><dt>Release</dt><dd>{days(L.duration)}</dd><dt>Cooldown</dt><dd>{days(L.cooldown)}</dd></>}
+            {L && <><dt>Release</dt><dd>{days(L.duration)}</dd><dt>Cooldown</dt><dd>{days(L.cooldown)}</dd><dt>Current window ends</dt><dd>{Number(L.streamEnd) > 0 ? new Date(Number(L.streamEnd) * 1000).toUTCString() : "—"}</dd></>}
             <dt>Fee source</dt><dd className="[overflow-wrap:anywhere]">{st.feeSource ? <a className="font-mono text-xs underline" href={explorerAddr(st.feeSource.address, st.cluster)} target="_blank" rel="noreferrer">{st.feeSource.address} ↗</a> : "none"}</dd>
           </dl>
-          <p className="text-xs">The existing $FLEURI bonding-curve pool uses a config fleuri does not control, so its fees are not routed here. Linking a vault is not proof that fees flow into it.</p>
+          <p className="text-xs">The existing $FLEURI bonding-curve pool uses a config fleuri does not control, so its fees are not routed here. A Pollen vault can also be funded manually, so a received claim proves Pollen funding, not that it came from DBC/DAMM trading fees. Trading origin stays unverified unless individual route funding is proven.</p>
         </Panel>
       </div>
 
       <Panel title="Pool totals">
         {L ? <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
           <div><dt className="text-xs">Active stake</dt><dd>{fl(L.totalActive)}</dd></div>
-          <div><dt className="text-xs">Verified Meteora fees</dt><dd>{wsol(L.verifiedFeesTotal)}</dd></div>
-          <div><dt className="text-xs">Treasury funding (not fees)</dt><dd>{wsol(L.treasuryTotal)}</dd></div>
+          <div><dt className="text-xs">Pollen-funded rewards</dt><dd>{wsol(L.dfsFundedTotal)}</dd></div>
+          <div><dt className="text-xs">Treasury top-ups</dt><dd>{wsol(L.treasuryTotal)}</dd></div>
           <div><dt className="text-xs">Released to stakers</dt><dd>{wsol(L.distributedTotal)}</dd></div>
           <div><dt className="text-xs">Claimed</dt><dd>{wsol(L.claimedTotal)}</dd></div>
           <div><dt className="text-xs">Unallocated (no stakers)</dt><dd>{wsol(L.unallocated)}</dd></div>

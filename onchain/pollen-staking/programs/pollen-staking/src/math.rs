@@ -2,8 +2,10 @@
 //!
 //! * Rewards come only from tracked funding (`fund`): verified Meteora fee harvests or
 //!   separately labelled treasury funding. Direct token donations never enter the ledger.
-//! * Each funding restarts a linear stream of (unreleased remainder + new amount) over the fixed
-//!   `duration`. Released amounts are cumulative integer vests, not rounded per-second rates.
+//! * Funding never delays rewards already scheduled: while a release window is open, new funds
+//!   join the remainder and release by the SAME deadline (`stream_end`). Only when the window has
+//!   ended does a funding open a fresh window of the immutable `duration`. Repeated tiny top-ups
+//!   therefore cannot postpone anyone's rewards. Released amounts are cumulative integer vests.
 //! * Released rewards are distributed with a Q64 accumulator. The undistributed numerator
 //!   (`carry`) and per-position fractions (`frac`) are kept, so rounding dust is never lost.
 //! * When nobody is staked, released rewards go to `unallocated` and can be re-streamed later
@@ -25,10 +27,11 @@ pub struct Ledger {
     pub carry: u128,
     pub stream_amount: u64,
     pub stream_start: i64,
+    pub stream_end: i64,
     pub stream_released: u64,
     pub unallocated: u64,
     pub last_update: i64,
-    pub verified_fees_total: u64,
+    pub dfs_funded_total: u64,
     pub treasury_total: u64,
     pub distributed_total: u64,
     pub claimed_total: u64,
@@ -49,12 +52,15 @@ fn add(a: u64, b: u64) -> std::result::Result<u64, MathError> { a.checked_add(b)
 fn sub(a: u64, b: u64) -> std::result::Result<u64, MathError> { a.checked_sub(b).ok_or(MathError::Insufficient) }
 
 impl Ledger {
-    pub fn new(duration: i64, cooldown: i64, now: i64) -> Self { Ledger { duration, cooldown, stream_start: now, last_update: now, ..Default::default() } }
+    pub fn new(duration: i64, cooldown: i64, now: i64) -> Self { Ledger { duration, cooldown, stream_start: now, stream_end: now, last_update: now, ..Default::default() } }
 
     /// Cumulative vested amount of the current stream at `now`.
     pub fn vested(&self, now: i64) -> u64 {
-        let el = (now - self.stream_start).clamp(0, self.duration) as u128;
-        ((self.stream_amount as u128 * el) / self.duration as u128) as u64
+        if now >= self.stream_end { return self.stream_amount; }
+        if now <= self.stream_start { return 0; }
+        let el = (now - self.stream_start) as u128;
+        let win = (self.stream_end - self.stream_start) as u128;
+        ((self.stream_amount as u128 * el) / win) as u64
     }
 
     pub fn update(&mut self, now: i64) -> std::result::Result<(), MathError> {
@@ -81,14 +87,17 @@ impl Ledger {
         self.stream_amount = add(remaining, extra)?;
         self.stream_start = now;
         self.stream_released = 0;
+        // Keep an open window's deadline; only an ended window gets a fresh immutable-length one.
+        if now >= self.stream_end { self.stream_end = now.checked_add(self.duration).ok_or(MathError::Overflow)?; }
         Ok(())
     }
 
-    /// Adds actually received funds. `verified` = measured Meteora fee harvest; else treasury.
-    pub fn fund(&mut self, amount: u64, verified: bool, now: i64) -> std::result::Result<(), MathError> {
+    /// Adds actually received funds. `from_dfs` = measured Pollen (DFS) claim; else treasury.
+    /// A DFS claim proves receipt from the vault, not that the vault was funded by trading fees.
+    pub fn fund(&mut self, amount: u64, from_dfs: bool, now: i64) -> std::result::Result<(), MathError> {
         if amount == 0 { return Err(MathError::Zero); }
         self.update(now)?;
-        if verified { self.verified_fees_total = add(self.verified_fees_total, amount)?; } else { self.treasury_total = add(self.treasury_total, amount)?; }
+        if from_dfs { self.dfs_funded_total = add(self.dfs_funded_total, amount)?; } else { self.treasury_total = add(self.treasury_total, amount)?; }
         self.restream(amount, now)
     }
 
@@ -105,7 +114,7 @@ impl Ledger {
 
     /// Tokens the reward vault must hold for all current and future obligations.
     pub fn liabilities_upper_bound(&self) -> u64 {
-        (self.verified_fees_total as u128 + self.treasury_total as u128 - self.claimed_total as u128) as u64
+        (self.dfs_funded_total as u128 + self.treasury_total as u128 - self.claimed_total as u128) as u64
     }
 }
 
@@ -224,11 +233,15 @@ mod tests {
         stake(&mut l, &mut a, 10, 0).unwrap();
         l.fund(700, true, 0).unwrap();
         assert_eq!(owed(&l, &a, D / 7), 100);
-        l.fund(600, false, D / 7).unwrap(); // refill: remaining 600 + 600 restreamed
+        l.fund(600, false, D / 7).unwrap(); // refill joins remaining 600 inside the SAME window
         assert_eq!(owed(&l, &a, D / 7), 100, "accrued preserved on refill");
-        assert_eq!(owed(&l, &a, D / 7 + D / 2), 100 + 600);
-        assert_eq!(owed(&l, &a, 10 * D), 1_300);
-        assert_eq!((l.verified_fees_total, l.treasury_total), (700, 600));
+        assert_eq!(l.stream_end, D, "deadline unchanged");
+        assert_eq!(owed(&l, &a, D / 7 + (D - D / 7) / 2), 100 + 600);
+        assert_eq!(owed(&l, &a, D), 1_300, "everything by the original deadline");
+        l.fund(70, false, 2 * D).unwrap(); // window ended: fresh window
+        assert_eq!(l.stream_end, 3 * D);
+        assert_eq!(owed(&l, &a, 3 * D), 1_370);
+        assert_eq!((l.dfs_funded_total, l.treasury_total), (700, 670));
     }
     #[test] fn unstake_stops_earning_and_cooldown() {
         let mut l = l0(); let (mut a, mut b) = Default::default();
@@ -254,6 +267,15 @@ mod tests {
         assert_eq!((a.active, l.total_active, a.pending_amount), (100, 100, 0));
         assert_eq!(cancel_unstake(&mut l, &mut a, 30), Err(MathError::NoPending));
         assert_eq!(request_unstake(&mut l, &mut a, 101, 40), Err(MathError::Insufficient));
+    }
+    #[test] fn tiny_topups_cannot_delay_rewards() {
+        let mut l = l0(); let mut a = PositionState::default();
+        stake(&mut l, &mut a, 1, 0).unwrap();
+        l.fund(1_000_000, true, 0).unwrap();
+        for t in (1..D).step_by(3_600) { l.fund(1, false, t).unwrap(); let _ = l.release_unallocated(t); }
+        let topups = ((D - 1) / 3_600 + 1) as u64;
+        assert_eq!(l.stream_end, D);
+        assert_eq!(owed(&l, &a, D), 1_000_000 + topups, "old tranche fully released by its old deadline");
     }
     #[test] fn double_claim_rejected() {
         let mut l = l0(); let mut a = PositionState::default();
@@ -286,14 +308,14 @@ mod tests {
 
     /// Fixture shared with the TypeScript decoder (src/pq/staking.test.ts).
     #[test] fn layout_fixture() {
-        let l = Ledger { duration: D, cooldown: D, total_active: 3, acc_per_share: 1u128 << 70, carry: 5, stream_amount: 9, stream_start: -1, stream_released: 2, unallocated: 4, last_update: 7, verified_fees_total: 11, treasury_total: 12, distributed_total: 13, claimed_total: 14 };
+        let l = Ledger { duration: D, cooldown: D, total_active: 3, acc_per_share: 1u128 << 70, carry: 5, stream_amount: 9, stream_start: -1, stream_end: 6, stream_released: 2, unallocated: 4, last_update: 7, dfs_funded_total: 11, treasury_total: 12, distributed_total: 13, claimed_total: 14 };
         let p = PositionState { active: 21, checkpoint: u128::MAX, frac: 22, owed: 23, pending_amount: 24, unlock_ts: 25, claimed_total: 26 };
         let hex = |b: Vec<u8>| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
         let s = format!("{{\"ledger\":\"{}\",\"position\":\"{}\"}}\n", hex(l.try_to_vec().unwrap()), hex(p.try_to_vec().unwrap()));
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/layout.json");
         if std::env::var("WRITE_FIXTURES").is_ok() { std::fs::write(path, &s).unwrap(); }
         assert_eq!(std::fs::read_to_string(path).unwrap(), s, "TS fixture out of date: run WRITE_FIXTURES=1 cargo test");
-        assert_eq!(Ledger::INIT_SPACE, 12 * 8 + 2 * 16);
+        assert_eq!(Ledger::INIT_SPACE, 13 * 8 + 2 * 16);
         assert_eq!(PositionState::INIT_SPACE, 5 * 8 + 2 * 16);
     }
 }

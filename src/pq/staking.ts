@@ -41,7 +41,7 @@ const disc = (kind: "instructions" | "accounts" | "events", name: string): numbe
 };
 const eqDisc = (b: Uint8Array, d: number[]) => d.every((v, i) => b[i] === v);
 
-export type Ledger = { duration: bigint; cooldown: bigint; totalActive: bigint; accPerShare: bigint; carry: bigint; streamAmount: bigint; streamStart: bigint; streamReleased: bigint; unallocated: bigint; lastUpdate: bigint; verifiedFeesTotal: bigint; treasuryTotal: bigint; distributedTotal: bigint; claimedTotal: bigint };
+export type Ledger = { duration: bigint; cooldown: bigint; totalActive: bigint; accPerShare: bigint; carry: bigint; streamAmount: bigint; streamStart: bigint; streamEnd: bigint; streamReleased: bigint; unallocated: bigint; lastUpdate: bigint; dfsFundedTotal: bigint; treasuryTotal: bigint; distributedTotal: bigint; claimedTotal: bigint };
 export type PositionState = { active: bigint; checkpoint: bigint; frac: bigint; owed: bigint; pendingAmount: bigint; unlockTs: bigint; claimedTotal: bigint };
 
 class R {
@@ -54,12 +54,12 @@ class R {
   key() { const k = new PublicKey(this.b.subarray(this.o, this.o + 32)).toBase58(); this.o += 32; return k; }
 }
 export function readLedger(r: R): Ledger {
-  return { duration: r.i64(), cooldown: r.i64(), totalActive: r.u64(), accPerShare: r.u128(), carry: r.u128(), streamAmount: r.u64(), streamStart: r.i64(), streamReleased: r.u64(), unallocated: r.u64(), lastUpdate: r.i64(), verifiedFeesTotal: r.u64(), treasuryTotal: r.u64(), distributedTotal: r.u64(), claimedTotal: r.u64() };
+  return { duration: r.i64(), cooldown: r.i64(), totalActive: r.u64(), accPerShare: r.u128(), carry: r.u128(), streamAmount: r.u64(), streamStart: r.i64(), streamEnd: r.i64(), streamReleased: r.u64(), unallocated: r.u64(), lastUpdate: r.i64(), dfsFundedTotal: r.u64(), treasuryTotal: r.u64(), distributedTotal: r.u64(), claimedTotal: r.u64() };
 }
 export function readPositionState(r: R): PositionState {
   return { active: r.u64(), checkpoint: r.u128(), frac: r.u128(), owed: r.u64(), pendingAmount: r.u64(), unlockTs: r.i64(), claimedTotal: r.u64() };
 }
-export const POOL_LEN = 8 + 7 * 32 + 2 + 128;
+export const POOL_LEN = 8 + 7 * 32 + 2 + 136;
 export const POSITION_LEN = 8 + 64 + 1 + 72;
 export function decodePool(data: Uint8Array) {
   if (data.length < POOL_LEN || !eqDisc(data, disc("accounts", "Pool"))) throw new Error("Not a Pollen Staking pool account.");
@@ -76,8 +76,18 @@ export const fixtureReader = (b: Uint8Array) => new R(b);
 // ---- accounting mirror (math.rs) ----
 const Q = 64n, MASK = (1n << 64n) - 1n;
 export function vested(l: Ledger, now: bigint) {
-  let el = now - l.streamStart; if (el < 0n) el = 0n; if (el > l.duration) el = l.duration;
-  return (l.streamAmount * el) / l.duration;
+  if (now >= l.streamEnd) return l.streamAmount;
+  if (now <= l.streamStart) return 0n;
+  return (l.streamAmount * (now - l.streamStart)) / (l.streamEnd - l.streamStart);
+}
+/** Mirror of `Ledger::fund`: refills keep an open window's deadline; only an ended window restarts. */
+export function fundLedger(l0: Ledger, amount: bigint, fromDfs: boolean, now: bigint): Ledger {
+  if (amount <= 0n) throw new Error("zero");
+  const l = updateLedger(l0, now);
+  if (fromDfs) l.dfsFundedTotal += amount; else l.treasuryTotal += amount;
+  l.streamAmount = l.streamAmount - l.streamReleased + amount; l.streamStart = now; l.streamReleased = 0n;
+  if (now >= l.streamEnd) l.streamEnd = now + l.duration;
+  return l;
 }
 export function updateLedger(l0: Ledger, now: bigint): Ledger {
   const l = { ...l0 }; const v = vested(l, now); const delta = v - l.streamReleased; l.streamReleased = v;
@@ -150,7 +160,7 @@ export type ReadinessFacts = {
   cluster: string | null; genesisOk: boolean; rpcFresh: boolean;
   programId: string | null; programExecutable: boolean; programUpgradeable: boolean | null; upgradeAuthority: string | null;
   expectedHash: string | null; actualHash: string | null;
-  mint: { address: string; exists: boolean; mintAuthority: string | null; freezeAuthority: string | null; owner: string | null } | null;
+  mint: { address: string; exists: boolean; mintAuthority: string | null; freezeAuthority: string | null; owner: string | null; decimals?: number; initialized?: boolean } | null;
   pool: null | { stakeMint: string; rewardMint: string; principalVault: string; rewardVault: string; feeVault: string };
   vaultsOk: boolean; feeSourceOk: boolean; feeSourceDetail: string;
 };
@@ -163,19 +173,86 @@ export function readiness(f: ReadinessFacts, programId: string | null = f.progra
     c("rpc", "Fresh RPC", f.rpcFresh, f.rpcFresh ? "Recent block time read from RPC." : "RPC data is stale or unavailable."),
     c("configured", "Program configured", !!programId && programId !== PLACEHOLDER_PROGRAM_ID, !programId ? "POLLEN_STAKING_PROGRAM_ID is not set: the program is not deployed by fleuri." : programId === PLACEHOLDER_PROGRAM_ID ? "Configured ID is the local placeholder, not a deployment." : programId),
     c("program", "Executable program", f.programExecutable, f.programExecutable ? "Program account is executable." : "No executable program at this address."),
-    c("code", "Expected program code", !!f.expectedHash && f.expectedHash === f.actualHash, !f.expectedHash ? "POLLEN_STAKING_PROGRAM_SHA256 (verified build hash) is not set." : f.actualHash ? (f.expectedHash === f.actualHash ? "On-chain bytecode matches the verified build." : `On-chain bytecode ${f.actualHash.slice(0, 12)}… differs from the verified build.`) : "On-chain bytecode could not be read."),
+    c("code", "Expected program code", !!f.expectedHash && f.expectedHash === f.actualHash, !f.expectedHash ? "POLLEN_STAKING_PROGRAM_SHA256 (expected ELF hash) is not set." : f.actualHash ? (f.expectedHash === f.actualHash ? "On-chain ELF hash matches the configured hash. This proves identity with the configured value only, not a reproducible build." : `On-chain ELF hash ${f.actualHash.slice(0, 12)}… differs from the configured hash.`) : "On-chain bytecode could not be read."),
     c("upgrade", "Upgrade authority shown", f.programUpgradeable !== null, f.programUpgradeable === null ? "Upgrade status unavailable." : f.programUpgradeable ? `Upgradeable by ${f.upgradeAuthority}. Terms are immutable per pool, but the code can still be upgraded by this key.` : "Immutable: no upgrade authority."),
-    c("mint", "Correct FLEURI mint", !!f.mint?.exists && f.mint.address === STAKE_MINT && f.mint.owner === TOKEN_PROGRAM, !f.mint?.exists ? "Mint not readable." : f.mint.owner !== TOKEN_PROGRAM ? "Not a standard SPL Token mint." : STAKE_MINT),
+    c("mint", "Correct FLEURI mint", !!f.mint?.exists && f.mint.address === STAKE_MINT && f.mint.owner === TOKEN_PROGRAM && f.mint.initialized === true && f.mint.decimals === STAKE_DECIMALS, !f.mint?.exists ? "Mint not readable." : f.mint.owner !== TOKEN_PROGRAM ? "Not a standard SPL Token mint." : f.mint.initialized !== true ? "Mint is not initialized." : f.mint.decimals !== STAKE_DECIMALS ? `Mint has ${f.mint.decimals} decimals, expected ${STAKE_DECIMALS}.` : STAKE_MINT),
     c("mintAuth", "Mint authority revoked", !!f.mint?.exists && f.mint.mintAuthority === null, f.mint?.mintAuthority ? `Mint authority is still ${f.mint.mintAuthority}.` : f.mint?.exists ? "Revoked." : "Unknown."),
     c("freezeAuth", "Freeze authority revoked", !!f.mint?.exists && f.mint.freezeAuthority === null, f.mint?.freezeAuthority ? `Freeze authority is still set (${f.mint.freezeAuthority}). The program refuses to initialize a pool for a freezable mint.` : f.mint?.exists ? "Revoked." : "Unknown."),
     c("pool", "Pool initialized", !!f.pool && !!d && f.pool.stakeMint === STAKE_MINT && f.pool.rewardMint === WSOL, !f.pool ? "No pool account at the derived address." : f.pool.stakeMint !== STAKE_MINT ? "Pool stake mint differs." : "Pool found."),
     c("vaults", "Canonical vaults", f.vaultsOk && !!f.pool && !!d && f.pool.principalVault === d.principal.toBase58() && f.pool.rewardVault === d.reward.toBase58() && f.pool.principalVault !== f.pool.rewardVault, f.vaultsOk ? "Principal and reward vaults are distinct program PDAs." : "Vaults not verified."),
-    c("source", "Fee source verified", f.feeSourceOk, f.feeSourceDetail),
+    c("source", "Pollen fee source configured", f.feeSourceOk, f.feeSourceDetail),
   ];
   return { checks, depositsEnabled: checks.every((x) => x.ok) };
 }
 
-/** Hash of the deployed ELF: ProgramData bytes after the 45-byte header, trailing zero padding trimmed. */
+/** Exits (request/cancel/withdraw/claim) depend only on these: never on mint authorities or the fee source. */
+export const EXIT_CHECK_IDS = ["cluster", "rpc", "configured", "program", "code", "pool", "vaults"] as const;
+export function requiredChecks(action: StakingAction | "harvest", all: ReadyCheck[]): string[] {
+  return action === "stake" ? all.map((c) => c.id) : action === "harvest" ? [...EXIT_CHECK_IDS, "source"] : [...EXIT_CHECK_IDS];
+}
+export const blockers = (action: StakingAction | "harvest", checks: ReadyCheck[]) => { const need = requiredChecks(action, checks); return checks.filter((c) => need.includes(c.id) && !c.ok); };
+
+// ---- strict account checks (malformed/truncated input yields issues, never success) ----
+export const STAKE_DECIMALS = 6;
+const keyAt = (d: Uint8Array, o: number) => new PublicKey(d.subarray(o, o + 32)).toBase58();
+const u32At = (d: Uint8Array, o: number) => new DataView(d.buffer, d.byteOffset, d.length).getUint32(o, true);
+/** SPL Token mint (82 bytes, owned by Token program, initialized). Throws on malformed data. */
+export function decodeMintStrict(owner: string, d: Uint8Array) {
+  if (owner !== TOKEN_PROGRAM) throw new Error("Mint is not owned by the SPL Token program.");
+  if (d.length !== 82) throw new Error("Mint account has the wrong length.");
+  const opt = (o: number) => { const t = u32At(d, o); if (t > 1) throw new Error("Malformed mint option."); return t === 1 ? keyAt(d, o + 4) : null; };
+  if (d[45] > 1) throw new Error("Malformed mint initialized flag.");
+  return { mintAuthority: opt(0), supply: new DataView(d.buffer, d.byteOffset, d.length).getBigUint64(36, true), decimals: d[44], initialized: d[45] === 1, freezeAuthority: opt(46) };
+}
+/** Pool vault custody: 165 bytes, SPL owner, initialized (not frozen), mint, authority, no delegate, no close authority. */
+export function checkTokenAccount(acc: { owner: string; data: Uint8Array } | null, want: { mint: string; authority: string }): string[] {
+  if (!acc) return ["account missing"];
+  const d = acc.data; const issues: string[] = [];
+  if (acc.owner !== TOKEN_PROGRAM) issues.push("not owned by SPL Token");
+  if (d.length !== 165) return [...issues, "wrong token account length"];
+  if (keyAt(d, 0) !== want.mint) issues.push("wrong mint");
+  if (keyAt(d, 32) !== want.authority) issues.push("wrong authority");
+  if (u32At(d, 72) !== 0) issues.push("has a delegate");
+  if (d[108] === 0) issues.push("uninitialized"); else if (d[108] === 2) issues.push("frozen"); else if (d[108] !== 1) issues.push("bad state");
+  if (u32At(d, 129) !== 0) issues.push("has a close authority");
+  return issues;
+}
+export const DFS_FEE_VAULT_DISC = [192, 178, 69, 232, 58, 149, 157, 132];
+export const FEE_VAULT_LEN = 8 + 240 + 5 * 80;
+/** Mirror of Rust `check_fee_vault`: exact DFS PDA wSOL vault naming `pool` at `index` with a share. */
+export function checkFeeVault(address: string, acc: { owner: string; data: Uint8Array } | null, want: { feeTokenVault: string; pool: string; index: number }): { issues: string[]; share: number | null; totalShare: number | null } {
+  const bad = (m: string) => ({ issues: [m], share: null, totalShare: null });
+  if (!acc) return bad("fee vault missing");
+  const d = acc.data;
+  if (acc.owner !== DFS_PROGRAM) return bad("not owned by Dynamic Fee Sharing");
+  if (d.length < FEE_VAULT_LEN || !DFS_FEE_VAULT_DISC.every((v, i) => d[i] === v)) return bad("not a DFS fee vault");
+  const issues: string[] = [];
+  if (keyAt(d, 40) !== WSOL) issues.push("token mint is not wSOL");
+  if (d[104] !== 0) issues.push("token flag is not SPL Token");
+  if (d[105] !== 1) issues.push("not a PDA fee vault (keypair vaults are rejected)");
+  try { const pda = PublicKey.createProgramAddressSync([enc("fee_vault"), d.subarray(152, 184), pk(WSOL).toBytes(), Uint8Array.of(d[106])], pk(DFS_PROGRAM)); if (pda.toBase58() !== address) issues.push("address is not the canonical fee-vault PDA"); } catch { issues.push("address is not the canonical fee-vault PDA"); }
+  const tv = PublicKey.findProgramAddressSync([enc("token_vault"), pk(address).toBytes()], pk(DFS_PROGRAM))[0].toBase58();
+  if (tv !== want.feeTokenVault || keyAt(d, 72) !== tv) issues.push("token vault is not canonical");
+  const totalShare = u32At(d, 120); if (totalShare === 0) issues.push("total share is zero");
+  let share: number | null = null;
+  if (!Number.isInteger(want.index) || want.index < 0 || want.index > 4) issues.push("recipient index out of range");
+  else { const u = 248 + want.index * 80; share = u32At(d, u + 32); if (keyAt(d, u) !== want.pool) issues.push(`recipient ${want.index} is not the pool PDA`); if (share === 0) issues.push("pool share is zero"); }
+  return { issues, share, totalShare };
+}
+
+/** Pure confirmation matcher: only this program's own event for the prepared action, pool and wallet. */
+export function matchConfirmation(prep: { subject: string; wallet: string; payload: { programId: string; action: StakingAction | "harvest"; amount: string | null } }, logs: string[]) {
+  const action = prep.payload.action;
+  const evs = parseEvents(logs, prep.payload.programId).filter((e) => e.name === EXPECTED_EVENT[action] && e.pool === prep.subject);
+  const ev = action === "harvest" ? evs[0] : evs.find((e) => e.who === prep.wallet);
+  if (!ev) throw new Error(`No ${EXPECTED_EVENT[action]} event from Pollen Staking for this wallet in the confirmed transaction.`);
+  if ((action === "stake" || action === "request_unstake") && ev.amount.toString() !== prep.payload.amount) throw new Error("On-chain amount differs from the prepared amount.");
+  return ev;
+}
+
+/** Expected-hash normalization (also used by scripts/staking-elf-hash.ts for a local .so):
+ * SHA-256 over the ELF = ProgramData bytes after the 45-byte header, with ALL trailing 0x00 bytes
+ * removed (the loader zero-pads to the allocated length). Apply the same trim to the local .so. */
 export function programElf(programData: Uint8Array) {
   let end = programData.length; while (end > 45 && programData[end - 1] === 0) end--;
   return programData.subarray(45, end);
