@@ -44,13 +44,13 @@ function Receipts() {
     {!userId ? <Panel title="Your workspace"><p className="text-sm">Open your workspace to create and manage receipts. Published receipts and the offline verifier work without one.</p><button type="button" className="btn btn-ink" disabled={busy} onClick={() => { setBusy(true); store.startSandbox().catch((e) => setErr((e as Error).message)).finally(() => setBusy(false)); }}>{busy ? "Opening…" : "Open workspace"}</button></Panel>
     : <Panel title="Your receipts">
       <p className="text-xs">To create one, open a completed trial in the <Link to="/greenhouse" className="underline">Greenhouse</Link> and choose “Create research receipt”. Signing needs a <Link to="/identity" className="underline">registered PQ identity</Link>; an on-chain identity anchor is optional.</p>
-      {rows == null ? <p className="text-sm">{err || "Loading…"}</p> : !rows.length ? <p className="text-sm">No receipts yet.</p> :
+      {err ? <p role="alert" className="text-sm text-poppy-deep">Could not load your receipts: {err}</p> : rows == null ? <p className="text-sm">Loading…</p> : !rows.length ? <p className="text-sm">No receipts yet.</p> :
         <ul className="divide-y divide-ink/10 text-sm">{rows.map((r) => <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
           <span className="min-w-0 break-words"><span className={cn("hair mr-2 px-1 font-mono text-[0.65rem] uppercase", r.status === "signed" ? "bg-sprout text-paper-light" : "bg-paper-deep")}>{r.status}</span>{r.agents.map((h: string) => `@${h}`).join(", ")} · {new Date(r.created_at).toLocaleString()}{r.published ? " · published" : " · private"}{r.anchor_status !== "none" && ` · anchor ${r.anchor_status}`}</span>
-          {r.status === "signed" ? <Link to="/receipts/$id" params={{ id: r.id }} className="btn btn-paper">Open</Link> : <Link to="/receipts/new" search={{ run: r.run_id }} className="btn btn-paper">Continue signing</Link>}
+          {r.status === "signed" ? <Link to="/receipts/$id" params={{ id: r.id }} className="btn btn-paper">Open</Link> : <Link to="/receipts/new" search={{ draft: r.id }} className="btn btn-paper">Continue signing</Link>}
         </li>)}</ul>}
     </Panel>}
     {err && rows != null && <p role="alert" className="text-sm text-poppy-deep">{err}</p>}
-    <ReceiptFileVerifier />
+    <ReceiptFileVerifier key={userId ?? "guest"} />
   </div>;
 }
