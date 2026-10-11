@@ -268,3 +268,10 @@ export const botanistInfo = createServerFn({ method: "GET" }).handler(() => safe
   try { blockhash = (await connection().getLatestBlockhash("confirmed")).blockhash; } catch { /* readiness shows RPC */ }
   return { ...r, blockhash };
 }));
+
+// ---------- Pollen Staking ----------
+export const stakingState = createServerFn({ method: "POST" }).inputValidator((d: unknown) => z.object({ wallet: addr.nullable() }).strict().parse(d))
+  .handler(async ({ data }) => safe(async () => (await import("./staking.server")).readState(data.wallet)));
+export const stakingPrepare = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ wallet: addr, action: z.enum(["stake", "request_unstake", "cancel_unstake", "withdraw", "claim", "harvest"]), amount: z.string().regex(/^[1-9][0-9]{0,19}$/).optional() }).strict().parse(d))
+  .handler(async ({ data, context }) => safe(async () => { const [st, pq] = await Promise.all([import("./staking.server"), import("./pq.server")]); return st.prepare(pq.savePrep, context.userId, data); }));
