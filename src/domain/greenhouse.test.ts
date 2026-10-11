@@ -179,9 +179,9 @@ describe("greenhouse trials", () => {
     const a = Object.values(garden().agents)[0];
     const h = policyHash(a);
     expect(policyHash({ ...a, strategy: a.strategy + "!" })).not.toBe(h);
-    expect(evidenceStatus({ runPolicyHash: h, proposalPolicyHash: h, engineVersion: "greenhouse-rules-1" }, h)).toEqual({ policy: "match", currency: "current", engine: "supported" });
+    expect(evidenceStatus({ runPolicyHash: h, proposalPolicyHash: h, engineVersion: "greenhouse-rules-2" }, h)).toEqual({ policy: "match", currency: "current", engine: "supported" });
     expect(evidenceStatus({ runPolicyHash: h, proposalPolicyHash: null, engineVersion: "greenhouse-rules-1" }, "x").policy).toBe("unknown");
     expect(evidenceStatus({ runPolicyHash: h, proposalPolicyHash: "y", engineVersion: "old" }, "x")).toEqual({ policy: "mismatch", currency: "stale", engine: "unsupported" });
-    expect(evidenceStatus({ runPolicyHash: h, proposalPolicyHash: h, engineVersion: "greenhouse-rules-1" }, null).currency).toBe("unavailable");
+    expect(evidenceStatus({ runPolicyHash: h, proposalPolicyHash: h, engineVersion: "greenhouse-rules-2" }, null).currency).toBe("unavailable");
   });
 });
