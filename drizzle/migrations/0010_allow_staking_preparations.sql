@@ -1,0 +1,2 @@
+ALTER TABLE public.chain_preparations DROP CONSTRAINT IF EXISTS chain_preparations_kind_check;
+ALTER TABLE public.chain_preparations ADD CONSTRAINT chain_preparations_kind_check CHECK (kind = ANY (ARRAY['anchor','launch','migrate','config','pollen_create','pollen_fund','pollen_claim','pollen_route','staking_stake','staking_request_unstake','staking_cancel_unstake','staking_withdraw','staking_claim','staking_harvest']));
