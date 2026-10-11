@@ -71,8 +71,11 @@ export async function estimateWalletCost(conn: Connection, message: Uint8Array, 
     conn.simulateTransaction(vtx, { sigVerify: false, replaceRecentBlockhash: false, commitment: "confirmed", accounts: { encoding: "base64", addresses: [wallet] } }),
   ]);
   if (sim.value.err) return { ok: false as const, balanceLamports: pre, error: `Simulation failed: ${JSON.stringify(sim.value.err)}. ${(sim.value.logs ?? []).slice(-3).join(" | ")}`.slice(0, 400) };
-  const post = sim.value.accounts?.[0]?.lamports ?? pre;
-  const networkFee = fee.value ?? 0;
+  // Unknown values stay unknown: never treat a missing fee or post-balance as zero cost.
+  const post = sim.value.accounts?.[0]?.lamports;
+  const networkFee = fee.value;
+  if (typeof networkFee !== "number" || !Number.isSafeInteger(networkFee) || networkFee < 0) return { ok: false as const, balanceLamports: pre, error: "The RPC did not return a network fee for this exact message." };
+  if (typeof post !== "number" || !Number.isSafeInteger(post) || post < 0) return { ok: false as const, balanceLamports: pre, error: "The RPC simulation did not return the wallet's post-balance." };
   // Simulated post-balance of the payer: account rent plus whatever the RPC deducts for fees.
   return { ok: true as const, balanceLamports: pre, simulatedChangeLamports: Math.max(0, pre - post), networkFeeLamports: networkFee };
 }

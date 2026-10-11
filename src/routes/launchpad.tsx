@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/bits";
 import { FlowerTiles } from "@/components/PixelFlower";
+import { ScopeChangedError } from "@/pq/wallet-flow";
 import { CheckList, Panel, PassportTerms, PendingTransactions, RealBadge, WalletButtons, downloadPassport, explorerTx, lifecycleLabel, signSubmitConfirm, useWallets, type PqMine } from "@/components/pq/ui";
 import { getPqReadiness, pqLaunchProposals, pqMine, pqPinImage, pqPrepareLaunch, pqPrepareMigration, pqPublicLaunches, pqRefreshLifecycle, pqSetProposalStatus, pqStartLaunch } from "@/lib/pq.functions";
 import { b64 } from "@/pq/canonical";
@@ -37,7 +38,12 @@ function Launchpad() {
   const walletCtrl=useRef<AbortController|null>(null); const scopeRef=useRef("");
   const fence=useRef(createFence()).current;
   const identity=mine?.identities.find(i=>i.key_hash===local.envelope?.keyHash && i.cluster===readiness?.cluster && i.status==="anchored");
-  scopeRef.current=`${userId??"guest"}|${usedProposal??"-"}|${frozenEvidence?.frozenAt??"-"}|${signed?.manifestHash??"-"}`;
+  // Review scope (account, proposal, frozen evidence, mint) and approval scope (+ the signed passport).
+  const reviewKey=`${userId??"guest"}|${usedProposal??"-"}|${frozenEvidence?.frozenAt??"-"}`;
+  const reviewRef=useRef(""); reviewRef.current=reviewKey;
+  scopeRef.current=`${reviewKey}|${signed?.manifestHash??"-"}`;
+  const mounted=useRef(true); useEffect(()=>{mounted.current=true; return ()=>{mounted.current=false;};},[]);
+  const mintKey=()=>mint.current?.publicKey.toBase58()??"-";
   async function refresh() {
     const g=fence.current();
     if(store.get().userId) {const r=await pqMine(); if(!fence.guard(g)) return; if(r.ok) setMine(r.data); else setError(r.error);}
@@ -80,19 +86,24 @@ function Launchpad() {
     void refresh().catch(e=>setReadError(e.message));
   },[userId]);
   async function run(label:string,fn:()=>Promise<void>) {
-    setBusy(label); setError("");
-    try {await fn();} catch(e) {setError((e as Error).message); await refresh().catch(()=>{});} finally {setBusy(null);}
+    setBusy(label); setError(""); const g=fence.current();
+    try {await fn();} catch(e) {if(mounted.current&&fence.guard(g)) {setError((e as Error).message); await refresh().catch(()=>{});}} finally {if(mounted.current) setBusy(null);}
   }
   async function review() {
+    const rk=reviewRef.current; const g=fence.current();
+    const stale=()=>!mounted.current||!fence.guard(g)||reviewRef.current!==rk;
     if(!identity || !local.unlocked || !local.backupAck || !readiness?.ready) throw new Error("Back up, unlock and anchor your identity, then resolve the readiness checks.");
     let uri=imageUri, hash=imageHash;
     if(file) {
       if(file.size>1_000_000) throw new Error("Token image must be 1 MB or smaller.");
       setBusy("Pinning your image…"); const r=await pqPinImage({data:{data:b64(new Uint8Array(await file.arrayBuffer())),mime:file.type}});
+      if(stale()) return;
       if(!r.ok) throw new Error(r.error); uri=r.data.imageUri; hash=r.data.imageSha256; setImageUri(uri); setImageHash(hash);
     }
     mint.current ??= Keypair.generate();
-    const r=await pqStartLaunch({data:{identityId:identity.id,baseMint:mint.current.publicKey.toBase58()}});
+    const startMint=mintKey();
+    const r=await pqStartLaunch({data:{identityId:identity.id,baseMint:startMint}});
+    if(stale()||mintKey()!==startMint) return; // a discarded review never installs a passport draft
     if(!r.ok) throw new Error(r.error);
     const token:PassportManifest["token"]={...r.data.template.token,name:name.trim(),symbol:symbol.trim().toUpperCase(),imageUri:uri.trim(),imageSha256:hash};
     if(website.trim()) token.website=website.trim();
@@ -101,14 +112,21 @@ function Launchpad() {
     setManifest(m); setReviewAck(false);
   }
   async function launch(kind:WalletKind) {
-    if(!signed || !mint.current) throw new Error("Sign this draft before launching.");
+    // Capture the exact signed passport, co-signer and approval scope BEFORE any await.
+    const passport=signed, coSigner=mint.current, proposal=usedProposal;
+    if(!passport || !coSigner) throw new Error("Sign this draft before launching.");
+    const scope=scopeRef.current, coKey=coSigner.publicKey.toBase58(), g=fence.current();
+    const live=()=>mounted.current&&fence.guard(g)&&scopeRef.current===scope&&mint.current?.publicKey.toBase58()===coKey;
+    walletCtrl.current?.abort(); const ctrl=new AbortController(); walletCtrl.current=ctrl;
     setBusy("Preparing immutable metadata and the Meteora transaction…");
-    const p=await pqPrepareLaunch({data:{passport:signed}}); if(!p.ok) throw new Error(p.error);
-    // The wallet result is only submitted if the account, proposal, frozen evidence and signed passport are unchanged.
-    const scope=scopeRef.current; walletCtrl.current?.abort(); const ctrl=new AbortController(); walletCtrl.current=ctrl;
-    const r=await signSubmitConfirm(kind,p.data,{coSign:[mint.current],onStatus:setBusy,guard:()=>scopeRef.current===scope,signal:ctrl.signal});
-    setDone({signature:r.signature,hash:signed.manifestHash}); mint.current=null;
-    if(usedProposal) {await pqSetProposalStatus({data:{id:usedProposal,status:"launched"}}); setUsedProposal(null);}
+    const p=await pqPrepareLaunch({data:{passport}});
+    if(!live()||ctrl.signal.aborted) throw new ScopeChangedError("The review, account or mint changed while preparing. Nothing was sent.");
+    if(!p.ok) throw new Error(p.error);
+    const r=await signSubmitConfirm(kind,p.data,{coSign:[coSigner],onStatus:(x)=>{if(live()) setBusy(x);},guard:live,signal:ctrl.signal});
+    if(!mounted.current||!fence.guard(g)) return;
+    setDone({signature:r.signature,hash:passport.manifestHash}); if(mint.current?.publicKey.toBase58()===coKey) mint.current=null;
+    if(proposal) {await pqSetProposalStatus({data:{id:proposal,status:"launched"}}); if(mounted.current&&fence.guard(g)) setUsedProposal(null);}
+    if(!mounted.current||!fence.guard(g)) return;
     toast.success(r.detail); await refresh();
   }
   async function migrate(kind:WalletKind,id:string) {

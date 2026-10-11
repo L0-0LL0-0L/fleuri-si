@@ -14,8 +14,9 @@ export interface WalletFlowDeps<T> {
   serialize(tx: T): string;
   submit(serialized: string): Promise<{ ok: true; data: { signature: string } } | { ok: false; error: string }>;
   confirm(): Promise<{ ok: true; data: { status: string; id?: string; detail: string } } | { ok: false; error: string }>;
-  /** Subscribes to wallet account changes/disconnects; returns an unsubscribe. */
-  watchAccount?(onChange: () => void): () => void;
+  /** Subscribes to wallet account changes/disconnects; returns an unsubscribe. Pass the new account
+   *  (base58), null for a disconnect, or undefined when unknown. */
+  watchAccount?(onChange: (account?: string | null) => void): () => void;
   sleep?(ms: number): Promise<void>;
 }
 export interface WalletFlowOpts { onStatus?: (s: string) => void; guard?: () => boolean; signal?: AbortSignal; polls?: number; pollMs?: number }
@@ -24,11 +25,19 @@ export async function guardedSignSubmit<T>(prep: { preparationId: string; transa
   const local = new AbortController();
   const onOuter = () => local.abort(); o.signal?.addEventListener("abort", onOuter);
   if (o.signal?.aborted) local.abort();
-  const unwatch = d.watchAccount?.(() => local.abort()) ?? (() => {});
+  // The connecting wallet's own initial accountChanged event is not a switch; any other account,
+  // a disconnect, or an unknown change after connection cancels.
+  let connected: string | null = null;
+  const unwatch = d.watchAccount?.((acct) => {
+    if (acct === null) return local.abort();
+    if (connected === null) { if (acct === undefined) local.abort(); return; }
+    if (acct !== connected) local.abort();
+  }) ?? (() => {});
   const sleep = d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const check = (stage: string) => { if (local.signal.aborted || (o.guard && !o.guard())) throw new ScopeChangedError(`Cancelled ${stage}: the account, wallet or review changed. Nothing new was sent.`); };
   // Rejects as soon as cancellation happens, even if the wallet prompt is still open.
   const race = <R,>(p: Promise<R>, stage: string) => new Promise<R>((res, rej) => {
+    p.catch(() => {}); // a late wallet rejection after cancellation must never be unhandled
     const ab = () => rej(new ScopeChangedError(`Cancelled ${stage}: the account, wallet or review changed. Nothing new was sent.`));
     if (local.signal.aborted) return ab();
     local.signal.addEventListener("abort", ab, { once: true });
@@ -38,6 +47,7 @@ export async function guardedSignSubmit<T>(prep: { preparationId: string; transa
     const tx = d.decode(prep.transaction);
     check("before connecting");
     const wallet = await race(d.connect(), "while connecting");
+    connected = wallet;
     check("after connecting");
     if (wallet !== d.feePayer(tx)) throw new Error("Switch to the wallet named in this prepared transaction.");
     d.coSign?.(tx);
@@ -45,7 +55,10 @@ export async function guardedSignSubmit<T>(prep: { preparationId: string; transa
     const signed = await race(d.sign(tx), "while the wallet was open");
     check("after the wallet signed (the signature was discarded)");
     o.onStatus?.("Submitting the exact prepared transaction…");
-    const sub = await d.submit(d.serialize(signed));
+    const bytes = d.serialize(signed);
+    // Last gate: nothing (status callbacks, serialization) may run between this check and submit.
+    check("before submission (the signature was discarded)");
+    const sub = await d.submit(bytes);
     if (!sub.ok) throw new Error(sub.error);
     for (let i = 0; i < (o.polls ?? 40); i++) {
       if (local.signal.aborted || (o.guard && !o.guard())) throw new ScopeChangedError(`Submitted ${sub.data.signature}; stopped watching because the view changed. Check it under Pending transactions.`);

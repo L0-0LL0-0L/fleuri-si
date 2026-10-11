@@ -30,7 +30,15 @@ export const Route = createFileRoute("/receipts/new")({
   component: NewReceipt,
 });
 
-function NewReceipt() {
+// Owner/run/draft scope is a React key: a change remounts synchronously, so no old private draft,
+// signature or busy state renders for a new scope, and the old instance's fence is invalidated.
+export function NewReceipt() {
+  const { run, draft } = Route.useSearch();
+  const { userId } = useGarden();
+  return <NewReceiptScoped key={`${userId ?? "guest"}|${run ?? ""}|${draft ?? ""}`} />;
+}
+
+function NewReceiptScoped() {
   const { run: runParam, draft: draftParam } = Route.useSearch();
   const navigate = useNavigate();
   const { userId, store } = useGarden();
@@ -43,7 +51,7 @@ function NewReceipt() {
   const [ack, setAck] = useState(false); const [busy, setBusy] = useState<string | null>(null); const [err, setErr] = useState("");
   const [reloadN, setReloadN] = useState(0);
 
-  useEffect(() => { loadLocal(); }, []);
+  useEffect(() => { loadLocal(); return () => { fence.bump(); }; }, []);
   // Owner/run/draft change: clear every private draft/signature/pending view and fence late responses.
   useEffect(() => {
     const g = fence.bump();
@@ -58,10 +66,11 @@ function NewReceipt() {
         if (d.data.status === "signed") { void navigate({ to: "/receipts/$id", params: { id: d.data.id } }); return; }
         if (receiptHash(d.data.manifest) !== d.data.manifestHash || d.data.manifest.source.runId !== d.data.runId) return setErr("The stored draft does not match its hash or trial.");
         rid = d.data.runId; setRunId(rid);
+        const prior = readReceiptPending(userId, rid, localStorage); // captured BEFORE it is overwritten below
         const p: ReceiptPending = { requestId: d.data.requestId, runId: rid, identityId: d.data.identityId, receiptId: d.data.id, manifestHash: d.data.manifestHash };
         writeReceiptPending(userId, p, localStorage); setPending(p); setPick(p.identityId);
         setDraft({ id: d.data.id, manifest: d.data.manifest, manifestHash: d.data.manifestHash });
-        setSaved(readReceiptSig(userId, d.data.id, d.data.manifestHash, localStorage) ?? legacySig(readReceiptPending(userId, rid, localStorage), d.data.id, d.data.manifestHash));
+        setSaved(readReceiptSig(userId, d.data.id, d.data.manifestHash, localStorage) ?? legacySig(prior, d.data.id, d.data.manifestHash));
       } else {
         const p = readReceiptPending(userId, rid!, localStorage); setPending(p); if (p) setPick(p.identityId);
       }

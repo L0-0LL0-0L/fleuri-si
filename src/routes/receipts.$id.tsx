@@ -30,24 +30,40 @@ export const Route = createFileRoute("/receipts/$id")({
   component: ReceiptPage,
 });
 
-function ReceiptPage() {
+// Each load is bound to the owner + receipt + generation captured when it (or its reload callback)
+// was created. Results are stored with that scope key and rendered only while it is still current,
+// so a stale reload can never paint receipt A under owner B / receipt B, even before effects run.
+type Loaded = { key: string; g: number; row: any } | { key: string; g: number; err: string };
+export function ReceiptPage() {
   const { id } = Route.useParams();
   const { userId } = useGarden();
-  const [row, setRow] = useState<any>(null); const [err, setErr] = useState("");
+  const key = `${userId ?? "guest"}|${id}`;
+  const [data, setData] = useState<Loaded | null>(null);
   const fence = useRef(createFence()).current;
-  async function load(g = fence.current()) {
-    const own = userId ? await rrGet({ data: { id } }) : null;
-    const r = own?.ok ? own : await rrPublic({ data: { id } });
+  useEffect(() => () => { fence.bump(); }, []);
+  async function load(rid: string, uid: string | null, k: string, g: number) {
     if (!fence.guard(g)) return;
-    if (!r.ok) { setErr(r.error); return; }
-    setRow(r.data);
+    try {
+      const own = uid ? await rrGet({ data: { id: rid } }) : null;
+      if (!fence.guard(g)) return;
+      const r = own?.ok ? own : await rrPublic({ data: { id: rid } });
+      if (!fence.guard(g)) return;
+      setData(r.ok ? { key: k, g, row: r.data } : { key: k, g, err: r.error });
+    } catch (e) { if (fence.guard(g)) setData({ key: k, g, err: (e as Error).message }); }
   }
   // id or session change: never show the previous receipt/owner while the new one loads.
-  useEffect(() => { const g = fence.bump(); setRow(null); setErr(""); if (!/^[0-9a-f-]{36}$/i.test(id)) { setErr("That is not a receipt id."); return; } load(g).catch((e) => fence.guard(g) && setErr((e as Error).message)); }, [id, userId]);
+  useEffect(() => {
+    const g = fence.bump();
+    if (!/^[0-9a-f-]{36}$/i.test(id)) { setData({ key, g, err: "That is not a receipt id." }); return; }
+    void load(id, userId, key, g);
+  }, [id, userId]);
+  const cur = data && data.key === key ? data : null;
+  const err = cur && "err" in cur ? cur.err : "";
+  const row = cur && "row" in cur ? cur.row : null;
   return <div className="space-y-4">
     <PageHeader title="research receipt" kicker="signed · greenhouse" />
     <FlowerTiles count={8} cols={8} start={4} />
-    {err ? <EmptyState title="receipt unavailable" body={err} action={<Link to="/receipts" className="btn btn-paper">All receipts</Link>} /> : !row ? <ListSkeleton /> : <ReceiptDetail key={`${userId ?? "guest"}|${row.id}`} row={row} owner={userId} reload={() => load()} />}
+    {err ? <EmptyState title="receipt unavailable" body={err} action={<Link to="/receipts" className="btn btn-paper">All receipts</Link>} /> : !row ? <ListSkeleton /> : <ReceiptDetail key={key} row={row} owner={userId} reload={() => load(id, userId, cur!.key, cur!.g)} />}
   </div>;
 }
 
@@ -57,8 +73,12 @@ function ReceiptDetail({ row, reload, owner }: { row: any; reload: () => Promise
   const [busy, setBusy] = useState<string | null>(null); const [msg, setMsg] = useState("");
   const [reviewPub, setReviewPub] = useState(false); const [anchor, setAnchor] = useState<AnchorPrep | null>(null);
   const [preps, setPreps] = useState<PendingPreparation[]>([]); const [prepErr, setPrepErr] = useState("");
-  // Every async result is bound to owner + receipt + current anchor preparation and to this mount.
-  const scope = useLiveScope(`${owner ?? "guest"}|${row.id}|${anchor?.preparationId ?? "-"}`);
+  // Async results are bound to owner + receipt + this mount. Deliberate prepared-state changes (a new
+  // preparation, a successful anchor) do not invalidate the operation that made them; the wallet
+  // guard separately checks that the reviewed preparation is still the one on screen.
+  const scope = useLiveScope(`${owner ?? "guest"}|${row.id}`);
+  const anchorRef = useRef<AnchorPrep | null>(null); anchorRef.current = anchor;
+  const opRef = useRef(0);
   const walletCtrl = useRef<AbortController | null>(null);
   useEffect(() => () => walletCtrl.current?.abort(), []);
   const review = useMemo(() => anchor ? reviewAnchorPrep(anchor, { wallet: row.manifest.issuer.wallet, cluster: row.manifest.cluster, genesisHash: row.manifest.genesisHash, manifestHash: row.manifest_hash }) : null, [anchor, row]);
@@ -71,9 +91,10 @@ function ReceiptDetail({ row, reload, owner }: { row: any; reload: () => Promise
   }
   useEffect(() => { void loadPreps(); }, [row.id]);
   async function act(label: string, fn: (live: () => boolean) => Promise<void>) {
-    const t = scope.token(); const live = () => scope.live(t);
+    const t = scope.token(); const op = ++opRef.current; const live = () => scope.live(t);
     setBusy(label); setMsg("");
-    try { await fn(live); } catch (e) { if (live()) setMsg((e as Error).message); } finally { if (live()) setBusy(null); }
+    // Only the owning (latest) operation clears busy; an older completion never clears a newer one.
+    try { await fn(live); } catch (e) { if (live() && opRef.current === op) setMsg((e as Error).message); } finally { if (live() && opRef.current === op) setBusy(null); }
   }
   const publish = (p: boolean) => act(p ? "Publishing…" : "Making private…", async (live) => { const r = await rrPublish({ data: { id: row.id, published: p } }); if (!live()) return; if (!r.ok) throw new Error(r.error); setReviewPub(false); toast.success(p ? "Receipt published" : "Receipt is private again"); await reload(); });
   const prepare = () => act("Preparing the exact Memo transaction…", async (live) => { const r = await rrPrepareAnchor({ data: { id: row.id } }); if (!live()) return; if (!r.ok) throw new Error(r.error); setAnchor(r.data as AnchorPrep); });
@@ -82,8 +103,8 @@ function ReceiptDetail({ row, reload, owner }: { row: any; reload: () => Promise
     const prep = anchor; const scopeKey = scope.token();
     walletCtrl.current?.abort(); const ctrl = new AbortController(); walletCtrl.current = ctrl;
     return act("Preparing…", async (live) => {
-      const r = await signSubmitConfirm(k, prep, { onStatus: (s) => live() && setBusy(s), guard: () => scope.live(scopeKey) && Date.parse(prep.expiresAt) > Date.now(), signal: ctrl.signal });
-      if (!live()) return;
+      const r = await signSubmitConfirm(k, prep, { onStatus: (s) => live() && setBusy(s), guard: () => scope.live(scopeKey) && !ctrl.signal.aborted && anchorRef.current?.preparationId === prep.preparationId && Date.parse(prep.expiresAt) > Date.now(), signal: ctrl.signal });
+      if (!live() || ctrl.signal.aborted || anchorRef.current?.preparationId !== prep.preparationId) return; // cancelled or replaced
       setAnchor(null); toast.success(r.detail); await reload(); await loadPreps();
     });
   };
@@ -117,11 +138,11 @@ function ReceiptDetail({ row, reload, owner }: { row: any; reload: () => Promise
           <p>Expires {new Date(anchor.expiresAt).toLocaleTimeString()}. Nothing is sent until you approve in your wallet.</p>
           {review && !review.ok && <ul role="alert" className="list-disc pl-4 text-poppy-deep">{review.problems.map((p) => <li key={p}>{p}</li>)}</ul>}
           <WalletButtons avail={wallets} busy={busy} disabled={!review?.ok} action="Anchor with" onPick={(k) => void sign(k)} />
-          <button type="button" className="btn btn-paper" onClick={() => { walletCtrl.current?.abort(); setAnchor(null); }}>Cancel</button></div>)}
+          <button type="button" className="btn btn-paper" onClick={() => { walletCtrl.current?.abort(); opRef.current++; setBusy(null); setAnchor(null); }}>Cancel</button></div>)}
       {msg && <p role="alert" className="break-words text-sm text-poppy-deep">{msg}</p>}
     </Panel>
     {row.mine && prepErr && <p role="alert" className="text-sm text-poppy-deep">Could not load pending transactions: {prepErr}</p>}
-    {row.mine && <PendingTransactions rows={preps} onRefresh={async () => { const t = scope.token(); await reload(); if (scope.live(t)) await loadPreps(); }} />}
+    {row.mine && <PendingTransactions rows={preps} onRefresh={async () => { const t = scope.token(); if (!scope.live(t)) return; await reload(); if (scope.live(t)) await loadPreps(); }} />}
     <ScopeNote />
     <Panel title="Signed manifest"><ManifestReview m={row.manifest} hash={row.manifest_hash} /></Panel>
     <TrialReport key={trial.id} row={trial} handles={{}} receiptView />
