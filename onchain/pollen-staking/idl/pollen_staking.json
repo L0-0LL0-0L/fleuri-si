@@ -528,6 +528,10 @@
             "type": "i64"
           },
           {
+            "name": "stream_end",
+            "type": "i64"
+          },
+          {
             "name": "stream_released",
             "type": "u64"
           },
@@ -540,7 +544,7 @@
             "type": "i64"
           },
           {
-            "name": "verified_fees_total",
+            "name": "dfs_funded_total",
             "type": "u64"
           },
           {
