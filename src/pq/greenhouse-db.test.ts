@@ -21,6 +21,7 @@ beforeAll(async () => {
   await db.exec(await readFile(new URL("./sql/0011_greenhouse_trials.sql", import.meta.url), "utf8"));
   await db.exec("grant all on all tables in schema public to anon,authenticated;"); // defaults re-granted later must be revoked by 0012
   await db.exec(await readFile(new URL("./sql/0012_greenhouse_leases.sql", import.meta.url), "utf8"));
+  await db.exec(await readFile(new URL("./sql/0013_greenhouse_recovery_limit.sql", import.meta.url), "utf8"));
   await db.exec("insert into agents values('a_1','rose'),('a_2','moss'); insert into launch_proposals(id,agent_handle,name,symbol,origin_agent_id,origin_policy_hash) values('bbbbbbbb-0000-4000-8000-000000000001','rose','Rose','ROSE','a_1','"+"p".repeat(64)+"'),('bbbbbbbb-0000-4000-8000-000000000002','moss','Moss','MOSS',null,null),('bbbbbbbb-0000-4000-8000-000000000003','nobody','X','XXX',null,null);");
 }, 30_000);
 afterAll(async () => { await db?.close(); });
@@ -112,6 +113,25 @@ describe("greenhouse leases (0012)", () => {
     expect(res.filter((x) => x.status === "fulfilled")).toHaveLength(2);
     expect(res.filter((x) => x.status === "rejected").every((x: any) => /already running/.test(String(x.reason)))).toBe(true);
     await db.exec(`update greenhouse_runs set status='done' where owner_id='${C}'`);
+  });
+  it("expired recovery respects the 2-active limit without mutating the refused run", async () => {
+    const D = "44444444-4444-4444-8444-444444444444";
+    const [ra, rb, rc] = [1, 2, 3].map((i) => `eeeeeeee-0000-4000-8000-00000000000${i}`);
+    const a = await claim(D, ra);
+    await expire(ra);
+    const b = await claim(D, rb), c = await claim(D, rc);
+    expect(b.acquired && c.acquired).toBe(true);
+    const before = (await q("select attempts, lease_token, lease_expires_at from greenhouse_runs where request_id=$1", [ra]))[0];
+    await expect(claim(D, ra)).rejects.toThrow("already running");
+    const after = (await q("select attempts, lease_token, lease_expires_at from greenhouse_runs where request_id=$1", [ra]))[0];
+    expect(after).toEqual(before); expect(after.attempts).toBe(1);
+    // same-id unexpired retry is not another slot
+    expect(await claim(D, rb)).toMatchObject({ acquired: false, status: "running" });
+    await fin(b.id, b.lease, "oh", D);
+    const rec = await claim(D, ra);
+    expect(rec).toMatchObject({ id: a.id, acquired: true, attempts: 2 }); expect(rec.input).toEqual(input); expect(rec.lease).not.toBe(before.lease_token);
+    const active = await q("select count(*)::int n from greenhouse_runs where owner_id=$1 and status='running' and lease_expires_at > now()", [D]);
+    expect(active[0].n).toBe(2);
   });
   it("rate-limits 30 per hour per owner", async () => {
     for (let i = 0; i < 40; i++) {
