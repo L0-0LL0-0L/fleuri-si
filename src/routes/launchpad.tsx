@@ -10,6 +10,8 @@ import { b64 } from "@/pq/canonical";
 import { loadLocal, usePqLocal, withSecret } from "@/pq/local";
 import { parseManifest, signPassport, type PassportManifest, type SignedPassportT } from "@/pq/passport";
 import { useGarden } from "@/store/garden";
+import { AttachEvidence, EvidenceList, originAgentId, type EvidenceRow } from "@/components/greenhouse/ProposalEvidence";
+import { ghEvidence, ghMyRuns } from "@/lib/greenhouse.functions";
 import type { WalletKind } from "@/services/wallet";
 
 export const Route = createFileRoute("/launchpad")({
@@ -18,7 +20,7 @@ export const Route = createFileRoute("/launchpad")({
 });
 
 function Launchpad() {
-  const local=usePqLocal(); const {userId,store}=useGarden(); const wallets=useWallets();
+  const local=usePqLocal(); const {userId,store,state:garden}=useGarden(); const wallets=useWallets();
   const mint=useRef<Keypair|null>(null);
   const [readiness,setReadiness]=useState<any>(null); const [readError,setReadError]=useState("");
   const [mine,setMine]=useState<PqMine|null>(null); const [launches,setLaunches]=useState<any[]>([]);
@@ -29,14 +31,21 @@ function Launchpad() {
   const [manifest,setManifest]=useState<PassportManifest|null>(null); const [signed,setSigned]=useState<SignedPassportT|null>(null);
   const [reviewAck,setReviewAck]=useState(false); const [done,setDone]=useState<{signature:string;hash:string}|null>(null);
   const [proposals,setProposals]=useState<any[]>([]); const [usedProposal,setUsedProposal]=useState<string|null>(null);
+  const [evidence,setEvidence]=useState<EvidenceRow[]>([]); const [ghRuns,setGhRuns]=useState<any[]>([]); const [frozenEvidence,setFrozenEvidence]=useState<EvidenceRow[]|null>(null);
   const identity=mine?.identities.find(i=>i.key_hash===local.envelope?.keyHash && i.cluster===readiness?.cluster && i.status==="anchored");
   async function refresh() {
     if(store.get().userId) {const r=await pqMine(); if(r.ok) setMine(r.data); else setError(r.error);}
     const r=await pqPublicLaunches(); if(r.ok) setLaunches(r.data); else setReadError(r.error);
     const pr=await pqLaunchProposals(); if(pr.ok) setProposals(pr.data);
+    if(store.get().userId && pr.ok) await loadEvidence(pr.data);
+  }
+  async function loadEvidence(list:any[]=proposals) {
+    const [ev,rs]=await Promise.all([ghEvidence({data:{proposalIds:list.map(p=>p.id)}}),ghMyRuns()]);
+    if(ev.ok) setEvidence(ev.data as EvidenceRow[]); if(rs.ok) setGhRuns(rs.data);
   }
   function useProposal(p:any) {
     setDone(null); setManifest(null); setSigned(null); setReviewAck(false);
+    setFrozenEvidence(structuredClone(evidence.filter(e=>e.proposal_id===p.id)));
     setName(p.name); setSymbol(p.symbol); setWebsite(""); setTwitter("");
     setFile(null); setImageUri(""); setImageHash(null); setUsedProposal(p.id);
     window.scrollTo({top:0,behavior:"smooth"});
@@ -112,12 +121,16 @@ function Launchpad() {
         <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{p.name} <span className="text-poppy">${p.symbol}</span></p><p className="font-mono text-xs">drafted by @{p.agent_handle}</p></div>
         {p.tagline && <p className="text-sm">{p.tagline}</p>}
         {p.reason && <p className="text-xs text-ink-soft">why: {p.reason}</p>}
+        <div className="space-y-1"><p className="font-mono text-[0.65rem] uppercase tracking-widest">Greenhouse evidence · drafted with policy {p.origin_policy_hash?`${p.origin_policy_hash.slice(0,8)}… (${p.origin_mode??"unknown"} mode)`:"unknown (legacy draft)"}</p>
+          {userId?<><EvidenceList rows={evidence.filter(e=>e.proposal_id===p.id)} agents={garden?.agents??{}}/><AttachEvidence proposalId={p.id} originId={garden?originAgentId(p,garden.agents):p.origin_agent_id??null} runs={ghRuns} onDone={()=>loadEvidence()}/></>:<p className="text-xs text-ink-soft">Open your workspace to attach your own trial evidence.</p>}
+        </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn btn-red" disabled={!!busy} onClick={()=>useProposal(p)}>{usedProposal===p.id?"Draft loaded below ↓":"Use this draft"}</button>
           <button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>void run("Dismissing draft…",async()=>{const r=await pqSetProposalStatus({data:{id:p.id,status:"dismissed"}});if(!r.ok)throw new Error(r.error);await refresh();})}>Dismiss</button>
         </div>
       </div>)}
     </Panel>}
+    {usedProposal && frozenEvidence && <Panel title="Greenhouse evidence for this review"><EvidenceList rows={frozenEvidence} agents={garden?.agents??{}} frozen/></Panel>}
     <Panel title="Your next bloom">
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();void run("Reading exact chain terms…",review);}}>
         <label className="text-sm font-semibold">Token name<input required maxLength={32} value={name} onChange={e=>setName(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="a strange little bloom"/></label>

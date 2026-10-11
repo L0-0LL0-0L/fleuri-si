@@ -64,7 +64,7 @@ export async function peekGarden(ownerId: string | null) {
   return (await loadForMutation(db, ownerId)).state;
 }
 
-export type LaunchProposalDraft = { agentHandle: string; name: string; symbol: string; tagline: string; reason: string };
+export type LaunchProposalDraft = { agentHandle: string; name: string; symbol: string; tagline: string; reason: string; originAgentId: string; originPolicyHash: string; originMode: "rules" | "ai" };
 
 /**
  * Best-effort record of an agent's virtual launch as a real-launch proposal.
@@ -79,6 +79,9 @@ export async function recordLaunchProposal(p: LaunchProposalDraft) {
       symbol: p.symbol.slice(0, 10),
       tagline: p.tagline.slice(0, 200),
       reason: p.reason.slice(0, 200),
+      origin_agent_id: p.originAgentId,
+      origin_policy_hash: p.originPolicyHash,
+      origin_mode: p.originMode,
     });
     if (error) console.error("[proposals] insert failed", error.message);
   } catch (e) {

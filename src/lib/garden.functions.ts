@@ -106,6 +106,7 @@ export const gardenCommand = createServerFn({ method: "POST" })
     const { mutateGarden, ensureOwner, peekGarden, DuplicateCycleError, ConflictError } = await import("./garden.server");
     const E = await import("@/domain/engine");
     const { DomainError } = await import("@/domain/types");
+    const G = await import("@/domain/greenhouse");
     const now = Date.now();
     try {
       switch (data.type) {
@@ -185,8 +186,9 @@ export const gardenCommand = createServerFn({ method: "POST" })
             E.assertOwner(d, userId, data.agentId);
             const r = E.runCycle(d, data.agentId, now, plan);
             const coin = r.decision === "launch" && !r.error ? Object.values(d.coins).find((k) => k.creatorId === data.agentId && k.createdAt === now) : undefined;
+            const origin = d.agents[data.agentId];
             return {
-              result: { ...r, proposal: coin ? { agentHandle: ag.handle, name: coin.name, symbol: coin.symbol, tagline: coin.tagline, reason: note } : null },
+              result: { ...r, proposal: coin ? { agentHandle: ag.handle, name: coin.name, symbol: coin.symbol, tagline: coin.tagline, reason: note, originAgentId: origin.id, originPolicyHash: G.policyHash(origin), originMode: mode } : null },
               thoughtMode: mode,
               cycles: [{ agent_id: data.agentId, bucket, t: now, decision: r.decision, mode, trigger: "owner" as const, reason: (r.error ? `rejected: ${r.error}. ` : "") + note }],
             };

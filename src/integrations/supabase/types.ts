@@ -443,6 +443,129 @@ export type Database = {
         }
         Relationships: []
       }
+      greenhouse_evidence: {
+        Row: {
+          attached_at: string
+          content_hash: string
+          engine_version: string
+          id: string
+          origin_agent_id: string
+          owner_id: string
+          proposal_id: string
+          proposal_policy_hash: string | null
+          repetitions: number
+          run_id: string
+          run_policy_hash: string
+          scenarios: string[]
+        }
+        Insert: {
+          attached_at?: string
+          content_hash: string
+          engine_version: string
+          id?: string
+          origin_agent_id: string
+          owner_id: string
+          proposal_id: string
+          proposal_policy_hash?: string | null
+          repetitions: number
+          run_id: string
+          run_policy_hash: string
+          scenarios: string[]
+        }
+        Update: {
+          attached_at?: string
+          content_hash?: string
+          engine_version?: string
+          id?: string
+          origin_agent_id?: string
+          owner_id?: string
+          proposal_id?: string
+          proposal_policy_hash?: string | null
+          repetitions?: number
+          run_id?: string
+          run_policy_hash?: string
+          scenarios?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "greenhouse_evidence_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "launch_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "greenhouse_evidence_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "greenhouse_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      greenhouse_runs: {
+        Row: {
+          agent_ids: string[]
+          attempts: number
+          claimed_at: string
+          content_hash: string | null
+          created_at: string
+          engine_version: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          input: Json
+          input_hash: string
+          output: Json | null
+          output_hash: string | null
+          owner_id: string
+          published: boolean
+          published_at: string | null
+          request_id: string
+          status: string
+        }
+        Insert: {
+          agent_ids: string[]
+          attempts?: number
+          claimed_at?: string
+          content_hash?: string | null
+          created_at?: string
+          engine_version: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          input: Json
+          input_hash: string
+          output?: Json | null
+          output_hash?: string | null
+          owner_id: string
+          published?: boolean
+          published_at?: string | null
+          request_id: string
+          status?: string
+        }
+        Update: {
+          agent_ids?: string[]
+          attempts?: number
+          claimed_at?: string
+          content_hash?: string | null
+          created_at?: string
+          engine_version?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          input?: Json
+          input_hash?: string
+          output?: Json | null
+          output_hash?: string | null
+          owner_id?: string
+          published?: boolean
+          published_at?: string | null
+          request_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       holdings: {
         Row: {
           agent_id: string
@@ -511,6 +634,9 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          origin_agent_id: string | null
+          origin_mode: string | null
+          origin_policy_hash: string | null
           reason: string
           status: string
           symbol: string
@@ -521,6 +647,9 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          origin_agent_id?: string | null
+          origin_mode?: string | null
+          origin_policy_hash?: string | null
           reason?: string
           status?: string
           symbol: string
@@ -531,6 +660,9 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          origin_agent_id?: string | null
+          origin_mode?: string | null
+          origin_policy_hash?: string | null
           reason?: string
           status?: string
           symbol?: string
@@ -1367,6 +1499,159 @@ export type Database = {
         }
       }
       garden_commit: { Args: { p: Json }; Returns: number }
+      greenhouse_attach_evidence: {
+        Args: { _owner: string; _proposal: string; _run: string }
+        Returns: {
+          attached_at: string
+          content_hash: string
+          engine_version: string
+          id: string
+          origin_agent_id: string
+          owner_id: string
+          proposal_id: string
+          proposal_policy_hash: string | null
+          repetitions: number
+          run_id: string
+          run_policy_hash: string
+          scenarios: string[]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "greenhouse_evidence"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      greenhouse_claim_run: {
+        Args: {
+          _agents: string[]
+          _engine: string
+          _input: Json
+          _input_hash: string
+          _owner: string
+          _request: string
+        }
+        Returns: {
+          agent_ids: string[]
+          attempts: number
+          claimed_at: string
+          content_hash: string | null
+          created_at: string
+          engine_version: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          input: Json
+          input_hash: string
+          output: Json | null
+          output_hash: string | null
+          owner_id: string
+          published: boolean
+          published_at: string | null
+          request_id: string
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "greenhouse_runs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      greenhouse_fail_run: {
+        Args: { _id: string; _owner: string; _reason: string }
+        Returns: {
+          agent_ids: string[]
+          attempts: number
+          claimed_at: string
+          content_hash: string | null
+          created_at: string
+          engine_version: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          input: Json
+          input_hash: string
+          output: Json | null
+          output_hash: string | null
+          owner_id: string
+          published: boolean
+          published_at: string | null
+          request_id: string
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "greenhouse_runs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      greenhouse_finalize_run: {
+        Args: {
+          _content_hash: string
+          _id: string
+          _input_hash: string
+          _output: Json
+          _output_hash: string
+          _owner: string
+        }
+        Returns: {
+          agent_ids: string[]
+          attempts: number
+          claimed_at: string
+          content_hash: string | null
+          created_at: string
+          engine_version: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          input: Json
+          input_hash: string
+          output: Json | null
+          output_hash: string | null
+          owner_id: string
+          published: boolean
+          published_at: string | null
+          request_id: string
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "greenhouse_runs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      greenhouse_set_published: {
+        Args: { _id: string; _owner: string; _published: boolean }
+        Returns: {
+          agent_ids: string[]
+          attempts: number
+          claimed_at: string
+          content_hash: string | null
+          created_at: string
+          engine_version: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          input: Json
+          input_hash: string
+          output: Json | null
+          output_hash: string | null
+          owner_id: string
+          published: boolean
+          published_at: string | null
+          request_id: string
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "greenhouse_runs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       my_alerts: {
         Args: { p_limit?: number }
         Returns: {

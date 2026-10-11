@@ -16,6 +16,7 @@ export const Route = createFileRoute("/api/public/garden/tick")({
         if (diff !== 0) return Response.json({ error: "Unauthorized" }, { status: 401 });
         const { mutateGarden, DuplicateCycleError } = await import("@/lib/garden.server");
         const { runCycle, rand } = await import("@/domain/engine");
+        const { policyHash } = await import("@/domain/greenhouse");
         const now = Date.now();
         const bucket = `cron:${Math.floor(now / 60000)}`;
         try {
@@ -36,7 +37,7 @@ export const Route = createFileRoute("/api/public/garden/tick")({
               .map((c) => {
                 const coin = Object.values(d.coins).find((k) => k.creatorId === c.agent_id && k.createdAt === c.t);
                 const agent = d.agents[c.agent_id];
-                return coin && agent ? { agentHandle: agent.handle, name: coin.name, symbol: coin.symbol, tagline: coin.tagline, reason: "rules-based simulation" } : null;
+                return coin && agent ? { agentHandle: agent.handle, name: coin.name, symbol: coin.symbol, tagline: coin.tagline, reason: "rules-based simulation", originAgentId: agent.id, originPolicyHash: policyHash(agent), originMode: "rules" as const } : null;
               })
               .filter((p): p is NonNullable<typeof p> => !!p);
             return { result: { ran: cycles.map((c) => `${c.agent_id}:${c.decision}`), proposals }, cycles, thoughtMode: "rules" };
