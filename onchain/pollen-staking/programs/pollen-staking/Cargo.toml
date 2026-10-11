@@ -2,6 +2,7 @@
 name = "pollen-staking"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.84"
 description = "Fleuri Pollen Staking: stake a fixed SPL mint, earn actually collected wSOL fees"
 license = "Apache-2.0"
 
