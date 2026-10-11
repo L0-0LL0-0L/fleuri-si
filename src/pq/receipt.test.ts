@@ -14,7 +14,7 @@ let kp: PqKeypair, wallet: Keypair, identity: IdentityProof, run: any;
 function make(over: { run?: any; id?: IdentityProof } = {}) {
   const r = over.run ?? run, idt = over.id ?? identity;
   const experiment = bundleFromStored(r);
-  const manifest = buildManifest({ run: r, experiment, identity: idt, receiptId: "44444444-4444-4444-8444-444444444444", requestId: "55555555-5555-4555-8555-555555555555", createdAt: "2026-10-11T01:00:00Z", domain: DOMAIN });
+  const manifest = buildManifest({ run: r, experiment, identity: idt, receiptId: "44444444-4444-4444-8444-444444444444", createdAt: "2026-10-11T01:00:00Z", domain: DOMAIN });
   const s = signReceipt(manifest, kp);
   return { format: RECEIPT_BUNDLE_FORMAT, manifest, manifestHash: s.manifestHash, alg: "ML-DSA-65", publicKey: s.publicKey, signature: s.signature, identityProof: idt, experiment, anchorHint: null } as any;
 }
