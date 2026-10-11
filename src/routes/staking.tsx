@@ -58,7 +58,7 @@ function StakingPage() {
   const notDeployed = st && (!st.programId || st.programId === st.placeholder);
   const stale = st && st.checks?.find((c: any) => c.id === "rpc" && !c.ok);
 
-  return <div className="space-y-4">
+  return <div className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
     <PageHeader title="pollen staking" kicker="Stake $FLEURI · share collected fees"><RealBadge cluster={st?.cluster} /></PageHeader>
     <div className="grid gap-4 md:grid-cols-[1fr_auto]">
       <p className="max-w-prose text-sm">Stake $FLEURI to share <strong>wrapped SOL that was actually collected</strong> into one fixed <Link to="/pollen" className="underline">Pollen</Link> fee-sharing vault. There are no new FLEURI emissions and no fixed APY: if no fees arrive, nothing is paid. Collected fees are released evenly over {days(DEFAULT_TERM_SECONDS)} (proposed default), and unstaking has a {days(DEFAULT_TERM_SECONDS)} cooldown. This layer extends Pollen's 2–5 recipient cap to any number of stakers.</p>
@@ -80,20 +80,20 @@ function StakingPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Deposit readiness">
           <ul className="space-y-1 text-sm">
-            {st.checks.map((c: any) => <li key={c.id} className="flex gap-2"><span aria-hidden className={c.ok ? "text-sprout" : "text-poppy-deep"}>{c.ok ? "✓" : "✕"}</span><span className="min-w-0 break-words"><strong>{c.label}.</strong> {c.detail}</span></li>)}
+            {st.checks.map((c: any) => <li key={c.id} className="flex gap-2"><span aria-hidden className={c.ok ? "text-sprout" : "text-poppy-deep"}>{c.ok ? "✓" : "✕"}</span><span className="min-w-0 [overflow-wrap:anywhere]"><strong>{c.label}.</strong> {c.detail}</span></li>)}
           </ul>
           <p className="text-xs">{st.depositsEnabled ? "All checks pass." : "Deposits stay blocked until every check passes."}</p>
         </Panel>
         <Panel title="Immutable terms & fee source">
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-            <dt>Stake mint</dt><dd className="font-mono text-xs break-all">{st.stakeMint}</dd>
+            <dt>Stake mint</dt><dd className="font-mono text-xs [overflow-wrap:anywhere]">{st.stakeMint}</dd>
             <dt>Mint authority</dt><dd>{st.mint ? (st.mint.mintAuthority ?? "revoked") : "unknown"}</dd>
-            <dt>Freeze authority</dt><dd className="break-all">{st.mint ? (st.mint.freezeAuthority ? <span className="text-poppy-deep">still set: {st.mint.freezeAuthority}</span> : "revoked") : "unknown"}</dd>
+            <dt>Freeze authority</dt><dd className="[overflow-wrap:anywhere]">{st.mint ? (st.mint.freezeAuthority ? <span className="text-poppy-deep">still set: {st.mint.freezeAuthority}</span> : "revoked") : "unknown"}</dd>
             <dt>Reward</dt><dd>wrapped SOL</dd>
-            <dt>Program</dt><dd className="font-mono text-xs break-all">{st.programId ?? "not configured"}</dd>
-            <dt>Upgrade</dt><dd className="break-all">{st.facts.programUpgradeable === null ? "unknown" : st.facts.programUpgradeable ? `upgradeable by ${st.facts.upgradeAuthority}` : "immutable"}</dd>
+            <dt>Program</dt><dd className="font-mono text-xs [overflow-wrap:anywhere]">{st.programId ?? "not configured"}</dd>
+            <dt>Upgrade</dt><dd className="[overflow-wrap:anywhere]">{st.facts.programUpgradeable === null ? "unknown" : st.facts.programUpgradeable ? `upgradeable by ${st.facts.upgradeAuthority}` : "immutable"}</dd>
             {L && <><dt>Release</dt><dd>{days(L.duration)}</dd><dt>Cooldown</dt><dd>{days(L.cooldown)}</dd></>}
-            <dt>Fee source</dt><dd className="break-all">{st.feeSource ? <a className="font-mono text-xs underline" href={explorerAddr(st.feeSource.address, st.cluster)} target="_blank" rel="noreferrer">{st.feeSource.address} ↗</a> : "none"}</dd>
+            <dt>Fee source</dt><dd className="[overflow-wrap:anywhere]">{st.feeSource ? <a className="font-mono text-xs underline" href={explorerAddr(st.feeSource.address, st.cluster)} target="_blank" rel="noreferrer">{st.feeSource.address} ↗</a> : "none"}</dd>
           </dl>
           <p className="text-xs">The existing $FLEURI bonding-curve pool uses a config fleuri does not control, so its fees are not routed here. Linking a vault is not proof that fees flow into it.</p>
         </Panel>
@@ -114,7 +114,7 @@ function StakingPage() {
         {!userId && <div className="space-y-2"><p className="text-sm">Open a workspace so prepared transactions can be recovered.</p><button className="btn btn-ink" disabled={!!busy} onClick={() => void run("Opening…", async () => { await store.startSandbox(); })}>Open workspace</button></div>}
         {!wallet ? <WalletButtons avail={wallets} busy={busy} action="Connect" onPick={(k) => void run("Connecting…", async () => { const a = await connectWallet(k); setWallet({ kind: k, address: a }); await load(a); })} />
           : <div className="space-y-3 text-sm">
-            <p className="break-all">Wallet <span className="font-mono text-xs">{wallet.address}</span></p>
+            <p className="[overflow-wrap:anywhere]">Wallet <span className="font-mono text-xs">{wallet.address}</span></p>
             <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div><dt className="text-xs">Wallet FLEURI</dt><dd>{fl(st.balances?.fleuri)}</dd></div>
               <div><dt className="text-xs">Active stake</dt><dd>{pos ? fl(pos.active) : "none"}</dd></div>
@@ -138,7 +138,7 @@ function StakingPage() {
       </Panel>
     </>}
     {busy && <p role="status" className="text-sm">{busy}</p>}
-    {msg && <p role="status" className="text-sm break-words">{msg}</p>}
-    {err && <p role="alert" className="text-sm text-poppy-deep break-words">{err}</p>}
+    {msg && <p role="status" className="text-sm [overflow-wrap:anywhere]">{msg}</p>}
+    {err && <p role="alert" className="text-sm text-poppy-deep [overflow-wrap:anywhere]">{err}</p>}
   </div>;
 }
