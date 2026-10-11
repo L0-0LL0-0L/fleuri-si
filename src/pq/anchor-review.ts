@@ -30,6 +30,13 @@ export function reviewAnchorPrep(p: AnchorPrep, expect: { wallet: string; cluste
   if (!Number.isFinite(exp) || exp <= now) problems.push("the preparation has expired — prepare a new one");
   if (!p.cost) problems.push("fee simulation was not available");
   else if (!p.cost.ok) problems.push(`fee simulation failed: ${p.cost.error ?? "unknown"}`);
-  else if (p.cost.balanceLamports == null || p.cost.simulatedChangeLamports == null || p.cost.balanceLamports < p.cost.simulatedChangeLamports) problems.push("the wallet balance does not cover the simulated cost");
+  else {
+    const lam = (v: unknown) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+    const { balanceLamports: b, simulatedChangeLamports: c, networkFeeLamports: f } = p.cost;
+    if (!lam(b)) problems.push("the wallet balance is unavailable");
+    if (!lam(c)) problems.push("the simulated balance change is unavailable");
+    if (!lam(f)) problems.push("the network fee is unavailable");
+    if (lam(b) && lam(c) && lam(f) && b! < Math.max(c!, f!)) problems.push(`the wallet balance (${b} lamports) does not cover the cost (${Math.max(c!, f!)} lamports)`);
+  }
   return { ok: problems.length === 0, problems, memo, feePayer, signers };
 }

@@ -29,6 +29,7 @@ export async function guardedSignSubmit<T>(prep: { preparationId: string; transa
   const check = (stage: string) => { if (local.signal.aborted || (o.guard && !o.guard())) throw new ScopeChangedError(`Cancelled ${stage}: the account, wallet or review changed. Nothing new was sent.`); };
   // Rejects as soon as cancellation happens, even if the wallet prompt is still open.
   const race = <R,>(p: Promise<R>, stage: string) => new Promise<R>((res, rej) => {
+    p.catch(() => {}); // a late wallet rejection after cancellation must never be unhandled
     const ab = () => rej(new ScopeChangedError(`Cancelled ${stage}: the account, wallet or review changed. Nothing new was sent.`));
     if (local.signal.aborted) return ab();
     local.signal.addEventListener("abort", ab, { once: true });
@@ -45,7 +46,10 @@ export async function guardedSignSubmit<T>(prep: { preparationId: string; transa
     const signed = await race(d.sign(tx), "while the wallet was open");
     check("after the wallet signed (the signature was discarded)");
     o.onStatus?.("Submitting the exact prepared transaction…");
-    const sub = await d.submit(d.serialize(signed));
+    const bytes = d.serialize(signed);
+    // Last gate: nothing (status callbacks, serialization) may run between this check and submit.
+    check("before submission (the signature was discarded)");
+    const sub = await d.submit(bytes);
     if (!sub.ok) throw new Error(sub.error);
     for (let i = 0; i < (o.polls ?? 40); i++) {
       if (local.signal.aborted || (o.guard && !o.guard())) throw new ScopeChangedError(`Submitted ${sub.data.signature}; stopped watching because the view changed. Check it under Pending transactions.`);

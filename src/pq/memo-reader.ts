@@ -25,6 +25,7 @@ export function memoReader(rpcUrl: string, opts: { timeoutMs?: number; fetch?: F
   const url = checkRpcUrl(rpcUrl);
   const f: Fetch = opts.fetch ?? ((u, i) => fetch(u, i));
   async function call(method: string, params: unknown[]) {
+    if (opts.signal?.aborted) throw new Error("RPC timed out or was cancelled.");
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 10_000);
     const onAbort = () => ctrl.abort(); opts.signal?.addEventListener("abort", onAbort);
@@ -42,16 +43,19 @@ export function memoReader(rpcUrl: string, opts: { timeoutMs?: number; fetch?: F
     async tx(sig) {
       const r = await call("getTransaction", [sig, { commitment: "confirmed", encoding: "json", maxSupportedTransactionVersion: 0 }]);
       if (r == null) return { status: "missing" as const };
+      if (r.version !== undefined && r.version !== "legacy" && r.version !== 0) return { status: "unsupported" as const, reason: `Transaction version ${String(r.version)} is not supported by this reader.` };
+      // A success claim needs explicit metadata: missing meta or meta without an err field is unknown, not success.
+      if (!r.meta || typeof r.meta !== "object" || !("err" in r.meta)) return { status: "unsupported" as const, reason: "The RPC returned no usable transaction status metadata." };
       const msg = r?.transaction?.message; const keys = msg?.accountKeys; const n = msg?.header?.numRequiredSignatures;
-      if (!Array.isArray(keys) || !keys.every((k: unknown) => typeof k === "string") || !Number.isInteger(n) || !Array.isArray(msg?.instructions) || typeof r.slot !== "number")
+      if (!Array.isArray(keys) || !keys.every((k: unknown) => typeof k === "string") || !Number.isInteger(n) || n < 1 || n > keys.length || !Array.isArray(msg?.instructions) || !Number.isSafeInteger(r.slot) || r.slot < 0)
         return { status: "unsupported" as const, reason: "The RPC returned a transaction shape this reader does not understand." };
       const ixs: { program: string; data: Uint8Array }[] = [];
       for (const ix of msg.instructions) {
-        if (!Number.isInteger(ix?.programIdIndex) || typeof ix?.data !== "string") return { status: "unsupported" as const, reason: "Unrecognized instruction encoding." };
+        if (!Number.isInteger(ix?.programIdIndex) || ix.programIdIndex < 0 || typeof ix?.data !== "string") return { status: "unsupported" as const, reason: "Unrecognized instruction encoding." };
         if (ix.programIdIndex >= keys.length) return { status: "unsupported" as const, reason: "Instruction program comes from an address lookup table; not supported by this reader." };
         ixs.push({ program: keys[ix.programIdIndex], data: b58decode(ix.data) });
       }
-      return { status: "ok" as const, tx: { slot: r.slot, err: r.meta?.err ?? null, signers: keys.slice(0, n), ixs } };
+      return { status: "ok" as const, tx: { slot: r.slot, err: r.meta.err, signers: keys.slice(0, n), ixs } };
     },
   };
 }
