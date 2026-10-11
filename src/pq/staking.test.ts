@@ -80,7 +80,7 @@ describe("accounting mirror", () => {
 describe("readiness", () => {
   const prog = Keypair.generate().publicKey.toBase58(); const d = derive(prog);
   const good = (): ReadinessFacts => ({ cluster: "mainnet-beta", genesisOk: true, rpcFresh: true, programId: prog, programExecutable: true, programUpgradeable: false, upgradeAuthority: null, expectedHash: "ab", actualHash: "ab",
-    mint: { address: STAKE_MINT, exists: true, mintAuthority: null, freezeAuthority: null, owner: TOKEN_PROGRAM },
+    mint: { address: STAKE_MINT, exists: true, mintAuthority: null, freezeAuthority: null, owner: TOKEN_PROGRAM, decimals: 6, initialized: true },
     pool: { stakeMint: STAKE_MINT, rewardMint: WSOL, principalVault: d.principal.toBase58(), rewardVault: d.reward.toBase58(), feeVault: "x" }, vaultsOk: true, feeSourceOk: true, feeSourceDetail: "ok" });
   it("enables deposits only when every check passes", () => { expect(readiness(good()).depositsEnabled).toBe(true); });
   it.each([
