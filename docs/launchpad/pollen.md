@@ -11,6 +11,6 @@ Pollen vaults are real Meteora Dynamic Fee Sharing vaults on Solana. Each vault 
   * the pool collects fees in the vault's token,
   * and the person claiming is one of the vault's recipients.
 
-  Existing pools can't be changed to meet these conditions afterwards. Linking a vault to a token page is not proof that fees are routed to it.
+  An existing pool's immutable partner fee claimer cannot be changed to meet these partner-route conditions afterwards. A separate creator-fee route can require the current creator's explicit approval to transfer creator authority and quote-only requirements; that option is not implemented in fleuri and needs separate review. Linking a vault to a token page is not proof that fees are routed to it.
 
-Need more than five recipients? [Pollen Staking](pollen-staking.md) gives one vault share to any number of $FLEURI stakers. It is not deployed yet.
+Need more than five recipients? [Pollen Staking](pollen-staking.md) is implemented to distribute one fixed vault share proportionally among $FLEURI stakers. The [staking page](https://fleuri.si/staking) includes live-read readiness, portfolio refresh, wallet-reviewed actions and pending-transaction recovery, but **no staking program is deployed and deposits remain blocked**. Rewards are Pollen-funded wSOL, not FLEURI emissions or a fixed APY. Because DFS also accepts manual funding, receipt from Pollen alone does not prove trading-fee origin.

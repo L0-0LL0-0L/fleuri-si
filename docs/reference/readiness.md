@@ -14,9 +14,19 @@ Checkout requires a valid operator-supplied **public payout wallet address** (`B
 
 The default report price is **0.50 USDC**. Missing payout configuration does not prevent free passport verification, documentation or code tests.
 
+## Pollen Staking
+
+The [staking interface](../launchpad/pollen-staking.md) is implemented, but **no staking program is deployed and no verified fee routing is configured**. Deposits stay blocked until the independently reviewed deployment and configuration pass live checks: actual mainnet cluster/genesis, fresh RPC, executable non-placeholder program, matching configured code hash, correct initialized FLEURI mint with revoked mint/freeze authorities, initialized pool, full principal/reward custody checks and the exact Pollen PDA recipient index.
+
+The badge shows the latest read's actual cluster, not an assumed network. Portfolio reads share one confirmed slot and chain clock; stale snapshots or failed reads disable actions. Refresh and foreground polling update accrued rewards. Exits and reward claims use their own readiness checks and do not depend on optional fee-source or mint-authority deposit checks.
+
+A matching configured code hash is not proof of an independently reproducible build. The existing $FLEURI pool's immutable partner fee claimer does not name this Pollen vault; a separately reviewed, owner-approved creator-fee option is unimplemented. See [deployment blockers and acceptance steps](../launchpad/pollen-staking.md#real-blockers-before-mainnet).
+
 ## Pending transactions
 
 Use **Check confirmation** for an already signed launch, config or migration. Fleuri checks whether the exact transaction landed and records the result. A pending entry is not proof of failure or success. Do not sign a replacement merely because confirmation was interrupted.
+
+Staking recovery also appears directly on `/staking` for the signed-in owner. It checks confirmation or resends the exact saved signed bytes, without building a replacement.
 
 ## Security and publication
 
