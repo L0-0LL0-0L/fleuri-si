@@ -53,15 +53,19 @@ function NewReceiptScoped() {
 
   useEffect(() => { loadLocal(); return () => { fence.bump(); }; }, []);
   // Owner/run/draft change: clear every private draft/signature/pending view and fence late responses.
+  // Every async step is bound to the owner captured at its start AND the live store owner, which can
+  // change before React renders the new key.
+  const ownerLive = (o: string | null) => store.get().userId === o;
+  const guard = (g: number, o: string | null) => fence.guard(g) && ownerLive(o);
   useEffect(() => {
-    const g = fence.bump();
+    const g = fence.bump(); const o0 = userId;
     setRow(null); setIds(null); setIdErr(""); setPick(""); setDraft(null); setAck(false); setErr(""); setBusy(null); setSaved(null); setPending(null); setRunId(runParam);
     if (!userId || (!runParam && !draftParam)) return;
     (async () => {
       let rid = runParam;
       if (draftParam) { // exact server draft recovery: works with no local storage, on any device
         const d = await rrResume({ data: { id: draftParam } });
-        if (!fence.guard(g)) return;
+        if (!guard(g, o0)) return;
         if (!d.ok) return setErr(d.error);
         if (d.data.status === "signed") { void navigate({ to: "/receipts/$id", params: { id: d.data.id } }); return; }
         if (receiptHash(d.data.manifest) !== d.data.manifestHash || d.data.manifest.source.runId !== d.data.runId) return setErr("The stored draft does not match its hash or trial.");
@@ -74,30 +78,32 @@ function NewReceiptScoped() {
       } else {
         const p = readReceiptPending(userId, rid!, localStorage); setPending(p); if (p) setPick(p.identityId);
       }
+      if (!guard(g, o0)) return;
       const [r, m] = await Promise.all([ghRun({ data: { id: rid! } }), pqMine()]);
-      if (!fence.guard(g)) return;
+      if (!guard(g, o0)) return;
       if (!r.ok) return setErr(r.error);
       if (!(r.data as any).mine) return setErr("Only your own saved trials can be attested from your account.");
       setRow(r.data as TrialRow);
       if (m.ok) setIds(m.data.identities.filter((i: any) => i.status !== "revoked")); else setIdErr(m.error);
-    })().catch((e) => fence.guard(g) && setErr((e as Error).message));
+    })().catch((e) => guard(g, o0) && setErr((e as Error).message));
   }, [userId, runParam, draftParam, reloadN]);
 
   async function freeze() {
     if (!userId || !runId || !pick) return;
-    const g = fence.current(); setBusy("Freezing the draft on the server…"); setErr("");
+    const g = fence.current(), o = userId; if (!guard(g, o)) return;
+    setBusy("Freezing the draft on the server…"); setErr("");
     try {
       const p: ReceiptPending = pending && pending.identityId === pick ? { requestId: pending.requestId, runId, identityId: pick } : { requestId: crypto.randomUUID(), runId, identityId: pick };
       writeReceiptPending(userId, p, localStorage); setPending(p); // saved before the request: reloads recover the same draft
       const r = await rrPrepare({ data: { requestId: p.requestId, runId, identityId: pick } });
-      if (!fence.guard(g)) return;
+      if (!guard(g, o)) return;
       if (!r.ok) throw new Error(r.error);
       if (r.data.status === "signed") { clearReceiptPending(userId, runId, localStorage); toast.success("This receipt was already signed."); void navigate({ to: "/receipts/$id", params: { id: r.data.id } }); return; }
       if (receiptHash(parseReceiptManifest(r.data.manifest)) !== r.data.manifestHash) throw new Error("The server draft does not match its hash.");
       const next = { ...p, receiptId: r.data.id, manifestHash: r.data.manifestHash }; writeReceiptPending(userId, next, localStorage); setPending(next);
       setDraft({ id: r.data.id, manifest: r.data.manifest, manifestHash: r.data.manifestHash }); setAck(false);
       setSaved(readReceiptSig(userId, r.data.id, r.data.manifestHash, localStorage));
-    } catch (e) { if (fence.guard(g)) setErr((e as Error).message); } finally { if (fence.guard(g)) setBusy(null); }
+    } catch (e) { if (guard(g, o)) setErr((e as Error).message); } finally { if (guard(g, o)) setBusy(null); }
   }
   async function sign() {
     const d = draft, owner = userId;
@@ -107,24 +113,26 @@ function NewReceiptScoped() {
     const chosen = ids?.find((i) => i.id === pick);
     if (!chosen || chosen.id !== pending.identityId || chosen.key_hash !== d.manifest.issuer.keyHash) { setErr("The chosen identity is not the one this draft names."); return; }
     if (pending.receiptId !== d.id || pending.manifestHash !== d.manifestHash) { setErr("This draft no longer matches the recovery record. Reload the page."); return; }
-    const g = fence.current(); setBusy("Signing with ML-DSA-65…"); setErr("");
+    const g = fence.current(); if (!guard(g, owner)) return;
+    setBusy("Signing with ML-DSA-65…"); setErr("");
     try {
       let sig = saved && saved.receiptId === d.id && saved.manifestHash === d.manifestHash ? { publicKey: saved.publicKey, signature: saved.signature } : null;
       if (!sig) {
         if (!local.unlocked || local.envelope?.keyHash !== d.manifest.issuer.keyHash) throw new Error("Unlock the key named in this draft first.");
         const s = withSecret((kp) => signReceipt(d.manifest, kp)); // the secret never leaves this call; also checks the key hash
-        if (!fence.guard(g)) return;
+        if (!guard(g, owner)) return;
         sig = { publicKey: s.publicKey, signature: s.signature };
         const v = { receiptId: d.id, manifestHash: d.manifestHash, ...sig }; writeReceiptSig(owner, v, localStorage); setSaved(v); // resend these exact bytes after a lost response
       }
+      if (!guard(g, owner)) return; // signature bytes stay saved for this owner's recovery
       setBusy("Server is verifying the signature…");
       const r = await rrSign({ data: { id: d.id, ...sig } });
-      if (!fence.guard(g)) return;
+      if (!guard(g, owner)) return;
       if (!r.ok) throw new Error(r.error);
       clearReceiptPending(owner, runId, localStorage); clearReceiptSig(owner, d.id, localStorage);
       toast.success(r.data.recovered ? "Recovered your signed receipt" : "Receipt signed and saved (private)");
       void navigate({ to: "/receipts/$id", params: { id: d.id } });
-    } catch (e) { if (fence.guard(g)) setErr((e as Error).message); } finally { if (fence.guard(g)) setBusy(null); }
+    } catch (e) { if (guard(g, owner)) setErr((e as Error).message); } finally { if (guard(g, owner)) setBusy(null); }
   }
 
   const idt = ids?.find((i) => i.id === pick);
