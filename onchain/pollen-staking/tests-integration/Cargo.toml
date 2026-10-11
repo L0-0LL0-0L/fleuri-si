@@ -4,18 +4,16 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
-# Executes the compiled SBF program (target/deploy/pollen_staking.so) in LiteSVM.
-# Build it first: `anchor build` (or `cargo build-sbf --manifest-path programs/pollen-staking/Cargo.toml`).
+# Executes the compiled SBF program in LiteSVM, together with Meteora's real Dynamic Fee
+# Sharing bytecode dumped from mainnet. See ../README.md ("Program tests").
+#   PS_SO  = path to pollen_staking.so  (default ../target/deploy/pollen_staking.so)
+#   DFS_SO = path to dfs.so             (default fixtures/dfs.so)
 [dev-dependencies]
-litesvm = "0.8"
+litesvm = "=0.6.1"
 pollen-staking = { path = "../programs/pollen-staking", features = ["no-entrypoint"] }
 anchor-lang = "=0.32.1"
-solana-keypair = "2.2"
-solana-signer = "2.2"
-solana-transaction = "2.2"
-solana-message = "2.2"
-solana-instruction = "2.2"
-solana-pubkey = "2.2"
+solana-sdk = "2.2"
 spl-token = { version = "8", features = ["no-entrypoint"] }
+bincode = "1"
 
 [workspace]
