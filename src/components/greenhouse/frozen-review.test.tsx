@@ -28,3 +28,22 @@ describe("frozen launch review evidence", () => {
     expect(screen.getByText(/No greenhouse evidence was attached/)).toBeInTheDocument();
   });
 });
+
+describe("frozen review with signed receipts", () => {
+  it("freezes receipt status; later anchor/publication changes do not alter the review", () => {
+    const rc: any = { id: "rc1", run_id: "r1", manifest_hash: "a".repeat(64), anchor_status: "none", published: false, signed_at: "2026-10-11T00:00:00Z", issuer_key: "b".repeat(64), engine_version: "greenhouse-rules-2", policies: [{ agentId: "a_1", policyHash: h }] };
+    const live = [{ ...row, receipts: [rc] }];
+    const review = freezeReview(prop, live, { a_1: agent } as any, new Date());
+    rc.anchor_status = "confirmed"; rc.policies[0].policyHash = "z".repeat(64); live[0].receipts.push({ ...rc, id: "rc2" });
+    render(<FrozenEvidence review={review} />);
+    expect(screen.getAllByTestId("frozen-receipt")).toHaveLength(1);
+    expect(screen.getByText("anchor none at freeze")).toBeInTheDocument();
+    expect(screen.getByText("receipt policy matches")).toBeInTheDocument();
+  });
+  it("flags a receipt for a different policy or legacy engine", () => {
+    const rc: any = { id: "rc1", run_id: "r1", manifest_hash: "a".repeat(64), anchor_status: "none", published: false, signed_at: "x", issuer_key: "b".repeat(64), engine_version: "greenhouse-rules-1", policies: [{ agentId: "a_1", policyHash: "y".repeat(64) }] };
+    render(<FrozenEvidence review={freezeReview(prop, [{ ...row, receipts: [rc] }], {}, new Date())} />);
+    expect(screen.getByText("receipt policy differs")).toBeInTheDocument();
+    expect(screen.getByText("unsupported greenhouse-rules-1")).toBeInTheDocument();
+  });
+});

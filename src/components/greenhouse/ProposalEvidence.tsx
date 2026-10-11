@@ -1,11 +1,17 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { evidenceStatus, policyHash, type EvidenceLabel } from "@/domain/greenhouse";
+import { SUPPORTED_ENGINES, evidenceStatus, policyHash, type EvidenceLabel } from "@/domain/greenhouse";
 import type { Agent } from "@/domain/types";
 import { ghAttach } from "@/lib/greenhouse.functions";
 import { cn } from "@/lib/utils";
 
-export interface EvidenceRow { id: string; proposal_id: string; run_id: string; origin_agent_id: string; run_policy_hash: string; proposal_policy_hash: string | null; engine_version: string; content_hash: string; repetitions: number; scenarios: string[]; attached_at: string }
+/** A signed research receipt over the same run, scoped to the reviewing owner. */
+export interface ReceiptEvidence { id: string; run_id: string; manifest_hash: string; anchor_status: string; published: boolean; signed_at: string; issuer_key: string; engine_version: string; policies: { agentId: string; policyHash: string }[] }
+export function receiptStatus(r: ReceiptEvidence, e: { origin_agent_id: string; run_policy_hash: string }) {
+  const pol = r.policies.find((p) => p.agentId === e.origin_agent_id);
+  return { includesAgent: !!pol, policyMatch: !!pol && pol.policyHash === e.run_policy_hash, engine: SUPPORTED_ENGINES.includes(r.engine_version as any) ? "supported" as const : "unsupported" as const };
+}
+export interface EvidenceRow { id: string; proposal_id: string; run_id: string; origin_agent_id: string; run_policy_hash: string; proposal_policy_hash: string | null; engine_version: string; content_hash: string; repetitions: number; scenarios: string[]; attached_at: string; receipts?: ReceiptEvidence[] }
 const short = (h: string | null) => (h ? `${h.slice(0, 8)}…` : "unknown");
 
 export function originAgentId(p: { origin_agent_id?: string | null; agent_handle: string }, agents: Record<string, Agent>) {
@@ -60,12 +66,13 @@ export function AttachEvidence({ proposalId, originId, runs, onDone }: { proposa
 export interface FrozenReview {
   proposalId: string; name: string; symbol: string; agentHandle: string;
   originPolicyHash: string | null; originMode: string | null; frozenAt: string;
-  items: { row: EvidenceRow; status: EvidenceLabel }[];
+  items: { row: EvidenceRow; status: EvidenceLabel; receipts: { r: ReceiptEvidence; s: ReturnType<typeof receiptStatus> }[] }[];
 }
 export function freezeReview(p: { id: string; name: string; symbol: string; agent_handle: string; origin_policy_hash?: string | null; origin_mode?: string | null }, rows: EvidenceRow[], agents: Record<string, Agent>, now: Date): FrozenReview {
   const items = rows.filter((e) => e.proposal_id === p.id).map((e) => {
     const cur = agents[e.origin_agent_id];
-    return { row: structuredClone(e), status: evidenceStatus({ runPolicyHash: e.run_policy_hash, proposalPolicyHash: e.proposal_policy_hash, engineVersion: e.engine_version }, cur ? policyHash(cur) : null) };
+    const receipts = (e.receipts ?? []).filter((r) => r.run_id === e.run_id).map((r) => ({ r: structuredClone(r), s: receiptStatus(r, e) }));
+    return { row: structuredClone(e), receipts, status: evidenceStatus({ runPolicyHash: e.run_policy_hash, proposalPolicyHash: e.proposal_policy_hash, engineVersion: e.engine_version }, cur ? policyHash(cur) : null) };
   });
   return Object.freeze({ proposalId: p.id, name: p.name, symbol: p.symbol, agentHandle: p.agent_handle, originPolicyHash: p.origin_policy_hash ?? null, originMode: p.origin_mode ?? null, frozenAt: now.toISOString(), items });
 }
@@ -77,7 +84,7 @@ export function FrozenEvidence({ review }: { review: FrozenReview }) {
     <div className="space-y-1 text-xs" data-testid="frozen-evidence">
       <p className="font-mono text-[0.65rem] uppercase tracking-widest">Frozen review · {review.name} ${review.symbol} by @{review.agentHandle} · drafted with policy {review.originPolicyHash ? `${short(review.originPolicyHash)} (${review.originMode ?? "unknown"} mode)` : "unknown (legacy draft)"} · frozen {review.frozenAt.replace("T", " ").slice(0, 19)} UTC</p>
       {!review.items.length ? <p>No greenhouse evidence was attached when this review was frozen.</p> :
-        <ul className="space-y-1">{review.items.map(({ row: e, status: st }) => (
+        <ul className="space-y-1">{review.items.map(({ row: e, status: st, receipts }) => (
           <li key={e.id} className="hair space-y-1 bg-paper p-2">
             <p className="flex flex-wrap items-center gap-1">
               <span className={tone(st.policy === "match")}>{st.policy === "match" ? "policy matches draft" : st.policy === "mismatch" ? "policy differs from draft" : "draft policy unknown (legacy)"}</span>
@@ -85,6 +92,13 @@ export function FrozenEvidence({ review }: { review: FrozenReview }) {
               <span className={tone(st.engine === "supported")}>{st.engine === "supported" ? e.engine_version : `unsupported engine ${e.engine_version}`}</span>
             </p>
             <p className="break-words">policy <span className="font-mono">{short(e.run_policy_hash)}</span> · rules mode · {e.repetitions} repetition(s) × {e.scenarios.length} scenario(s) · content <span className="font-mono">{short(e.content_hash)}</span> · attached {new Date(e.attached_at).toLocaleDateString()}</p>
+            {receipts.map(({ r, s }) => <p key={r.id} className="flex flex-wrap items-center gap-1" data-testid="frozen-receipt">
+              <span className={tone(true)}>signed receipt</span>
+              <span className={tone(s.policyMatch)}>{s.policyMatch ? "receipt policy matches" : s.includesAgent ? "receipt policy differs" : "receipt lacks agent"}</span>
+              <span className={tone(s.engine === "supported")}>{s.engine === "supported" ? r.engine_version : `unsupported ${r.engine_version}`}</span>
+              <span className={tone(r.anchor_status === "confirmed")}>{r.anchor_status === "confirmed" ? "anchored at freeze" : `anchor ${r.anchor_status} at freeze`}</span>
+              <span className="font-mono">key {short(r.issuer_key)} · receipt {short(r.manifest_hash)}</span>
+            </p>)}
           </li>))}</ul>}
       <p className="text-[0.7rem] text-ink-soft">Frozen when you loaded this draft; later attachments or agent edits do not change it. Advisory vSOL sandbox evidence only — not part of the signed passport, not an approval, safety rating or forecast.</p>
     </div>
