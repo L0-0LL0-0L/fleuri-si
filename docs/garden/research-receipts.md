@@ -35,3 +35,9 @@ A status of **recorded: confirmed** is what fleuri saved. It is not verification
 
 ## Proposal review
 When a launch proposal cites a trial, only your own receipts that fully pass checking for that exact trial are frozen into your review. Each one shows its key, whether its policy matches, whether its engine can be replayed and any **recorded** anchor, which is clearly marked as not re-checked on chain. The same snapshot stays through passport signing and wallet approval; later edits don't change it. If receipts can't be loaded, the review says so rather than showing older ones.
+
+### Cost and chain-status strictness
+
+- **Anchor cost must be fully known.** The wallet button stays disabled unless the wallet balance, the simulated balance change and the network fee are all available whole, non-negative lamport amounts, and the balance covers the larger of the two costs. A missing fee or simulated post-balance is shown as "unavailable", never as zero.
+- **Unknown transaction status is never a pass.** When re-reading an anchor, a transaction with missing status metadata, an unsupported version or out-of-range signer/instruction data is reported as unsupported, not confirmed.
+- **Owner changes cancel in-flight work.** If you switch workspace while signing, publishing or preparing, late replies are ignored; a signature you already made stays saved on this device for that workspace so it can be resent unchanged.
