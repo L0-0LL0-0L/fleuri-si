@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { PageHeader } from "@/components/bits";
-import { RealBadge, signSubmitConfirm, useWallets } from "@/components/pq/ui";
+import { signSubmitConfirm, useWallets } from "@/components/pq/ui";
 import { StakingView, type StakingApi } from "@/components/staking/StakingView";
 import { pqMine, stakingPrepare, stakingState } from "@/lib/pq.functions";
 import { connectWallet } from "@/services/wallet";
@@ -29,7 +29,7 @@ function StakingPage() {
     connect: (kind) => connectWallet(kind),
   }), []);
   return <div className="min-w-0 space-y-4">
-    <PageHeader title="pollen staking" kicker="Stake $FLEURI · share Pollen-funded wSOL"><RealBadge /></PageHeader>
+    <PageHeader title="pollen staking" kicker="Stake $FLEURI · share Pollen-funded wSOL" />
     <StakingView api={api} userId={userId} wallets={wallets} onOpenWorkspace={async () => { await store.startSandbox(); }} />
   </div>;
 }

@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FlowerTiles } from "@/components/PixelFlower";
-import { Panel, PendingTransactions, WalletButtons, explorerAddr, type PendingPreparation } from "@/components/pq/ui";
+import { Panel, PendingTransactions, RealBadge, WalletButtons, explorerAddr, type PendingPreparation } from "@/components/pq/ui";
 import { formatUnits } from "@/pq/pollen";
 import { DEFAULT_TERM_SECONDS } from "@/pq/staking";
 import { POLL_MS, displayChecks, freshness, gates, ownPosition, reviewLines, type Snapshot } from "@/pq/staking-view";
@@ -98,6 +98,7 @@ export function StakingView({ api, userId, onOpenWorkspace, wallets, pollMs = PO
     </div>
 
     <div className="flex flex-wrap items-center gap-2 text-xs">
+      <RealBadge cluster={st?.cluster ?? undefined} />
       <button type="button" className="btn btn-paper" disabled={reading} onClick={() => void load(true)}>{reading ? "Reading chain…" : "Refresh"}</button>
       {st?.slot ? <span className="text-xs">As of slot {st.slot}{st.chainTime ? ` · chain time ${new Date(st.chainTime * 1000).toISOString().slice(0, 19).replace("T", " ")} UTC` : ""}</span> : null}
       <span role="status" aria-label="freshness" className={fr.stale ? "text-poppy-deep" : ""}>{fr.stale ? `Stale: ${fr.reason}` : fr.reason} Auto-refresh every {Math.round(pollMs / 1000)}s while this tab is visible.</span>
