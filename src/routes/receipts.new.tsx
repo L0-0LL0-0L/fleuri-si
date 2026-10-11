@@ -145,7 +145,7 @@ function NewReceipt() {
       </Panel>
       {draft && <Panel title="2 · Review exactly what you will sign">
         <ManifestReview m={draft.manifest} hash={draft.manifestHash} />
-        <div className={cn("hair p-2 text-xs", keyReady ? "bg-sprout text-paper-light" : "bg-paper-deep")}>{keyReady ? "The unlocked key on this device matches the chosen identity." : <>Unlock the key with fingerprint <span className="font-mono">{idt?.key_hash.slice(0, 16)}…</span> on the <Link to="/identity" className="underline">PQ identity</Link> page, then return here. Your private key never leaves this browser.</>}</div>
+        <div className={cn("hair p-2 text-xs", keyReady ? "bg-sprout text-paper-light" : "bg-paper-deep")}>{keyReady ? (saved ? "A signature for this exact draft is saved on this device; it will be resent unchanged." : "The unlocked key on this device matches the chosen identity.") : <>Unlock the key with fingerprint <span className="font-mono">{idt?.key_hash.slice(0, 16)}…</span> on the <Link to="/identity" className="underline">PQ identity</Link> page, then return here. Your private key never leaves this browser.</>}</div>
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={ack} onChange={(e) => setAck(e.target.checked)} /><span>I reviewed this frozen record. I'm attesting that my registered identity reviewed this virtual, scheduled-rules experiment — not that the strategy is good, safe or profitable.</span></label>
         <button type="button" className="btn btn-red" disabled={!ack || !keyReady || !!busy} onClick={() => void sign()}>{busy ?? (saved ? "Resend my saved signature" : "Sign & save receipt")}</button>
       </Panel>}
