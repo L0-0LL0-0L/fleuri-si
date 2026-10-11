@@ -9,7 +9,7 @@ publish = false
 #   PS_SO  = path to pollen_staking.so  (default ../target/deploy/pollen_staking.so)
 #   DFS_SO = path to dfs.so             (default fixtures/dfs.so)
 [dev-dependencies]
-litesvm = "=0.6.1"
+litesvm = "0.7"
 pollen-staking = { path = "../programs/pollen-staking", features = ["no-entrypoint"] }
 anchor-lang = "=0.32.1"
 solana-sdk = "2.2"
