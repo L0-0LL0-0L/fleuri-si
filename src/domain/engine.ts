@@ -371,7 +371,7 @@ export interface CyclePlan {
 }
 const clean = (t: string | null | undefined, max: number) => (t ?? "").replace(/\s+/g, " ").trim().slice(0, max) || undefined;
 
-export function runCycle(s: GardenState, agentId: string, now: number, plan?: CyclePlan): { decision: Decision; event?: GardenEvent; error?: string } {
+export function runCycle(s: GardenState, agentId: string, now: number, plan?: CyclePlan): { decision: Decision; intended: Decision; event?: GardenEvent; error?: string } {
   const a = s.agents[agentId];
   if (!a) throw new DomainError("Unknown agent.");
   if (a.status !== "active") throw new DomainError(`@${a.handle} is ${a.status} — resume it to run a cycle.`);
@@ -401,6 +401,7 @@ export function runCycle(s: GardenState, agentId: string, now: number, plan?: Cy
   }
   let event: GardenEvent | undefined;
   let error: string | undefined;
+  const intended = decision;
   const planSym = plan?.symbol ? plan.symbol.toUpperCase().replace(/^\$/, "") : undefined;
   const planText = clean(plan?.text, 220);
   const tag = plan ? `[ai] ${clean(plan.reason, 160) ?? ""} · ` : "";
@@ -470,7 +471,7 @@ export function runCycle(s: GardenState, agentId: string, now: number, plan?: Cy
   }
   if (decision === "rest" && !error) think(a, now, tag + "rested. photosynthesis only.");
   a.lastActionAt = now;
-  return { decision, event, error };
+  return { decision, intended, event, error };
 }
 
 function graduationPct(c: { raised: number }) {
