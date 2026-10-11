@@ -10,7 +10,7 @@ export const DFS_PROGRAM = "dfsdo2UqvwfN8DuUVrMRNfQe11VaiNoKcMqLHVvDPzh";
 export const DFS_FEE_VAULT_AUTHORITY = "EYqHRdtepv1KKUkPAYMBYpSfiGfNd8sa55ZtswodTfBS";
 export const WSOL = "So11111111111111111111111111111111111111112";
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-export const ATA_PROGRAM = "ATokenGPvbd2nk3LS3sb2zYYPEvx2XPmBrWw2TxFHF7Hvb";
+export const ATA_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 export const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 export const UPGRADEABLE_LOADER = "BPFLoaderUpgradeab1e11111111111111111111111";
 export const DEFAULT_TERM_SECONDS = 7 * 86_400;
@@ -35,7 +35,7 @@ export function derive(programId: string, stakeMint = STAKE_MINT) {
 export const dfsEventAuthority = () => PublicKey.findProgramAddressSync([enc("__event_authority")], pk(DFS_PROGRAM))[0];
 export const ata = (owner: string, mint: string) => PublicKey.findProgramAddressSync([pk(owner).toBytes(), pk(TOKEN_PROGRAM).toBytes(), pk(mint).toBytes()], pk(ATA_PROGRAM))[0];
 
-const disc = (kind: "instructions" | "accounts" | "events", name: string): number[] => {
+export const disc = (kind: "instructions" | "accounts" | "events", name: string): number[] => {
   const x = (STAKING_IDL[kind] as any[]).find((i) => i.name === name);
   if (!x) throw new Error(`IDL has no ${name}`);
   return x.discriminator;
@@ -196,6 +196,7 @@ export const blockers = (action: StakingAction | "harvest", checks: ReadyCheck[]
 // ---- strict account checks (malformed/truncated input yields issues, never success) ----
 export const STAKE_DECIMALS = 6;
 const keyAt = (d: Uint8Array, o: number) => new PublicKey(d.subarray(o, o + 32)).toBase58();
+const u128At = (d: Uint8Array, o: number) => { const v = new DataView(d.buffer, d.byteOffset, d.length); return (v.getBigUint64(o + 8, true) << 64n) | v.getBigUint64(o, true); };
 const u32At = (d: Uint8Array, o: number) => new DataView(d.buffer, d.byteOffset, d.length).getUint32(o, true);
 /** SPL Token mint (82 bytes, owned by Token program, initialized). Throws on malformed data. */
 export function decodeMintStrict(owner: string, d: Uint8Array) {
@@ -221,8 +222,8 @@ export function checkTokenAccount(acc: { owner: string; data: Uint8Array } | nul
 export const DFS_FEE_VAULT_DISC = [192, 178, 69, 232, 58, 149, 157, 132];
 export const FEE_VAULT_LEN = 8 + 240 + 5 * 80;
 /** Mirror of Rust `check_fee_vault`: exact DFS PDA wSOL vault naming `pool` at `index` with a share. */
-export function checkFeeVault(address: string, acc: { owner: string; data: Uint8Array } | null, want: { feeTokenVault: string; pool: string; index: number }): { issues: string[]; share: number | null; totalShare: number | null } {
-  const bad = (m: string) => ({ issues: [m], share: null, totalShare: null });
+export function checkFeeVault(address: string, acc: { owner: string; data: Uint8Array } | null, want: { feeTokenVault: string; pool: string; index: number }): { issues: string[]; share: number | null; totalShare: number | null; claimable: bigint | null } {
+  const bad = (m: string) => ({ issues: [m], share: null, totalShare: null, claimable: null });
   if (!acc) return bad("fee vault missing");
   const d = acc.data;
   if (acc.owner !== DFS_PROGRAM) return bad("not owned by Dynamic Fee Sharing");
@@ -235,10 +236,17 @@ export function checkFeeVault(address: string, acc: { owner: string; data: Uint8
   const tv = PublicKey.findProgramAddressSync([enc("token_vault"), pk(address).toBytes()], pk(DFS_PROGRAM))[0].toBase58();
   if (tv !== want.feeTokenVault || keyAt(d, 72) !== tv) issues.push("token vault is not canonical");
   const totalShare = u32At(d, 120); if (totalShare === 0) issues.push("total share is zero");
-  let share: number | null = null;
+  let share: number | null = null; let claimable: bigint | null = null;
   if (!Number.isInteger(want.index) || want.index < 0 || want.index > 4) issues.push("recipient index out of range");
-  else { const u = 248 + want.index * 80; share = u32At(d, u + 32); if (keyAt(d, u) !== want.pool) issues.push(`recipient ${want.index} is not the pool PDA`); if (share === 0) issues.push("pool share is zero"); }
-  return { issues, share, totalShare };
+  else {
+    const u = 248 + want.index * 80; share = u32At(d, u + 32);
+    if (keyAt(d, u) !== want.pool) issues.push(`recipient ${want.index} is not the pool PDA`); if (share === 0) issues.push("pool share is zero");
+    // DFS Q64: claimable = share * (fee_per_share - user.fee_per_share_checkpoint) >> 64, for THIS index only
+    // (DFS allows duplicate addresses, so never look the recipient up by address).
+    const fps = u128At(d, 136), cp = u128At(d, u + 64);
+    if (cp > fps) issues.push("recipient checkpoint is ahead of the vault"); else claimable = (BigInt(share) * (fps - cp)) >> 64n;
+  }
+  return { issues, share, totalShare, claimable };
 }
 
 /** Pure confirmation matcher: only this program's own event for the prepared action, pool and wallet. */
@@ -272,3 +280,29 @@ export function decodeProgramAccount(d: Uint8Array) {
 }
 
 export function formatLamports(v: bigint) { const s = v.toString().padStart(10, "0"); const f = s.slice(-9).replace(/0+$/, ""); return s.slice(0, -9) + (f ? "." + f : ""); }
+
+// ---- coherent snapshot ----
+export const CLOCK_SYSVAR = "SysvarC1ock11111111111111111111111111111111";
+/** Clock sysvar (40 bytes): slot u64, epoch_start_timestamp i64, epoch u64, leader_schedule_epoch u64, unix_timestamp i64 @32. */
+export function decodeClock(acc: { owner: string; data: Uint8Array } | null) {
+  if (!acc || acc.data.length !== 40) throw new Error("Clock sysvar unreadable.");
+  const v = new DataView(acc.data.buffer, acc.data.byteOffset, 40);
+  return { slot: v.getBigUint64(0, true), unixTimestamp: v.getBigInt64(32, true) };
+}
+type Acc = { owner: string; data: Uint8Array } | null;
+/**
+ * Derives the owner's position view from ONE multi-account read (same bank): pool ledger,
+ * position and Clock must come from the same snapshot. A position checkpoint ahead of the
+ * pool accumulator means the snapshot is incoherent: throw so the caller retries, never display it.
+ */
+export function positionView(programId: string, pool: Acc, position: Acc, clock: Acc) {
+  if (!pool || pool.owner !== programId) throw new Error("Pool missing from snapshot.");
+  const p = decodePool(pool.data); const c = decodeClock(clock);
+  if (!position || position.owner !== programId) return { pool: p, clock: c, position: null };
+  const pos = decodePosition(position.data);
+  if (pos.state.checkpoint > p.ledger.accPerShare) throw new IncoherentSnapshot("Position checkpoint is ahead of the pool accumulator.");
+  const claim = claimableAt(p.ledger, pos.state, c.unixTimestamp);
+  if (claim < 0n) throw new IncoherentSnapshot("Negative claimable.");
+  return { pool: p, clock: c, position: { ...pos, claimable: claim } };
+}
+export class IncoherentSnapshot extends Error {}

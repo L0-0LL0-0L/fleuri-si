@@ -20,7 +20,7 @@ Stake $FLEURI and earn a share of the **wrapped SOL the pool actually received**
 | App decoders, account checks, readiness, confirmation, recovery and page tests (TypeScript) | Passing (56) |
 | `/staking` page, transaction prepare/sign/recover flow | Implemented; blocked until deployed |
 | Deployed program on mainnet or devnet | **None** |
-| Fee routing from the existing $FLEURI pool | **Not available.** That pool uses a Meteora config fleuri does not control, and configs are immutable. |
+| Fee routing from the existing $FLEURI pool | **No verified fee routing is configured.** The pool's immutable partner fee claimer does not name this Pollen vault, so the implemented partner route is unavailable. A creator-fee route would require the current creator's explicit approval to transfer creator authority plus quote-only requirements; it is unimplemented, needs separate review, and fleuri performs no authority transfer. |
 
 ## How rewards work
 
@@ -114,3 +114,8 @@ These are server settings. They are public, read-only identifiers, never keys.
 * No deployed program, reproducible build hash or upgrade-authority policy.
 * No mainnet DFS PDA vault naming the pool PDA.
 * No trading pool whose immutable config routes fees into that vault. Even once one exists, manual DFS funding remains possible, so trading origin needs separate proof.
+
+
+## Coherent reads
+
+The page reads pool, position, both vaults, the wallet's token accounts, the fee vault and the Clock sysvar in one `getMultipleAccountsInfoAndContext` call at `confirmed`, and shows that read's slot and Clock time. A position checkpoint ahead of the pool accumulator is treated as incoherent and re-read (up to 3 times), never displayed. The pool's harvestable amount is computed for the configured recipient index only (DFS allows duplicate addresses).

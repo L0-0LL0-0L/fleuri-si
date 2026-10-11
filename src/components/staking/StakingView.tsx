@@ -99,6 +99,7 @@ export function StakingView({ api, userId, onOpenWorkspace, wallets, pollMs = PO
 
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <button type="button" className="btn btn-paper" disabled={reading} onClick={() => void load(true)}>{reading ? "Reading chain…" : "Refresh"}</button>
+      {st?.slot ? <span className="text-xs">As of slot {st.slot}{st.chainTime ? ` · chain time ${new Date(st.chainTime * 1000).toISOString().slice(0, 19).replace("T", " ")} UTC` : ""}</span> : null}
       <span role="status" aria-label="freshness" className={fr.stale ? "text-poppy-deep" : ""}>{fr.stale ? `Stale: ${fr.reason}` : fr.reason} Auto-refresh every {Math.round(pollMs / 1000)}s while this tab is visible.</span>
     </div>
 
@@ -141,7 +142,7 @@ export function StakingView({ api, userId, onOpenWorkspace, wallets, pollMs = PO
             <dt>Fee source</dt><dd className="[overflow-wrap:anywhere]">{st.feeSource ? <a className="font-mono text-xs underline" href={explorerAddr(st.feeSource.address, st.cluster)} target="_blank" rel="noreferrer">{st.feeSource.address} ↗</a> : "none"}</dd>
             {st.feeSource && <><dt>Pollen claimable</dt><dd>{wsol(st.feeSource.unclaimedForPool)}</dd></>}
           </dl>
-          <p className="text-xs">The existing $FLEURI bonding-curve pool uses a config fleuri does not control, so its fees are not routed here. A Pollen vault can also be funded manually, so a received claim proves Pollen funding, not that it came from DBC/DAMM trading fees. Trading origin stays unverified unless individual route funding is proven.</p>
+          <p className="text-xs">No verified fee routing is configured. The existing $FLEURI pool's immutable partner fee claimer does not name this Pollen vault, so the implemented partner route is unavailable. Meteora's fee sharing also supports creator-fee claims, which could only apply if the pool's current creator explicitly approves transferring creator authority and the quote-only requirements are met; that option is unimplemented, needs separate review, and fleuri does not perform any authority transfer. A Pollen vault can also be funded manually, so a received claim proves Pollen funding, not that it came from DBC/DAMM trading fees. Trading origin stays unverified unless individual route funding is proven.</p>
           <button type="button" className="btn btn-ink" disabled={dis || !wallet || !g.harvest} title={!g.harvest ? "Needs a ready program and fee source, a fresh read and a positive Pollen claimable balance" : ""} onClick={() => void act("harvest")}>Collect Pollen rewards</button>
         </Panel>
       </div>
