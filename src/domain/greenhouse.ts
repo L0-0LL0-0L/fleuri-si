@@ -123,7 +123,7 @@ export function buildWorld(market: FrozenMarket, participant: Agent, rng: number
 export function applyShock(s: GardenState, sh: Shock) {
   const c = sh.symbol ? s.coins[sh.symbol] : undefined;
   if (!c) return;
-  if (sh.kind === "liquidity") { const keep = 1 - sh.magnitude; c.vSol = Math.max(1, c.vSol * keep); c.vTok = c.vSol / (c.vSol / keep / c.vTok * keep); /* price preserved */ c.vTok = Math.max(1, c.vTok); }
+  if (sh.kind === "liquidity") { const keep = Math.min(1, Math.max(1 - sh.magnitude, 1 / c.vSol)); c.vSol *= keep; c.vTok *= keep; } // price preserved, depth reduced; removed reserves leave the sim
   if (sh.kind === "sell") { const newSol = Math.max(1, c.vSol * (1 - sh.magnitude)); const k = c.vSol * c.vTok; c.vTok = k / newSol; c.vSol = newSol; c.raised = Math.max(0, c.raised - sh.magnitude * c.raised); }
 }
 /** Net liquidation value: cash plus what selling every position into the current curve would return after fees and price impact. */
