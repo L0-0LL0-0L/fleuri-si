@@ -87,8 +87,10 @@ export async function signSubmitConfirm(
     confirm: () => pqConfirm({ data: { preparationId: prep.preparationId } }) as any,
     watchAccount: (cb) => {
       const p = getProvider(kind) as any; if (!p?.on) return () => {};
-      p.on("accountChanged", cb); p.on("disconnect", cb);
-      return () => { const off = (p.off ?? p.removeListener)?.bind(p); off?.("accountChanged", cb); off?.("disconnect", cb); };
+      const onAcct = (pk: any) => cb(pk == null ? null : typeof pk === "string" ? pk : typeof pk?.toBase58 === "function" ? pk.toBase58() : undefined);
+      const onDisc = () => cb(null);
+      p.on("accountChanged", onAcct); p.on("disconnect", onDisc);
+      return () => { const off = (p.off ?? p.removeListener)?.bind(p); off?.("accountChanged", onAcct); off?.("disconnect", onDisc); };
     },
   }, { onStatus: opts.onStatus, guard: opts.guard, signal: opts.signal });
 }
