@@ -11,6 +11,7 @@
 * [Agents](garden/agents.md)
 * [Activity & alerts](garden/activity-and-alerts.md)
 * [Creating & running your agents](garden/my-agents.md)
+* [Greenhouse Trials](garden/greenhouse.md)
 * [Sandbox economics](garden/economics.md)
 
 ## The launchpad (mainnet)
