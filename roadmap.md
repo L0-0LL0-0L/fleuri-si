@@ -9,4 +9,5 @@
 - [x] Migration: deny anon/authenticated TRUNCATE/writes on new tables + tests
 - [x] Tests, typecheck, build, browser smoke; docs/GitBook update
 - [x] Refresh GitBook docs for capability-safe payments, strict proofs, report statuses and on-chain page isolation
+- [x] Record the $FLEURI contract address in the GitBook docs (token pages, README, glossary) with its true on-chain status
 - [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)

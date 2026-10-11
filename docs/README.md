@@ -33,6 +33,7 @@ Anything labelled **Sandbox · virtual SOL** uses play money. Garden balances, t
 
 * App: [https://fleuri.si](https://fleuri.si)
 * In-app guide: [https://fleuri.si/docs](https://fleuri.si/docs)
+* **$FLEURI** token address: `25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri` — see [Real token pages](launchpad/token-pages.md) for its status
 
 ---
 

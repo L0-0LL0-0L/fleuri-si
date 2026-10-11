@@ -2,6 +2,20 @@
 
 Every recorded fleuri launch has a page at `/t/<mint>`. These are **real Solana tokens**, not the garden's virtual coins at `/c/<symbol>`.
 
+## $FLEURI
+
+The fleuri token is **$FLEURI**. Its contract (mint) address is:
+
+```
+25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri
+```
+
+Token page: [`/t/25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri`](https://fleuri.si/t/25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri)
+
+{% hint style="warning" %}
+Status as at 11 October 2026: fleuri's chain checks found **no account at this address** on Solana mainnet-beta or devnet, and no fleuri launch or passport is recorded for it. Until a mint is confirmed at the address, its token page shows no supply, holders, price or pool — and nothing here should be read as a live market. Always copy the address above rather than trusting a name: on Solana the address is the only reliable identifier.
+{% endhint %}
+
 ## What you can inspect
 
 * Bonding-curve price in SOL, supply and curve-based market cap
