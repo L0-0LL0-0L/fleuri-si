@@ -3,8 +3,8 @@
 import { PublicKey, Transaction, TransactionInstruction, type Connection } from "@solana/web3.js";
 import { GENESIS } from "@/pq/registration";
 import {
-  ATA_PROGRAM, EXPECTED_EVENT, PLACEHOLDER_PROGRAM_ID, STAKE_MINT, SYSTEM_PROGRAM, TOKEN_PROGRAM, WSOL, ata, buildHarvestIx, buildIx, claimableAt,
-  decodePool, decodePosition, decodeProgramAccount, decodeProgramData, derive, parseEvents, programElf, readiness, type ReadinessFacts, type StakingAction,
+  ATA_PROGRAM, PLACEHOLDER_PROGRAM_ID, STAKE_MINT, SYSTEM_PROGRAM, TOKEN_PROGRAM, WSOL, ata, buildHarvestIx, buildIx, claimableAt,
+  blockers, checkFeeVault, checkTokenAccount, decodeMintStrict, decodePool, decodePosition, decodeProgramAccount, decodeProgramData, derive, matchConfirmation, programElf, readiness, type ReadinessFacts, type StakingAction,
 } from "@/pq/staking";
 import * as sol from "./solana.server";
 
@@ -20,14 +20,7 @@ export function stakingEnv() {
 const big = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === "bigint" ? v.toString() : v]));
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
 
-function decodeMint(d: Uint8Array) {
-  if (d.length < 82) throw new Error("Not an SPL mint.");
-  const v = new DataView(d.buffer, d.byteOffset, d.length);
-  const opt = (o: number) => { const t = v.getUint32(o, true); if (t > 1) throw new Error("Malformed mint option."); return t === 1 ? new PublicKey(d.subarray(o + 4, o + 36)).toBase58() : null; };
-  return { mintAuthority: opt(0), supply: v.getBigUint64(36, true), decimals: d[44], freezeAuthority: opt(46) };
-}
-
-async function tokenAmount(conn: Connection, a: PublicKey) { const i = await conn.getAccountInfo(a); if (!i || i.data.length < 72) return null; return new DataView(i.data.buffer, i.data.byteOffset).getBigUint64(64, true); }
+async function tokenAmount(conn: Connection, a: PublicKey) { const i = await conn.getAccountInfo(a); if (!i || i.owner.toBase58() !== TOKEN_PROGRAM || i.data.length !== 165) return null; return new DataView(i.data.buffer, i.data.byteOffset).getBigUint64(64, true); }
 
 /** Reads everything needed for the page and for gating; unknowns stay unknown. */
 export async function readState(wallet: string | null) {
@@ -41,7 +34,7 @@ export async function readState(wallet: string | null) {
     const slot = await conn.getSlot("confirmed"); const bt = await conn.getBlockTime(slot);
     out.slot = slot; out.chainTime = bt; facts.rpcFresh = bt != null && Math.abs(Date.now() / 1000 - bt) < 180;
     const mi = await conn.getAccountInfo(new PublicKey(STAKE_MINT));
-    if (mi) { const m = decodeMint(mi.data); facts.mint = { address: STAKE_MINT, exists: true, mintAuthority: m.mintAuthority, freezeAuthority: m.freezeAuthority, owner: mi.owner.toBase58() }; out.mint = { ...big(m), owner: mi.owner.toBase58() }; }
+    if (mi) { const m = decodeMintStrict(mi.owner.toBase58(), mi.data); facts.mint = { address: STAKE_MINT, exists: true, mintAuthority: m.mintAuthority, freezeAuthority: m.freezeAuthority, owner: mi.owner.toBase58(), decimals: m.decimals, initialized: m.initialized }; out.mint = { ...big(m), owner: mi.owner.toBase58() }; }
   } catch (x) { out.errors.push(`RPC: ${(x as Error).message}`); }
   if (conn && s.programId && s.programId !== PLACEHOLDER_PROGRAM_ID) {
     try {
@@ -59,17 +52,24 @@ export async function readState(wallet: string | null) {
         const p = decodePool(pi.data);
         facts.pool = { stakeMint: p.stakeMint, rewardMint: p.rewardMint, principalVault: p.principalVault, rewardVault: p.rewardVault, feeVault: p.feeVault };
         const [pv, rv] = await Promise.all([conn.getAccountInfo(d.principal), conn.getAccountInfo(d.reward)]);
-        const tokOk = (i: any, mint: string) => !!i && i.owner.toBase58() === TOKEN_PROGRAM && new PublicKey(i.data.subarray(0, 32)).toBase58() === mint && new PublicKey(i.data.subarray(32, 64)).equals(d.pool) && new DataView(i.data.buffer, i.data.byteOffset).getUint32(72, true) === 0;
-        facts.vaultsOk = tokOk(pv, p.stakeMint) && tokOk(rv, WSOL);
+        const acc = (i: any) => (i ? { owner: i.owner.toBase58(), data: new Uint8Array(i.data) } : null);
+        const pIssues = checkTokenAccount(acc(pv), { mint: p.stakeMint, authority: d.pool.toBase58() });
+        const rIssues = checkTokenAccount(acc(rv), { mint: WSOL, authority: d.pool.toBase58() });
+        facts.vaultsOk = !pIssues.length && !rIssues.length;
+        out.vaultIssues = { principal: pIssues, reward: rIssues };
         out.pool = { address: d.pool.toBase58(), ...p, ledger: big(p.ledger), principalBalance: (await tokenAmount(conn, d.principal))?.toString() ?? null, rewardBalance: (await tokenAmount(conn, d.reward))?.toString() ?? null };
         try {
-          const { readVault } = await import("./pollen.server");
-          const v = await readVault(conn, p.feeVault);
-          const me = v.recipients.find((r) => r.address === d.pool.toBase58());
-          const ok = (!s.feeVault || s.feeVault === p.feeVault) && v.mint === WSOL && v.tokenVault === p.feeTokenVault && !!me;
+          const fvAcc = acc(await conn.getAccountInfo(new PublicKey(p.feeVault)));
+          const chk = checkFeeVault(p.feeVault, fvAcc, { feeTokenVault: p.feeTokenVault, pool: d.pool.toBase58(), index: p.recipientIndex });
+          const issues = [...chk.issues];
+          if (s.feeVault && s.feeVault !== p.feeVault) issues.push("pool fee source differs from the configured vault");
+          let v: any = null;
+          try { const { readVault } = await import("./pollen.server"); v = await readVault(conn, p.feeVault); if (v.pdaIssues?.length) issues.push(...v.pdaIssues); } catch (x) { issues.push(`vault unreadable: ${(x as Error).message}`); }
+          const ok = issues.length === 0;
           facts.feeSourceOk = ok;
-          facts.feeSourceDetail = ok ? `Pool PDA is a fixed recipient (${(me!.share / 100).toFixed(2)}%) of DFS vault ${p.feeVault}. Which trading pools route fees into that vault is not verified here.` : s.feeVault && s.feeVault !== p.feeVault ? "Pool fee source differs from the configured vault." : "Fee vault does not name this pool as a wSOL recipient.";
-          out.feeSource = { address: p.feeVault, funded: v.funded, recipientShareBps: me?.share ?? null, unclaimedForPool: me?.unclaimed ?? null, pdaIssues: v.pdaIssues };
+          facts.feeSourceDetail = ok ? `Pool PDA is recipient #${p.recipientIndex} (${((chk.share! / chk.totalShare!) * 100).toFixed(2)}% of shares) of DFS PDA vault ${p.feeVault}. Anyone can fund a DFS vault manually, so claims prove Pollen funding, not trading-fee origin; which DBC/DAMM pools route into it is unverified.` : `Fee source rejected: ${issues.join("; ")}.`;
+          const me = v?.recipients?.find((r: any) => r.address === d.pool.toBase58());
+          out.feeSource = { address: p.feeVault, funded: v?.funded ?? null, recipientIndex: p.recipientIndex, share: chk.share, totalShare: chk.totalShare, unclaimedForPool: me?.unclaimed ?? null, issues };
         } catch (x) { facts.feeSourceDetail = `Fee vault unreadable: ${(x as Error).message}`; }
         if (wallet) {
           const posAddr = d.position(wallet); const ps = await conn.getAccountInfo(posAddr);
@@ -85,7 +85,6 @@ export async function readState(wallet: string | null) {
   return { ...out, facts: { ...facts }, checks: r.checks, depositsEnabled: r.depositsEnabled };
 }
 
-const EXIT_CHECKS = ["cluster", "rpc", "configured", "program", "code", "pool", "vaults"];
 function ataIx(payer: string, owner: string, mint: string) {
   return new TransactionInstruction({ programId: new PublicKey(ATA_PROGRAM), data: Buffer.from([1]), keys: [
     { pubkey: new PublicKey(payer), isSigner: true, isWritable: true }, { pubkey: ata(owner, mint), isSigner: false, isWritable: true }, { pubkey: new PublicKey(owner), isSigner: false, isWritable: false },
@@ -94,8 +93,7 @@ function ataIx(payer: string, owner: string, mint: string) {
 
 export async function prepare(savePrep: SavePrep, ownerId: string, input: { wallet: string; action: StakingAction | "harvest"; amount?: string }) {
   const st = await readState(input.wallet);
-  const need = input.action === "stake" ? st.checks.map((c: any) => c.id) : input.action === "harvest" ? [...EXIT_CHECKS, "source"] : EXIT_CHECKS;
-  const failing = st.checks.filter((c: any) => need.includes(c.id) && !c.ok);
+  const failing = blockers(input.action, st.checks);
   if (failing.length) throw new Error(`Blocked: ${failing.map((c: any) => `${c.label} — ${c.detail}`).join(" ")}`);
   const programId = st.programId as string; const conn = sol.connection(); const d = derive(programId);
   const amount = input.amount != null ? BigInt(input.amount) : undefined;
@@ -127,10 +125,8 @@ export async function confirmStaking(prep: any, tx: { slot: number; ixs: { progr
   const t = await conn.getParsedTransaction(prep.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
   if (!t?.meta?.logMessages) return { status: "pending" as const, detail: "Waiting for transaction logs…" };
   const action = prep.payload.action as StakingAction | "harvest";
-  const evs = parseEvents(t.meta.logMessages, programId).filter((e) => e.name === EXPECTED_EVENT[action] && e.pool === prep.subject);
-  const ev = action === "harvest" ? evs[0] : evs.find((e) => e.who === prep.wallet);
-  if (!ev) throw new Error(`No ${EXPECTED_EVENT[action]} event from Pollen Staking for this wallet in the confirmed transaction.`);
-  if ((action === "stake" || action === "request_unstake") && ev.amount.toString() !== prep.payload.amount) throw new Error("On-chain amount differs from the prepared amount.");
+  if (t.meta.err) throw new Error("Transaction failed on chain.");
+  const ev = matchConfirmation(prep, t.meta.logMessages);
   const d = await db();
   must(await d.from("chain_preparations").update({ confirmed_at: new Date().toISOString(), payload: { ...prep.payload, verifiedSlot: tx.slot, event: { name: ev.name, amount: ev.amount.toString(), extra: ev.extra?.toString() ?? null } } }).eq("id", prep.id).eq("owner_id", ownerId));
   const words: Record<string, string> = { stake: "Staked", request_unstake: "Unstake requested for", cancel_unstake: "Cancelled unstake of", withdraw: "Withdrew", claim: "Claimed", harvest: "Harvested" };
