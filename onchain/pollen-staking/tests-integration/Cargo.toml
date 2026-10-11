@@ -1,0 +1,19 @@
+[package]
+name = "pollen-staking-integration"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Executes the compiled SBF program (target/deploy/pollen_staking.so) in LiteSVM.
+# Build it first: `anchor build` (or `cargo build-sbf --manifest-path programs/pollen-staking/Cargo.toml`).
+[dev-dependencies]
+litesvm = "0.8"
+pollen-staking = { path = "../programs/pollen-staking", features = ["no-entrypoint"] }
+anchor-lang = "=0.32.1"
+solana-keypair = "2.2"
+solana-signer = "2.2"
+solana-transaction = "2.2"
+solana-message = "2.2"
+solana-instruction = "2.2"
+solana-pubkey = "2.2"
+spl-token = { version = "8", features = ["no-entrypoint"] }

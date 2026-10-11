@@ -1,0 +1,8 @@
+[workspace]
+members = ["programs/pollen-staking", "tests-integration"]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
