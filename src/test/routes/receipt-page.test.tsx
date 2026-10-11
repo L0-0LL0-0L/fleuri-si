@@ -8,7 +8,7 @@ vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (o: any) => ({ ...o, useParams: () => h.params, useSearch: () => ({}) }),
   Link: ({ children }: any) => <a>{children}</a>,
 }));
-vi.mock("@/store/garden", () => ({ useGarden: () => ({ userId: h.user }) }));
+vi.mock("@/store/garden", () => ({ useGarden: () => ({ userId: h.user, store: { get: () => ({ userId: h.user }) } }) }));
 vi.mock("@/lib/research.functions", () => ({ rrGet: vi.fn(), rrPublic: vi.fn(), rrPrepareAnchor: vi.fn(), rrPublish: vi.fn() }));
 vi.mock("@/lib/pq.functions", () => ({ pqMine: vi.fn(async () => ({ ok: true, data: { preparations: [] } })) }));
 vi.mock("@/components/pq/ui", () => ({

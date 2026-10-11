@@ -14,7 +14,7 @@ vi.mock("@/lib/greenhouse.functions", () => ({ ghRun: vi.fn() }));
 vi.mock("@/lib/pq.functions", () => ({ pqMine: vi.fn() }));
 vi.mock("@/pq/local", () => ({ loadLocal: () => {}, usePqLocal: () => ({ unlocked: true, envelope: { keyHash: "k".repeat(64) } }), withSecret: (fn: any) => fn({}) }));
 vi.mock("@/pq/receipt", () => ({ receiptHash: () => "a".repeat(64), parseReceiptManifest: (m: any) => m, signReceipt: vi.fn(() => ({ publicKey: "PK", signature: "FRESH" })) }));
-vi.mock("@/domain/greenhouse", () => ({ SUPPORTED_ENGINES: ["greenhouse-rules-2"] }));
+vi.mock("@/domain/greenhouse", async (orig) => ({ ...(await orig<any>()), SUPPORTED_ENGINES: ["greenhouse-rules-2"] }));
 vi.mock("@/components/greenhouse/TrialReport", () => ({ TrialReport: () => null }));
 vi.mock("@/components/receipts/ManifestReview", () => ({ ManifestReview: () => null }));
 vi.mock("@/components/bits", () => ({ PageHeader: () => null, ListSkeleton: () => <p>loading</p> }));
