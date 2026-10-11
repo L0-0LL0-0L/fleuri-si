@@ -23,6 +23,7 @@
 * [Pool config](launchpad/pool-config.md)
 * [Verifying a passport](launchpad/verify.md)
 * [Pollen fee-sharing vaults](launchpad/pollen.md)
+* [Pollen Staking](launchpad/pollen-staking.md)
 * [Botanist field report](launchpad/botanist.md)
 
 ## Reference

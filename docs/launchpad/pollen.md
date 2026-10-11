@@ -12,3 +12,5 @@ Pollen vaults are real Meteora Dynamic Fee Sharing vaults on Solana. Each vault 
   * and the person claiming is one of the vault's recipients.
 
   Existing pools can't be changed to meet these conditions afterwards. Linking a vault to a token page is not proof that fees are routed to it.
+
+Need more than five recipients? [Pollen Staking](pollen-staking.md) gives one vault share to any number of $FLEURI stakers. It is not deployed yet.
