@@ -17,6 +17,7 @@
 - [x] Pollen Staking integration: polling/refresh, in-page review, recovery, Collect Pollen rewards, automatic unallocated resume, Anchor.toml + ID sync script, real IDL check in CI
 - [x] GitBook staking update: current portfolio controls, coherent snapshots, actual cluster badge, signing/recovery, validation evidence and undeployed fee-routing status
 - [x] Greenhouse Trials: deterministic rules-engine stress tests, baseline, scorecards, replayable bundles, private/published reports, proposal evidence
+- [x] Greenhouse hardening: fenced execution leases, settings-conflict checks, exact creator-rebate NLV (rules-2), stored-checksum replay, owner-scoped session state, frozen launch-review evidence
 - [ ] Future: Agent Research Receipts / on-chain anchors, Observatory, Watchtower, Pollen Access
 - [ ] Pollen Staking deployment: deploy keypair, verified build hash, DFS vault naming the pool PDA, routed fee source — waits on owner
 - [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)
