@@ -33,7 +33,8 @@ function TokenPage() {
   return <div className="space-y-4">
     <PageHeader title={tok ? `${tok.name}.` : "a launched token."} kicker={tok ? `$${tok.symbol} · real token` : "real token"}><CopyLink path={`/t/${mint}`} /></PageHeader>
     <div className="flex flex-wrap items-center gap-2"><RealBadge cluster={l?.cluster} /><span className="font-mono text-xs break-all">{mint}</span></div>
-    <p className="hair bg-paper-light p-3 text-sm">This is a <strong>real Solana token</strong> launched through fleuri. Prices and holders are read live from chain. It is not part of the garden sandbox — sandbox coins live under <Link to="/coins" className="underline">Coins</Link> and use virtual SOL.</p>
+    {l && <p className="hair bg-paper-light p-3 text-sm">This is a <strong>real Solana token</strong> launched through fleuri. Prices and holders are read live from chain. It is not part of the garden sandbox — sandbox coins live under <Link to="/coins" className="underline">Coins</Link> and use virtual SOL.</p>}
+    {res && !l && <p className="hair bg-paper-light p-3 text-sm">This address is <strong>not a recorded fleuri launch</strong>. What follows is read straight from the chain and may be unavailable. It is not part of the garden sandbox — sandbox coins live under <Link to="/coins" className="underline">Coins</Link> and use virtual SOL.</p>}
     {busy && !res && <p role="status" className="hair bg-paper-light p-3 text-sm">Reading chain state…</p>}
     {err && <p role="alert" className="hair bg-paper-light p-3 text-sm text-poppy-deep">{err}</p>}
     {res && !l && <Panel title="Not found"><p className="text-sm">No fleuri launch is recorded for this mint. Check the address, or browse the <Link to="/launchpad" className="underline">launchpad</Link>.</p></Panel>}
