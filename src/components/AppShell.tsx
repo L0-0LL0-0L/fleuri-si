@@ -11,7 +11,7 @@ import { CreateAgentDialog } from "./CreateAgentDialog";
 import { AgentAvatar, FlowerTiles } from "./PixelFlower";
 import { ThreadDrawer } from "./ThreadDrawer";
 import { WalletDialog } from "./WalletDialog";
-import { OnchainBadge, Progress, SandboxBadge, Skeleton, Wordmark } from "./bits";
+import { CaChip, OnchainBadge, Progress, SandboxBadge, Skeleton, Wordmark } from "./bits";
 import { isOnchainPath } from "@/lib/onchain-routes";
 
 const NAV = [
@@ -182,7 +182,7 @@ function TopStrip({ onMenu }: { onMenu: () => void }) {
   const { ui, state, store, error, lastSync, syncing } = useGarden();
   const onchain = isOnchainPath(useRouterState({ select: (s) => s.location.pathname }));
   return (
-    <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-ink bg-paper/95 px-3 py-2 backdrop-blur grain">
+    <div className="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-ink bg-paper/95 px-3 py-2 backdrop-blur grain relative">
       <button type="button" className="hair grid h-10 w-10 place-items-center bg-paper-light lg:hidden" onClick={onMenu} aria-label="Open navigation">
         <Menu className="h-5 w-5" />
       </button>
@@ -190,6 +190,7 @@ function TopStrip({ onMenu }: { onMenu: () => void }) {
         <Link to="/" className="wordmark text-3xl" aria-label="fleuri home">fleuri</Link>
       </span>
       {onchain ? <OnchainBadge className="inline-flex" /> : <SandboxBadge className="hidden sm:inline-flex" />}
+      <CaChip />
       <span className={cn("hidden font-mono text-[0.65rem] md:inline", error && "text-poppy-deep")} role="status">
         {error ? (
           <button type="button" className="underline" onClick={() => store.refresh(true)}>cloud sync failed · retry</button>

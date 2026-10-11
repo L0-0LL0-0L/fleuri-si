@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { Check, Link2 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { Check, Copy, Link2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { FLEURI_MINT, FLEURI_MINT_NOTE } from "@/lib/token";
 import { cn } from "@/lib/utils";
 import { PixelFlower } from "./PixelFlower";
 
@@ -153,4 +154,97 @@ export function KindBadge({ kind }: { kind: string }) {
     follow: "bg-lagoon text-ink",
   };
   return <span className={cn("chip", map[kind])}>{kind}</span>;
+}
+
+/**
+ * Top-bar "CA" button: press it and the $FLEURI contract address appears in a
+ * panel where it can be copied or selected as a whole. The address is shown with
+ * its real status — no account exists on chain yet, so nothing here may read as a
+ * live market.
+ */
+export function CaChip({ className }: { className?: string }) {
+  const [open, setOpen] = useState(false);
+  const [done, setDone] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onDown = (e: Event) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [open]);
+
+  const copy = async () => {
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(FLEURI_MINT);
+        ok = true;
+      }
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      // Clipboard API needs a secure context; fall back to a hidden field.
+      const ta = document.createElement("textarea");
+      ta.value = FLEURI_MINT;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        ok = document.execCommand("copy");
+      } catch {
+        ok = false;
+      }
+      ta.remove();
+    }
+    if (!ok) {
+      toast.error("Couldn't copy — your browser blocked clipboard access.");
+      return;
+    }
+    setDone(true);
+    toast.success("Contract address copied");
+    setTimeout(() => setDone(false), 1800);
+  };
+
+  return (
+    <div ref={wrap} className={cn("shrink-0", className)}>
+      <button
+        type="button"
+        className="btn btn-red h-9 min-h-9 px-2 text-xs"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="fleuri-ca"
+        title="Show the $FLEURI contract address"
+      >
+        CA
+      </button>
+      {open && (
+        <div id="fleuri-ca" className="hair grain absolute left-2 top-[calc(100%+0.35rem)] z-40 w-[min(86vw,26rem)] bg-paper-light p-3">
+          <p className="font-mono text-[0.65rem] uppercase tracking-widest text-poppy">$FLEURI contract address</p>
+          <code className="mt-1.5 block select-all break-all font-mono text-sm font-semibold leading-snug">{FLEURI_MINT}</code>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <button type="button" className="btn btn-ink h-9 min-h-9 px-3 text-xs" onClick={copy}>
+              {done ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {done ? "Copied" : "Copy address"}
+            </button>
+            <Link to="/t/$mint" params={{ mint: FLEURI_MINT }} className="chip bg-paper-deep text-ink">
+              token page ↗
+            </Link>
+          </div>
+          <p className="mt-2.5 text-xs leading-snug text-ink-soft">{FLEURI_MINT_NOTE}</p>
+        </div>
+      )}
+    </div>
+  );
 }
