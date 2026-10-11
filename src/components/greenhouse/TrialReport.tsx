@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Panel, downloadBlob } from "@/components/pq/ui";
 import { CopyLink } from "@/components/bits";
@@ -39,7 +40,7 @@ function Bar({ v, max, tone, label, lo, hi }: { v: number; max: number; tone: st
   );
 }
 
-export function TrialReport({ row, handles, onPublish }: { row: TrialRow; handles: Record<string, string>; onPublish?: (published: boolean) => Promise<void> }) {
+export function TrialReport({ row, handles, onPublish, receiptView }: { row: TrialRow; handles: Record<string, string>; onPublish?: (published: boolean) => Promise<void>; receiptView?: boolean }) {
   const out = row.output;
   const input = row.input;
   const [replay, setReplay] = useState<ReplayStatus | null>(null);
@@ -75,7 +76,8 @@ export function TrialReport({ row, handles, onPublish }: { row: TrialRow; handle
           <button type="button" className="btn btn-ink" disabled={!!busy || !supported} onClick={() => void doReplay()}>{busy ?? (supported ? "Replay & verify" : "Replay unavailable")}</button>
           <button type="button" className="btn btn-paper" onClick={() => downloadBlob(new Blob([JSON.stringify(bundle(), null, 1)], { type: "application/json" }), `greenhouse-${row.id.slice(0, 8)}.json`)}>Download evidence bundle</button>
           {row.mine && onPublish && <button type="button" className={cn("btn", row.published ? "btn-paper" : "btn-red")} disabled={!!busy} onClick={() => { setBusy(row.published ? "Unpublishing…" : "Publishing…"); onPublish(!row.published).then(() => toast.success(row.published ? "Report is private again" : "Report published"), (e) => toast.error((e as Error).message)).finally(() => setBusy(null)); }}>{row.published ? "Make private" : "Publish report"}</button>}
-          {row.published && <CopyLink path={`/greenhouse/r/${row.id}`} label="Copy public link" />}
+          {row.published && !receiptView && <CopyLink path={`/greenhouse/r/${row.id}`} label="Copy public link" />}
+          {row.mine && onPublish && supported && row.status === "done" && <Link to="/receipts/new" search={{ run: row.id }} className="btn btn-paper">Create research receipt</Link>}
         </div>
         <p className="text-xs">{row.published ? "Published: anyone with the link can read this sanitized report." : row.mine ? "Private: only your workspace can see this report until you publish it." : ""}</p>
         {!supported && <p className="hair bg-paper-deep p-2 text-xs">Recorded with engine {input.engineVersion}, which this build does not support. The original records can still be downloaded unchanged, but they cannot be replayed or relabelled here.</p>}
