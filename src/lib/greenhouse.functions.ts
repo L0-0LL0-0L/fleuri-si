@@ -64,25 +64,14 @@ export const ghStart = createServerFn({ method: "POST" })
     } catch (e) { return fail(e); }
   });
 
+/** The caller's own runs. owner_id isn't exposed through the Data API, so scope with the service role after authentication. */
 export const ghMyRuns = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const r = await (context.supabase as any).from("greenhouse_runs").select(LIST_COLS).eq("published", false).order("created_at", { ascending: false }).limit(30);
-    const p = await (context.supabase as any).rpc ? null : null;
-    void p;
-    // Own runs: RLS returns own rows + any published rows; the owner filter is enforced server-side via a second own-only query.
-    const own = await ownRuns(context.supabase, context.userId);
-    if (r.error) return fail(new Error(r.error.message));
-    return own;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const r = await (supabaseAdmin as any).from("greenhouse_runs").select(LIST_COLS).eq("owner_id", context.userId).order("created_at", { ascending: false }).limit(30);
+    return r.error ? fail(new Error(r.error.message)) : { ok: true as const, data: r.data as any[] };
   });
-
-async function ownRuns(supabase: any, userId: string) {
-  // owner_id is not selectable through the Data API; scope with the service role after authentication instead.
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  void supabase;
-  const r = await (supabaseAdmin as any).from("greenhouse_runs").select(LIST_COLS).eq("owner_id", userId).order("created_at", { ascending: false }).limit(30);
-  return r.error ? fail(new Error(r.error.message)) : { ok: true as const, data: r.data as any[] };
-}
 
 /** A run the caller may read: their own (RLS) or any published one. */
 export const ghRun = createServerFn({ method: "GET" })

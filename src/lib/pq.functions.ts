@@ -157,7 +157,7 @@ export const pqLaunchProposals = createServerFn({ method: "GET" }).handler(async
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: (input, init) => { const h = new Headers(init?.headers); if (key.startsWith("sb_") && h.get("Authorization") === `Bearer ${key}`) h.delete("Authorization"); h.set("apikey", key); return fetch(input, { ...init, headers: h }); } },
   });
-  const r = await (pub as any).from("launch_proposals").select("id,created_at,agent_handle,name,symbol,tagline,reason,status").eq("status", "pending").order("created_at", { ascending: false }).limit(20);
+  const r = await (pub as any).from("launch_proposals").select("id,created_at,agent_handle,name,symbol,tagline,reason,status,origin_agent_id,origin_policy_hash,origin_mode").eq("status", "pending").order("created_at", { ascending: false }).limit(20);
   return r.error ? { ok: false as const, error: r.error.message } : { ok: true as const, data: r.data as any[] };
 });
 
