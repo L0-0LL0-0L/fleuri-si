@@ -15,5 +15,6 @@
 - [x] Pollen Staking: Anchor program source, accounting + SBF program tests (with real DFS bytecode), IDL, client, /staking page, prepare/sign/recover flow, docs
 - [x] Pollen Staking review fixes: non-delayable release window, harvest custody checks, PDA fee-vault validation, strict server account checks, Pollen-funded naming, hash normalization
 - [x] Pollen Staking integration: polling/refresh, in-page review, recovery, Collect Pollen rewards, automatic unallocated resume, Anchor.toml + ID sync script, real IDL check in CI
+- [x] GitBook staking update: current portfolio controls, coherent snapshots, actual cluster badge, signing/recovery, validation evidence and undeployed fee-routing status
 - [ ] Pollen Staking deployment: deploy keypair, verified build hash, DFS vault naming the pool PDA, routed fee source — waits on owner
 - [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)

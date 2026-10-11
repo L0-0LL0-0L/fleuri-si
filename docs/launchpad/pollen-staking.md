@@ -1,5 +1,9 @@
 # Pollen Staking
 
+{% hint style="info" %}
+Open [Pollen Staking](https://fleuri.si/staking) from the app navigation or the Pollen page. The interface is implemented, but staking deposits are **not available yet**: no program has been deployed and no verified fee routing is configured.
+{% endhint %}
+
 Stake $FLEURI and earn a share of the **wrapped SOL the pool actually received** from one fixed [Pollen](pollen.md) fee-sharing vault. These are **Pollen-funded rewards**. There are no new FLEURI emissions and no fixed APY. If nothing arrives, nothing is paid.
 
 {% hint style="warning" %}
@@ -17,7 +21,7 @@ Stake $FLEURI and earn a share of the **wrapped SOL the pool actually received**
 | Program source (`onchain/pollen-staking`, Anchor 0.32.1) | Implemented |
 | Accounting unit tests (Rust, host) | Passing (14) |
 | Program tests: compiled SBF program and Meteora's real fee-sharing bytecode, run in LiteSVM | Passing (11) |
-| App decoders, account checks, readiness, confirmation, recovery and page tests (TypeScript) | Passing (56) |
+| App decoders, account checks, coherent snapshots, readiness, confirmation, recovery and page tests (TypeScript) | Passing in the latest checks; see validation below |
 | `/staking` page, transaction prepare/sign/recover flow | Implemented; blocked until deployed |
 | Deployed program on mainnet or devnet | **None** |
 | Fee routing from the existing $FLEURI pool | **No verified fee routing is configured.** The pool's immutable partner fee claimer does not name this Pollen vault, so the implemented partner route is unavailable. A creator-fee route would require the current creator's explicit approval to transfer creator authority plus quote-only requirements; it is unimplemented, needs separate review, and fleuri performs no authority transfer. |
@@ -39,10 +43,31 @@ Stake $FLEURI and earn a share of the **wrapped SOL the pool actually received**
 * **Request unstake** stops earning at once and starts the cooldown (proposed default 7 days). You can have only one pending withdrawal at a time, so an existing cooldown is never silently extended.
 * **Cancel** puts the pending amount back into active stake.
 * **Withdraw** works after the cooldown and needs your wallet signature.
+* **Claim** collects your accrued wSOL rewards, not your staked FLEURI. It is enabled only for your connected wallet when a recent chain read shows a positive claimable amount and exit-readiness checks pass.
 * **Collect Pollen rewards** on the page prepares the permissionless harvest. It is enabled only when the program and fee source pass and the pool has a positive claimable balance in the Pollen vault. You review and sign it in your own wallet.
 * Every prepared action is saved to your workspace. After a reload or an uncertain submission, *Pending transactions* on `/staking` resends the exact same signed bytes and never builds a new transaction.
 * Unstaking and withdrawing never call Meteora, so a fee-collection problem cannot trap your exit.
 * No admin instruction can move staked principal or accrued rewards.
+
+## Reading your portfolio
+
+The page shows active FLEURI stake, pending withdrawals and their chain-time countdown, exact claimable wSOL, Pollen-funded totals, separately labelled treasury top-ups, claimed rewards and unallocated funds. These are real chain reads, never garden vSOL balances or seeded rewards.
+
+* **Network badge:** shows the latest successful read's actual Solana cluster. Before the first successful read, it can say **network**; it does not assume mainnet.
+* **As-of evidence:** the page shows the snapshot's slot and chain time. All portfolio amounts and the withdrawal preview use that same snapshot.
+* **Refresh:** requests a new chain read. The page also refreshes every 45 seconds while the tab is visible, without overlapping reads.
+* **Stale or failed reads:** a snapshot older than 120 seconds, or a failed latest read, blocks actions until a fresh successful read. Old data is labelled stale rather than shown as a permanently green check.
+* **Wallet changes:** owned position data is cleared on disconnect or switch; late results for another wallet are ignored. A fresh read can enable Claim as rewards grow from zero to a positive amount.
+
+Disconnected, wrong-network, unavailable-RPC, not-configured and not-deployed states do not imply an available deposit or a live reward balance. The page supports narrow mobile screens and reduced motion.
+
+## Review, signing and recovery
+
+Before your wallet is asked to sign, an in-page review shows the action and applicable amount, cooldown, chain-time unlock date, expected claim or Pollen harvest amount, program and network. It also shows the simulated SOL change, network fee and any token-account creation rent. Expected rewards are a recent-read estimate; the program determines the exact payout at execution.
+
+Cancel closes the review without signing. Fleuri does not hold your wallet keys or sign automatically. A prepared transaction or pending signature is **not** a confirmed success.
+
+Owner-specific **Pending transactions** appear directly on `/staking`, including after reload or uncertain submission. Signed bytes are saved before broadcast. Recovery checks confirmation or resends those **identical signed bytes**; it never silently builds a replacement transaction.
 
 ## Safety checks in the program
 
@@ -113,9 +138,22 @@ These are server settings. They are public, read-only identifiers, never keys.
 
 * No deployed program, reproducible build hash or upgrade-authority policy.
 * No mainnet DFS PDA vault naming the pool PDA.
-* No trading pool whose immutable config routes fees into that vault. Even once one exists, manual DFS funding remains possible, so trading origin needs separate proof.
+* No verified fee routing is configured. The existing $FLEURI pool's immutable partner fee claimer does not name this Pollen vault, so the implemented partner route is unavailable. A creator-fee route would need the current creator's explicit approval to transfer creator authority and satisfy quote-only requirements; it is unimplemented and needs separate review. No authority transfer is performed.
+* Manual DFS funding remains possible even with a trading route, so trading origin needs separate proof.
 
 
 ## Coherent reads
 
 The page reads pool, position, both vaults, the wallet's token accounts, the fee vault and the Clock sysvar in one `getMultipleAccountsInfoAndContext` call at `confirmed`, and shows that read's slot and Clock time. A position checkpoint ahead of the pool accumulator is treated as incoherent and re-read (up to 3 times), never displayed. The pool's harvestable amount is computed for the configured recipient index only (DFS allows duplicate addresses).
+
+## Latest validation and limits
+
+These are development checks, not evidence of deployment or live fee routing:
+
+* **Rust accounting:** 14 tests passed in the last program run.
+* **Compiled SBF / LiteSVM:** 11 tests passed against the compiled staking program and Meteora's real fee-sharing bytecode. Later snapshot and badge patches changed no Rust, so these were not rerun for those patches.
+* **Full app suite after the snapshot correction:** 201 tests passed across 26 files with `bunx vitest run --maxWorkers=2`, including the encrypted-backup test in the same run.
+* **Final network-badge correction:** 9 focused staking page tests passed; TypeScript checking and the production build passed.
+* **Final browser checks:** desktop, 375px mobile and reduced motion passed with the network badge and as-of-slot line intact, no console errors and no sideways scrolling.
+
+The CI workflow has not been run, and no independently reproducible program build has been completed. Nothing was deployed, published or broadcast during these implementation checks. Deposits remain gated pending deployment, reviewed configuration and verified fee routing.
