@@ -10,5 +10,6 @@
 - [x] Tests, typecheck, build, browser smoke; docs/GitBook update
 - [x] Refresh GitBook docs for capability-safe payments, strict proofs, report statuses and on-chain page isolation
 - [x] Record the $FLEURI contract address in the GitBook docs (token pages, README, glossary) with its true on-chain status
-- [x] CA button in the top bar of every page: press to reveal and copy the $FLEURI address, with its honest not-live-yet status
+- [x] CA button in the top bar of every page: press to reveal and copy the $FLEURI address, with its live status and the independent-verification warning
+- [x] $FLEURI confirmed live on a Meteora bonding curve (mainnet) — token page, CA panel and docs state live figures and that it was not launched through fleuri's launchpad
 - [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)

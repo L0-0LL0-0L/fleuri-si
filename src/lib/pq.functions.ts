@@ -1,6 +1,7 @@
 // PQ launchpad server functions. Owner actions require the authenticated Cloud session.
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { FLEURI_MINT, FLEURI_POOL } from "@/lib/token";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const id = z.string().uuid();
@@ -181,32 +182,48 @@ export const pqTokenPage = createServerFn({ method: "GET" })
     });
     const r = await (pub as any).from("launches").select("id,pool,base_mint,lifecycle,cluster,creator_wallet,signature,created_at,damm_v2_pool,passports(manifest_hash,manifest,metadata_uri)").eq("base_mint", data.mint).maybeSingle();
     if (r.error) throw new Error(r.error.message);
-    if (!r.data) return { launch: null };
-    const { connection, readPool, readTokenMint } = await import("./solana.server");
-    const { PublicKey } = await import("@solana/web3.js");
-    const conn = connection();
-    const [pool, mint, largest] = await Promise.all([
-      readPool(conn, r.data.pool).catch(() => null),
-      readTokenMint(conn, data.mint).catch(() => null),
-      conn.getTokenLargestAccounts(new PublicKey(data.mint)).then((x) => x.value).catch(() => []),
-    ]);
-    let curvePriceSol: number | null = null;
-    if (pool?.sqrtPrice && mint) { const sp = Number(BigInt(pool.sqrtPrice)) / 2 ** 64; curvePriceSol = sp * sp * 10 ** (mint.decimals - 9); }
-    let usdPrice: number | null = null;
-    try { const j: any = await (await fetch(`https://lite-api.jup.ag/price/v3?ids=${data.mint}`, { signal: AbortSignal.timeout(6000) })).json(); usdPrice = j?.[data.mint]?.usdPrice ?? null; } catch { /* price unavailable */ }
-    const supply = mint ? Number(mint.supply) / 10 ** mint.decimals : null;
-    return {
-      launch: r.data,
-      chain: {
-        readable: !!pool,
-        curvePriceSol, usdPrice, supply, decimals: mint?.decimals ?? null,
-        raisedSol: pool ? Number(pool.quoteReserve) / 1e9 : null,
-        thresholdSol: pool ? Number(pool.migrationQuoteThreshold) / 1e9 : null,
-        isMigrated: pool?.isMigrated === 1, dammV2Pool: pool?.dammV2Confirmed ? pool.dammV2Pool : null,
-        topHolders: largest.slice(0, 10).map((a: any) => ({ address: a.address.toBase58(), amount: Number(a.uiAmount ?? 0) })),
-      },
-    };
+    if (!r.data) {
+      // The $FLEURI token launched directly on Meteora, outside fleuri's launchpad,
+      // so it has no launch record or passport. Its verified pool is still known,
+      // so the page shows live chain figures with that stated plainly.
+      if (data.mint !== FLEURI_MINT) return { launch: null };
+      const { connection, readTokenMetadata } = await import("./solana.server");
+      const meta = await readTokenMetadata(connection(), data.mint).catch(() => null);
+      return {
+        launch: null,
+        chain: await readChain(FLEURI_POOL, data.mint),
+        tokenMeta: meta ? { name: meta.name, symbol: meta.symbol, uri: meta.uri } : null,
+      };
+    }
+    return { launch: r.data, chain: await readChain(r.data.pool, data.mint) };
   }));
+
+/** Live chain read for a known DBC pool; missing figures stay missing. */
+async function readChain(pool: string, mintAddr: string) {
+  const { connection, readPool, readTokenMint } = await import("./solana.server");
+  const { PublicKey } = await import("@solana/web3.js");
+  const conn = connection();
+  const [p, mint, largest] = await Promise.all([
+    readPool(conn, pool).catch(() => null),
+    readTokenMint(conn, mintAddr).catch(() => null),
+    conn.getTokenLargestAccounts(new PublicKey(mintAddr)).then((x) => x.value).catch(() => []),
+  ]);
+  let curvePriceSol: number | null = null;
+  if (p?.sqrtPrice && mint) { const sp = Number(BigInt(p.sqrtPrice)) / 2 ** 64; curvePriceSol = sp * sp * 10 ** (mint.decimals - 9); }
+  let usdPrice: number | null = null;
+  try { const j: any = await (await fetch(`https://lite-api.jup.ag/price/v3?ids=${mintAddr}`, { signal: AbortSignal.timeout(6000) })).json(); usdPrice = j?.[mintAddr]?.usdPrice ?? null; } catch { /* price unavailable */ }
+  const supply = mint ? Number(mint.supply) / 10 ** mint.decimals : null;
+  return {
+    readable: !!p,
+    pool,
+    curvePriceSol, usdPrice, supply, decimals: mint?.decimals ?? null,
+    raisedSol: p ? Number(p.quoteReserve) / 1e9 : null,
+    thresholdSol: p ? Number(p.migrationQuoteThreshold) / 1e9 : null,
+    isMigrated: p?.isMigrated === 1, dammV2Pool: p?.dammV2Confirmed ? p.dammV2Pool : null,
+    topHolders: largest.slice(0, 10).map((a: any) => ({ address: a.address.toBase58(), amount: Number(a.uiAmount ?? 0) })),
+  };
+}
+
 
 // Living passport: current dated observations beside the immutable signed promises (public).
 export const pqLiving = createServerFn({ method: "POST" })

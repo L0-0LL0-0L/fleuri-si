@@ -231,13 +231,17 @@ export function CaChip({ className }: { className?: string }) {
       </button>
       {open && (
         <div id="fleuri-ca" className="hair grain absolute left-2 top-[calc(100%+0.35rem)] z-40 w-[min(86vw,26rem)] bg-paper-light p-3">
-          <p className="font-mono text-[0.65rem] uppercase tracking-widest text-poppy">$FLEURI contract address</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-mono text-[0.65rem] uppercase tracking-widest text-poppy">$FLEURI contract address</p>
+            <span className="chip bg-sprout text-paper-light" title="Verified by reading the mint and its pool on Solana mainnet.">live</span>
+          </div>
           <code className="mt-1.5 block select-all break-all font-mono text-sm font-semibold leading-snug">{FLEURI_MINT}</code>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <button type="button" className="btn btn-ink h-9 min-h-9 px-3 text-xs" onClick={copy}>
               {done ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               {done ? "Copied" : "Copy address"}
             </button>
+            <p className="min-w-0 flex-1 text-xs font-semibold leading-snug">Only send funds if the address and launch are independently verified on Meteora.</p>
             <Link to="/t/$mint" params={{ mint: FLEURI_MINT }} className="chip bg-paper-deep text-ink">
               token page ↗
             </Link>
