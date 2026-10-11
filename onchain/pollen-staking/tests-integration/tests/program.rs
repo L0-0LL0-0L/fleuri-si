@@ -7,6 +7,7 @@ use solana_sdk::{
     instruction::{AccountMeta, Instruction}, program_option::COption, program_pack::Pack,
     pubkey::Pubkey, signature::Keypair, signer::Signer, system_program, transaction::Transaction,
 };
+use anchor_lang::AccountDeserialize;
 use spl_token::state::{Account as TokAcc, AccountState, Mint};
 
 const DAY: i64 = 86_400;
@@ -58,20 +59,44 @@ struct Env { svm: LiteSVM, admin: Keypair, stake_mint: Pubkey, pool: Pubkey, pri
 
 fn dfs_pda(seeds: &[&[u8]]) -> Pubkey { Pubkey::find_program_address(seeds, &ps::DFS_PROGRAM_ID).0 }
 
-/// Creates a real DFS fee vault whose recipients are [pool PDA 50%, other 50%].
+/// SDK 1.1.0 `initialize_fee_vault_pda` discriminator.
+const DFS_INIT_PDA: [u8; 8] = [250, 250, 156, 113, 88, 143, 60, 233];
+/// SDK 1.1.0 `initialize_fee_vault` (keypair vault) discriminator; used only for negative tests.
+const DFS_INIT_KEYPAIR: [u8; 8] = [185, 140, 228, 234, 79, 203, 252, 50];
+fn params(recipients: &[(Pubkey, u32)]) -> Vec<u8> {
+    let mut d = vec![0u8; 64]; // padding: [u64; 8]
+    d.extend_from_slice(&(recipients.len() as u32).to_le_bytes());
+    for (a, s) in recipients { d.extend_from_slice(a.as_ref()); d.extend_from_slice(&s.to_le_bytes()); }
+    d
+}
+
+/// Creates a real DFS **PDA** fee vault (`initialize_fee_vault_pda`): seeds ["fee_vault", base, WSOL],
+/// token vault ["token_vault", fee_vault]. This is the routing source shape Pollen requires.
 fn create_fee_vault(svm: &mut LiteSVM, payer: &Keypair, recipients: &[(Pubkey, u32)]) -> (Pubkey, Pubkey) {
+    let base = Keypair::new();
+    let fv = dfs_pda(&[b"fee_vault", base.pubkey().as_ref(), WSOL.as_ref()]);
+    let tv = dfs_pda(&[b"token_vault", fv.as_ref()]);
+    let ix = Instruction { program_id: ps::DFS_PROGRAM_ID, data: [DFS_INIT_PDA.as_slice(), &params(recipients)].concat(), accounts: vec![
+        AccountMeta::new(fv, false), AccountMeta::new_readonly(ps::DFS_FEE_VAULT_AUTHORITY, false), AccountMeta::new(tv, false),
+        AccountMeta::new_readonly(WSOL, false), AccountMeta::new_readonly(payer.pubkey(), false), AccountMeta::new_readonly(base.pubkey(), true),
+        AccountMeta::new(payer.pubkey(), true), AccountMeta::new_readonly(spl_token::id(), false), AccountMeta::new_readonly(system_program::id(), false),
+        AccountMeta::new_readonly(dfs_pda(&[b"__event_authority"]), false), AccountMeta::new_readonly(ps::DFS_PROGRAM_ID, false)] };
+    send(svm, ix, &[payer, &base]).expect("dfs init pda");
+    let d = svm.get_account(&fv).unwrap().data;
+    assert_eq!((d[104], d[105]), (0, 1), "SPL token flag, PDA vault type");
+    (fv, tv)
+}
+
+/// Legacy keypair vault: must be rejected by Pollen Staking.
+fn create_keypair_fee_vault(svm: &mut LiteSVM, payer: &Keypair, recipients: &[(Pubkey, u32)]) -> (Pubkey, Pubkey) {
     let fv = Keypair::new();
     let tv = dfs_pda(&[b"token_vault", fv.pubkey().as_ref()]);
-    let mut data = vec![185, 140, 228, 234, 79, 203, 252, 50];
-    data.extend_from_slice(&[0u8; 64]);
-    data.extend_from_slice(&(recipients.len() as u32).to_le_bytes());
-    for (a, s) in recipients { data.extend_from_slice(a.as_ref()); data.extend_from_slice(&s.to_le_bytes()); }
-    let ix = Instruction { program_id: ps::DFS_PROGRAM_ID, data, accounts: vec![
+    let ix = Instruction { program_id: ps::DFS_PROGRAM_ID, data: [DFS_INIT_KEYPAIR.as_slice(), &params(recipients)].concat(), accounts: vec![
         AccountMeta::new(fv.pubkey(), true), AccountMeta::new_readonly(ps::DFS_FEE_VAULT_AUTHORITY, false), AccountMeta::new(tv, false),
         AccountMeta::new_readonly(WSOL, false), AccountMeta::new_readonly(payer.pubkey(), false), AccountMeta::new(payer.pubkey(), true),
         AccountMeta::new_readonly(spl_token::id(), false), AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(dfs_pda(&[b"__event_authority"]), false), AccountMeta::new_readonly(ps::DFS_PROGRAM_ID, false)] };
-    send(svm, ix, &[payer, &fv]).expect("dfs init");
+    send(svm, ix, &[payer, &fv]).expect("dfs init keypair");
     (fv.pubkey(), tv)
 }
 
@@ -248,4 +273,109 @@ fn duplicate_signed_bytes_are_rejected() {
     e.svm.send_transaction(tx.clone()).unwrap();
     assert!(e.svm.send_transaction(tx).is_err(), "resending identical bytes cannot double-stake");
     assert_eq!(bal(&e.svm, e.principal), 5);
+}
+
+fn ledger(e: &Env) -> ps::math::Ledger { ps::Pool::try_deserialize(&mut e.svm.get_account(&e.pool).unwrap().data.as_slice()).unwrap().ledger }
+fn fund_treasury(e: &mut Env, k: &Keypair, src: Pubkey, amount: u64) -> Result<(), String> {
+    let ix = Instruction { program_id: ps::ID, data: ps::instruction::FundTreasury { amount }.data(), accounts: ps::accounts::FundTreasury { funder: k.pubkey(), pool: e.pool, funder_token: src, reward_vault: e.reward, token_program: spl_token::id() }.to_account_metas(None) };
+    send(&mut e.svm, ix, &[k])
+}
+fn poke(e: &mut Env, k: &Keypair) -> Result<(), String> {
+    let ix = Instruction { program_id: ps::ID, data: ps::instruction::ReleaseUnallocated {}.data(), accounts: ps::accounts::Poke { pool: e.pool }.to_account_metas(None) };
+    send(&mut e.svm, ix, &[k])
+}
+fn edit(svm: &mut LiteSVM, k: Pubkey, f: impl FnOnce(&mut Vec<u8>)) { let mut a = svm.get_account(&k).unwrap(); f(&mut a.data); svm.set_account(k, a).unwrap(); }
+
+#[test]
+fn tiny_topups_cannot_delay_rewards_compiled() {
+    let mut e = ready();
+    let (alice, at, ar) = user(&mut e, 100);
+    stake(&mut e, &alice, at, 100).unwrap();
+    let griefer = Keypair::new(); e.svm.airdrop(&griefer.pubkey(), 10_000_000_000).unwrap();
+    let src = put_tok(&mut e.svm, WSOL, griefer.pubkey(), 2_000_000);
+    let start = t0(&e);
+    fund_treasury(&mut e, &griefer, src, 1_000_000).unwrap();
+    let deadline = ledger(&e).stream_end;
+    assert_eq!(deadline, start + 7 * DAY);
+    let mut n = 0u64;
+    for h in 1..(7 * 24) { now(&mut e.svm, start + h * 3_600); fund_treasury(&mut e, &griefer, src, 1).unwrap(); let _ = poke(&mut e, &griefer); n += 1; }
+    assert_eq!(ledger(&e).stream_end, deadline, "deadline never moves while the window is open");
+    now(&mut e.svm, deadline);
+    claim(&mut e, &alice, ar).unwrap();
+    assert_eq!(bal(&e.svm, ar), 1_000_000 + n, "old tranche and top-ups fully released by the old deadline");
+    // Window ended: a new funding opens a fresh immutable-length window.
+    now(&mut e.svm, deadline + DAY);
+    fund_treasury(&mut e, &griefer, src, 70).unwrap();
+    assert_eq!(ledger(&e).stream_end, deadline + DAY + 7 * DAY);
+}
+
+#[test]
+fn zero_delta_harvest_does_not_reset_timing() {
+    let mut e = ready();
+    let (alice, at, _) = user(&mut e, 10); stake(&mut e, &alice, at, 10).unwrap();
+    let f = e.admin.insecure_clone(); let (fv, tv) = (e.fee_vault, e.fee_token_vault);
+    dfs_fund(&mut e.svm, fv, tv, &f, 2_000);
+    { let ix = harvest_ix(&e, f.pubkey(), ps::DFS_PROGRAM_ID); send(&mut e.svm, ix, &[&f]) }.unwrap();
+    let before = ledger(&e); let s = t0(&e);
+    now(&mut e.svm, s + DAY);
+    let r = { let ix = harvest_ix(&e, f.pubkey(), ps::DFS_PROGRAM_ID); send(&mut e.svm, ix, &[&f]) };
+    assert!(r.is_err(), "zero-delta harvest fails");
+    let after = ledger(&e);
+    assert_eq!((after.stream_start, after.stream_end, after.stream_amount), (before.stream_start, before.stream_end, before.stream_amount));
+    assert_eq!(after.dfs_funded_total, 1_000);
+}
+
+#[test]
+fn keypair_or_tampered_fee_vaults_are_rejected() {
+    let mut e = setup();
+    let a = e.admin.insecure_clone();
+    // Legacy keypair vault naming the pool: rejected (not the PDA routing source).
+    let (kfv, ktv) = create_keypair_fee_vault(&mut e.svm, &a, &[(e.pool, 5_000), (Pubkey::new_unique(), 5_000)]);
+    let (good_fv, good_tv) = (e.fee_vault, e.fee_token_vault);
+    e.fee_vault = kfv; e.fee_token_vault = ktv;
+    assert!({ let ix = init_ix(&e, a.pubkey(), e.stake_mint, 0); send(&mut e.svm, ix, &[&a]) }.unwrap_err().contains("BadFeeVault"));
+    e.fee_vault = good_fv; e.fee_token_vault = good_tv;
+    let orig = e.svm.get_account(&good_fv).unwrap();
+    for (off, val) in [(105usize, 0u8), (104, 1), (106, orig.data[106].wrapping_add(1))] {
+        edit(&mut e.svm, good_fv, |d| d[off] = val);
+        let r = { let ix = init_ix(&e, a.pubkey(), e.stake_mint, 0); send(&mut e.svm, ix, &[&a]) };
+        assert!(r.unwrap_err().contains("BadFeeVault"), "byte {off} tamper must be rejected");
+        e.svm.set_account(good_fv, orig.clone()).unwrap();
+    }
+    // Base pubkey changed -> PDA no longer canonical.
+    edit(&mut e.svm, good_fv, |d| d[152] ^= 1);
+    assert!({ let ix = init_ix(&e, a.pubkey(), e.stake_mint, 0); send(&mut e.svm, ix, &[&a]) }.unwrap_err().contains("BadFeeVault"));
+    e.svm.set_account(good_fv, orig).unwrap();
+    { let ix = init_ix(&e, a.pubkey(), e.stake_mint, 0); send(&mut e.svm, ix, &[&a]) }.unwrap();
+}
+
+#[test]
+fn vault_custody_is_checked_everywhere() {
+    let mut e = ready();
+    let (alice, at, ar) = user(&mut e, 100);
+    stake(&mut e, &alice, at, 50).unwrap();
+    let f = e.admin.insecure_clone(); let (fv, tv) = (e.fee_vault, e.fee_token_vault);
+    dfs_fund(&mut e.svm, fv, tv, &f, 2_000);
+    // Reward vault with a delegate: harvest refuses before any CPI; claim refuses too.
+    let orig = e.svm.get_account(&e.reward).unwrap();
+    let reward = e.reward;
+    edit(&mut e.svm, reward, |d| { let mut t = TokAcc::unpack(d).unwrap(); t.delegate = COption::Some(Pubkey::new_unique()); t.delegated_amount = 1; t.pack_into_slice(d); });
+    assert!({ let ix = harvest_ix(&e, f.pubkey(), ps::DFS_PROGRAM_ID); send(&mut e.svm, ix, &[&f]) }.unwrap_err().contains("BadVault"));
+    assert!(claim(&mut e, &alice, ar).is_err());
+    // Close authority / frozen are rejected as well.
+    e.svm.set_account(reward, orig.clone()).unwrap();
+    edit(&mut e.svm, reward, |d| { let mut t = TokAcc::unpack(d).unwrap(); t.close_authority = COption::Some(Pubkey::new_unique()); t.pack_into_slice(d); });
+    assert!({ let ix = harvest_ix(&e, f.pubkey(), ps::DFS_PROGRAM_ID); send(&mut e.svm, ix, &[&f]) }.unwrap_err().contains("BadVault"));
+    e.svm.set_account(reward, orig).unwrap();
+    { let ix = harvest_ix(&e, f.pubkey(), ps::DFS_PROGRAM_ID); send(&mut e.svm, ix, &[&f]) }.unwrap();
+    // Principal vault with a delegate: stake and withdraw refuse.
+    let principal = e.principal;
+    let porig = e.svm.get_account(&principal).unwrap();
+    edit(&mut e.svm, principal, |d| { let mut t = TokAcc::unpack(d).unwrap(); t.state = AccountState::Frozen; t.pack_into_slice(d); });
+    assert!(stake(&mut e, &alice, at, 1).is_err());
+    e.svm.set_account(principal, porig).unwrap();
+    stake(&mut e, &alice, at, 1).unwrap();
+    // A swapped vault (principal passed as reward) is rejected.
+    let ix = Instruction { program_id: ps::ID, data: ps::instruction::Claim {}.data(), accounts: ps::accounts::Claim { owner: alice.pubkey(), pool: e.pool, position: position(&e, alice.pubkey()), owner_reward: ar, reward_vault: e.principal, token_program: spl_token::id() }.to_account_metas(None) };
+    assert!(send(&mut e.svm, ix, &[&alice]).is_err());
 }
