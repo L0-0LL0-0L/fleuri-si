@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FlowerTiles } from "@/components/PixelFlower";
-import { Panel, PendingTransactions, WalletButtons, explorerAddr, type PendingPreparation } from "@/components/pq/ui";
+import { Panel, PendingTransactions, RealBadge, WalletButtons, explorerAddr, type PendingPreparation } from "@/components/pq/ui";
 import { formatUnits } from "@/pq/pollen";
 import { DEFAULT_TERM_SECONDS } from "@/pq/staking";
 import { POLL_MS, displayChecks, freshness, gates, ownPosition, reviewLines, type Snapshot } from "@/pq/staking-view";

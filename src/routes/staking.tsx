@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { PageHeader } from "@/components/bits";
-import { RealBadge, signSubmitConfirm, useWallets } from "@/components/pq/ui";
+import { signSubmitConfirm, useWallets } from "@/components/pq/ui";
 import { StakingView, type StakingApi } from "@/components/staking/StakingView";
 import { pqMine, stakingPrepare, stakingState } from "@/lib/pq.functions";
 import { connectWallet } from "@/services/wallet";
