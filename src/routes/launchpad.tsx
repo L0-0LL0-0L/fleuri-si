@@ -22,7 +22,7 @@ export const Route = createFileRoute("/launchpad")({
   component: Launchpad,
 });
 
-function Launchpad() {
+export function Launchpad() {
   const local=usePqLocal(); const {userId,store,state:garden}=useGarden(); const wallets=useWallets();
   const mint=useRef<Keypair|null>(null);
   const [readiness,setReadiness]=useState<any>(null); const [readError,setReadError]=useState("");
