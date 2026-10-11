@@ -73,7 +73,7 @@ function Launchpad() {
     try {const r=await getPqReadiness(); if(r.ok) setReadiness(r.data); else setReadError(r.error);}
     catch(e) {setReadError((e as Error).message);}
   }
-  useEffect(()=>{loadLocal(); void checkReadiness();},[]);
+  useEffect(()=>{loadLocal(); void checkReadiness(); return ()=>walletCtrl.current?.abort();},[]);
   useEffect(()=>{ // workspace change: drop owner-scoped data and the frozen review, fence old responses
     fence.bump(); walletCtrl.current?.abort(); setMine(null); setEvidence([]); setEvidenceError(""); setGhRuns([]); setFrozenEvidence(null); setUsedProposal(null);
     setManifest(null); setSigned(null); setReviewAck(false); mint.current=null;
@@ -146,7 +146,7 @@ function Launchpad() {
         {p.tagline && <p className="text-sm">{p.tagline}</p>}
         {p.reason && <p className="text-xs text-ink-soft">why: {p.reason}</p>}
         <div className="space-y-1"><p className="font-mono text-[0.65rem] uppercase tracking-widest">Greenhouse evidence · drafted with policy {p.origin_policy_hash?`${p.origin_policy_hash.slice(0,8)}… (${p.origin_mode??"unknown"} mode)`:"unknown (legacy draft)"}</p>
-          {userId?<><EvidenceList rows={evidence.filter(e=>e.proposal_id===p.id)} agents={garden?.agents??{}}/><AttachEvidence proposalId={p.id} originId={garden?originAgentId(p,garden.agents):p.origin_agent_id??null} runs={ghRuns} onDone={()=>loadEvidence()}/></>:<p className="text-xs text-ink-soft">Open your workspace to attach your own trial evidence.</p>}
+          {userId?<>{evidenceError&&<p role="alert" className="text-xs text-poppy-deep">Greenhouse evidence could not be loaded: {evidenceError}</p>}<EvidenceList rows={evidence.filter(e=>e.proposal_id===p.id)} agents={garden?.agents??{}}/><AttachEvidence proposalId={p.id} originId={garden?originAgentId(p,garden.agents):p.origin_agent_id??null} runs={ghRuns} onDone={()=>loadEvidence()}/></>:<p className="text-xs text-ink-soft">Open your workspace to attach your own trial evidence.</p>}
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn btn-red" disabled={!!busy} onClick={()=>useProposal(p)}>{usedProposal===p.id?"Draft loaded below ↓":"Use this draft"}</button>
