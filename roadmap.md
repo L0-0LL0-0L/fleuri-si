@@ -19,6 +19,7 @@
 - [x] Greenhouse Trials: deterministic rules-engine stress tests, baseline, scorecards, replayable bundles, private/published reports, proposal evidence
 - [x] Greenhouse hardening: fenced execution leases, settings-conflict checks, exact creator-rebate NLV (rules-2), stored-checksum replay, owner-scoped session state, frozen launch-review evidence
 - [x] Agent Research Receipts: signed human attestations of saved Greenhouse runs, offline/CLI verify, private-by-default publish, optional Memo anchor, frozen proposal review
+- [x] Research Receipts corrective pass: strict JSON, independent checksum integrity, v2 schema without request id, exact draft recovery, scope-guarded wallet flows, browser-safe memo reader, recorded-vs-verified anchors, verified proposal evidence
 - [ ] Future: Observatory, Watchtower, Pollen Access
 - [ ] Pollen Staking deployment: deploy keypair, verified build hash, DFS vault naming the pool PDA, routed fee source — waits on owner
 - [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)

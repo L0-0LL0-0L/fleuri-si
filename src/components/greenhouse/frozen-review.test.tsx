@@ -29,21 +29,44 @@ describe("frozen launch review evidence", () => {
   });
 });
 
-describe("frozen review with signed receipts", () => {
-  it("freezes receipt status; later anchor/publication changes do not alter the review", () => {
-    const rc: any = { id: "rc1", run_id: "r1", manifest_hash: "a".repeat(64), anchor_status: "none", published: false, signed_at: "2026-10-11T00:00:00Z", issuer_key: "b".repeat(64), engine_version: "greenhouse-rules-2", policies: [{ agentId: "a_1", policyHash: h }] };
-    const live = [{ ...row, receipts: [rc] }];
-    const review = freezeReview(prop, live, { a_1: agent } as any, new Date());
-    rc.anchor_status = "confirmed"; rc.policies[0].policyHash = "z".repeat(64); live[0].receipts.push({ ...rc, id: "rc2" });
-    render(<FrozenEvidence review={review} />);
-    expect(screen.getAllByTestId("frozen-receipt")).toHaveLength(1);
-    expect(screen.getByText("anchor none at freeze")).toBeInTheDocument();
-    expect(screen.getByText("receipt policy matches")).toBeInTheDocument();
+const verifiedReceipt = (over: any = {}): any => ({ id: "rc1", run_id: "r1", manifest_hash: "a".repeat(64), schema: "fleuri.research-receipt/v2", legacy: false, published: false, signed_at: "2026-10-11T00:00:00Z", issuer_key: "b".repeat(64), engine_version: "greenhouse-rules-2", policies: [{ agentId: "a_1", policyHash: h }], verified: { signature: true, integrity: true, identity: true, replay: "pass" }, anchor: { recorded: "none", signature: null, chainVerified: false }, ...over });
+
+describe("frozen review with verified receipts (draft → passport review → wallet)", () => {
+  it("shows the frozen receipt identically at every review step while live data changes", () => {
+    const rc = verifiedReceipt(); const agents: any = { a_1: { ...agent } };
+    const live: EvidenceRow[] = [{ ...row, receipts: [rc] }];
+    const review = freezeReview(prop, live, agents, new Date("2026-10-11T12:00:00Z"));
+    const step1 = render(<FrozenEvidence review={review} />);
+    const before = step1.getByTestId("frozen-evidence").textContent;
+    expect(step1.getAllByTestId("frozen-receipt")).toHaveLength(1);
+    expect(step1.getByText("signed receipt · signature & integrity verified")).toBeInTheDocument();
+    expect(step1.getByText("exact replay")).toBeInTheDocument();
+    expect(step1.getByText("no anchor")).toBeInTheDocument();
+    step1.unmount();
+    // later: anchor recorded, policy edited, agent edited, a new receipt and a failed reload
+    rc.anchor.recorded = "confirmed"; rc.policies[0].policyHash = "z".repeat(64); agents.a_1.risk = 5;
+    live[0].receipts!.push(verifiedReceipt({ id: "rc2" })); live[0].receiptsError = "network";
+    expect(() => { (review.items[0].receipts[0].r as any).anchor.recorded = "confirmed"; }).toThrow(); // deep-frozen
+    const step2 = render(<FrozenEvidence review={review} />); // passport review / wallet step reuse the same snapshot
+    expect(step2.getByTestId("frozen-evidence").textContent).toBe(before);
+    expect(step2.getByText("receipt policy matches")).toBeInTheDocument();
+    expect(step2.queryByTestId("frozen-receipt-error")).toBeNull();
   });
-  it("flags a receipt for a different policy or legacy engine", () => {
-    const rc: any = { id: "rc1", run_id: "r1", manifest_hash: "a".repeat(64), anchor_status: "none", published: false, signed_at: "x", issuer_key: "b".repeat(64), engine_version: "greenhouse-rules-1", policies: [{ agentId: "a_1", policyHash: "y".repeat(64) }] };
+  it("labels a recorded anchor as recorded metadata, never chain-verified, and flags legacy/unsupported", () => {
+    const rc = verifiedReceipt({ legacy: true, engine_version: "greenhouse-rules-1", verified: { signature: true, integrity: true, identity: true, replay: "unsupported" }, anchor: { recorded: "confirmed", signature: "5".repeat(88), chainVerified: false }, policies: [{ agentId: "a_1", policyHash: "y".repeat(64) }] });
     render(<FrozenEvidence review={freezeReview(prop, [{ ...row, receipts: [rc] }], {}, new Date())} />);
+    expect(screen.getByText("anchor recorded confirmed at freeze · not re-read on chain")).toBeInTheDocument();
+    expect(screen.queryByText(/anchored at freeze/)).toBeNull();
     expect(screen.getByText("receipt policy differs")).toBeInTheDocument();
     expect(screen.getByText("unsupported greenhouse-rules-1")).toBeInTheDocument();
+    expect(screen.getByText("replay unsupported")).toBeInTheDocument();
+    expect(screen.getByText("legacy v1")).toBeInTheDocument();
+  });
+  it("never paints unverified rows as signed, and freezes a load error instead of older evidence", () => {
+    const unverified: any = { ...verifiedReceipt(), verified: undefined };
+    const r1 = render(<FrozenEvidence review={freezeReview(prop, [{ ...row, receipts: [unverified] }], {}, new Date())} />);
+    expect(r1.queryAllByTestId("frozen-receipt")).toHaveLength(0); r1.unmount();
+    render(<FrozenEvidence review={freezeReview(prop, [{ ...row, receipts: [], receiptsError: "timeout" }], {}, new Date())} />);
+    expect(screen.getByTestId("frozen-receipt-error")).toHaveTextContent("timeout");
   });
 });

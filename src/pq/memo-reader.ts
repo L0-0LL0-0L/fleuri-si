@@ -4,16 +4,14 @@ import type { AnchorReader } from "./receipt";
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 export function b58decode(s: string): Uint8Array {
-  const bytes: number[] = [0];
+  const bytes: number[] = []; // little-endian accumulator
   for (const ch of s) {
     let carry = B58.indexOf(ch); if (carry < 0) throw new Error("invalid base58");
     for (let i = 0; i < bytes.length; i++) { carry += bytes[i] * 58; bytes[i] = carry & 0xff; carry >>= 8; }
     while (carry) { bytes.push(carry & 0xff); carry >>= 8; }
   }
   for (const ch of s) { if (ch !== "1") break; bytes.push(0); }
-  const out = bytes.reverse();
-  while (out.length > 1 && out[0] === 0 && s[0] !== "1") out.shift();
-  return new Uint8Array(s.length === 0 ? [] : out);
+  return new Uint8Array(bytes.reverse());
 }
 
 export function checkRpcUrl(url: string) {
