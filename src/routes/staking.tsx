@@ -29,7 +29,7 @@ function StakingPage() {
     connect: (kind) => connectWallet(kind),
   }), []);
   return <div className="min-w-0 space-y-4">
-    <PageHeader title="pollen staking" kicker="Stake $FLEURI · share Pollen-funded wSOL"><RealBadge /></PageHeader>
+    <PageHeader title="pollen staking" kicker="Stake $FLEURI · share Pollen-funded wSOL" />
     <StakingView api={api} userId={userId} wallets={wallets} onOpenWorkspace={async () => { await store.startSandbox(); }} />
   </div>;
 }
