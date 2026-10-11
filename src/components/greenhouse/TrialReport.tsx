@@ -46,7 +46,7 @@ export function TrialReport({ row, handles, onPublish }: { row: TrialRow; handle
   const [busy, setBusy] = useState<string | null>(null);
   const name = (id: string) => (id === "baseline" ? "buy & hold" : `@${input.policies.find((p) => p.agentId === id)?.handle ?? handles[id] ?? id}`);
   const [sel, setSel] = useState({ agent: input.config.agentIds[0], scenario: input.config.scenarios[0] as Scenario, rep: 0 });
-  const trace: RunResult | undefined = useMemo(() => out && (sel.agent === "baseline" ? out.baselines : out.runs).find((r) => r.agentId === sel.agent && r.scenario === sel.scenario && r.rep === sel.rep), [out, sel]);
+  const trace: RunResult | undefined = useMemo(() => out ? (sel.agent === "baseline" ? out.baselines : out.runs).find((r) => r.agentId === sel.agent && r.scenario === sel.scenario && r.rep === sel.rep) : undefined, [out, sel]);
   if (!out) return <Panel title="Trial result"><p className="text-sm">{row.status === "failed" ? `This trial failed: ${row.error ?? "unknown error"}. No result was saved.` : "This trial has not finished. Nothing is shown until a result is durably saved."}</p></Panel>;
   const maxAbs = Math.max(5, ...out.scorecards.flatMap((s) => [Math.abs(s.returnPct.min), Math.abs(s.returnPct.max)]), ...out.baselines.map((b) => Math.abs(b.returnPct)));
   const bundle = () => makeBundle(input, out, row.id, row.created_at);
