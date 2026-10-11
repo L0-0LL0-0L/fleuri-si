@@ -2,7 +2,7 @@
 // a draft, verifies the browser's ML-DSA signature, and records results via service-role RPCs.
 import { canonicalize } from "@/pq/canonical";
 import { validateIdentityProof } from "@/pq/registration";
-import { RECEIPT_BUNDLE_FORMAT, buildManifest, commitmentProblems, parseReceiptManifest, receiptHash, receiptMemo, verifyReceiptSignature, type IdentityProof } from "@/pq/receipt";
+import { RECEIPT_BUNDLE_FORMAT, buildManifest, commitmentProblems, isLegacyManifest, parseReceiptManifest, receiptHash, receiptMemo, verifyReceiptBundle, verifyReceiptSignature, type IdentityProof } from "@/pq/receipt";
 import { bundleFromStored, verifyBundle } from "@/domain/greenhouse";
 
 const RUN_COLS = "id,owner_id,status,created_at,finished_at,input,output,input_hash,output_hash,content_hash";
@@ -29,7 +29,7 @@ export async function prepareReceipt(db: any, owner: string, input: { requestId:
   const f = validateIdentityProof(proofOf(idt));
   if (f.domain !== domain) throw new Error("This identity was registered for a different Fleuri domain.");
   const receiptId = crypto.randomUUID();
-  const manifest = buildManifest({ run, experiment, identity: proofOf(idt), receiptId, requestId: input.requestId, createdAt: now().toISOString(), domain });
+  const manifest = buildManifest({ run, experiment, identity: proofOf(idt), receiptId, createdAt: now().toISOString(), domain });
   const manifestHash = receiptHash(manifest);
   const r = must(await db.rpc("research_create_draft", { _owner: owner, _request: input.requestId, _r: { id: receiptId, run_id: run.id, identity_id: idt.id, manifest, manifest_hash: manifestHash, experiment } }), "Could not save the draft");
   return { id: r.id, status: r.status, manifest: r.manifest, manifestHash: r.manifest_hash, recovered: !r.created };
@@ -76,4 +76,44 @@ export async function confirmReceiptAnchor(db: any, prep: any, tx: { slot: numbe
   const r = must(await db.rpc("research_record_anchor", { _owner: ownerId, _id: row.id, _prep: prep.id, _ok: ok, _signature: prep.signature, _slot: tx.slot }));
   if (!ok) throw new Error(`Anchor transaction failed on chain: ${canonicalize(JSON.parse(JSON.stringify(tx.err)))}`);
   return { status: "confirmed" as const, detail: `Receipt hash anchored in slot ${tx.slot}${r.applied ? "" : " (already recorded)"}. Solana records the hash; signature validity is checked off-chain.`, id: row.id };
+}
+
+/** The message bytes to simulate: always the stored preparation's own message (never a fresh rebuild). */
+export function anchorCostTarget(prep: { message_b64: string }, decode: (s: string) => Uint8Array) {
+  if (!prep?.message_b64) throw new Error("Preparation has no stored message.");
+  return decode(prep.message_b64);
+}
+
+/** Owner-only exact draft recovery by receipt id: the stored request/identity/hash binding is returned
+ * to the owner so a different device resumes THIS draft instead of freezing a new one. */
+export async function resumeDraft(db: any, owner: string, id: string) {
+  const row = must(await db.from("research_receipts").select("id,owner_id,status,run_id,identity_id,request_id,manifest,manifest_hash").eq("id", id).eq("owner_id", owner).maybeSingle());
+  if (!row || row.owner_id !== owner) throw new Error("Receipt draft not found in your workspace.");
+  const m = parseReceiptManifest(row.manifest);
+  if (receiptHash(m) !== row.manifest_hash) throw new Error("Stored draft is inconsistent with its hash.");
+  if (m.source.runId !== row.run_id || m.receiptId !== row.id) throw new Error("Stored draft is not bound to its trial.");
+  const idt = must(await db.from("pq_identities").select("id,key_hash,wallet,status").eq("id", row.identity_id).eq("owner_id", owner).maybeSingle());
+  if (!idt || idt.key_hash !== m.issuer.keyHash || idt.wallet !== m.issuer.wallet) throw new Error("The draft's identity no longer matches.");
+  return { id: row.id, status: row.status as string, runId: row.run_id as string, identityId: row.identity_id as string, requestId: row.request_id as string, manifest: m, manifestHash: row.manifest_hash as string };
+}
+
+/** Proposal-review receipt evidence: only caller-owned receipts that FULLY verify offline and are bound
+ * to the same stored run checksums. Anchors are reported as recorded metadata, never chain-verified here. */
+export async function verifiedEvidenceForRuns(db: any, owner: string, runIds: string[]) {
+  if (!runIds.length) return [];
+  const rows = must(await db.from("research_receipts").select(`${PUBLIC_COLS},run_id,owner_id`).eq("owner_id", owner).eq("status", "signed").in("run_id", runIds).limit(20));
+  const runs = must(await db.from("greenhouse_runs").select("id,input_hash,output_hash,content_hash").eq("owner_id", owner).in("id", runIds));
+  const byRun = new Map<string, any>((runs as any[]).map((r) => [r.id, r]));
+  const out: any[] = [];
+  for (const row of rows as any[]) {
+    if (row.owner_id !== owner) continue;
+    let v; try { v = verifyReceiptBundle(exportBundle(row)); } catch { continue; }
+    const run = byRun.get(row.run_id); const m = v.manifest;
+    if (!v.valid || !m || !run || m.source.runId !== row.run_id || m.source.inputHash !== run.input_hash || m.source.outputHash !== run.output_hash || m.source.contentHash !== run.content_hash) continue;
+    out.push({ id: row.id, run_id: row.run_id, manifest_hash: row.manifest_hash, schema: m.schema, legacy: isLegacyManifest(m), signed_at: row.signed_at, published: row.published,
+      issuer_key: m.issuer.keyHash, engine_version: m.source.engineVersion, policies: m.trial.policies.map((p) => ({ agentId: p.agentId, policyHash: p.policyHash })),
+      verified: { signature: true, integrity: true, identity: true, replay: v.checks.find((c) => c.id === "replay")!.status as "pass" | "unsupported" },
+      anchor: { recorded: row.anchor_status as string, signature: row.anchor_signature as string | null, chainVerified: false as const } });
+  }
+  return out;
 }

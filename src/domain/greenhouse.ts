@@ -1,4 +1,5 @@
 // Greenhouse Trials: deterministic vSOL sandbox stress tests of the CURRENT rules engine.
+import { parseStrictJson } from "@/pq/strict-json";
 // Pure and isomorphic. Every participant runs in its own clone of one frozen public market,
 // with an external shock tape that is independent of agent randomness and selection order.
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -317,6 +318,21 @@ export type ReplayStatus = { status: "verified" | "mismatch" | "unsupported" | "
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/, "must be a 64-hex checksum");
 const BundleShape = z.object({ format: z.literal(BUNDLE_FORMAT), runId: z.string().max(64).nullable(), createdAt: z.string().max(40).nullable(), input: z.object({ engineVersion: z.string().max(40), scenarioVersion: z.string().max(40), config: z.unknown(), market: z.unknown(), policies: z.array(z.unknown()).max(LIMITS.agents) }).strict(), inputHash: hex64, output: z.object({ runs: z.array(z.unknown()).max(1000), baselines: z.array(z.unknown()).max(1000), scorecards: z.array(z.unknown()).max(1000), tapes: z.record(z.string().max(40), z.array(z.unknown()).max(LIMITS.cyclesMax)) }).strict(), outputHash: hex64, contentHash: hex64, note: z.string().max(400) }).strict();
 
+/** Engine-independent integrity: bounded shape plus the ORIGINAL stored checksum claims recomputed over the
+ * bundled input/output exactly as stored. Never re-executes, so it is safe for engines this build cannot run. */
+export function bundleIntegrity(raw: unknown): string[] {
+  const bad = boundedJson(raw); if (bad) return [`bundle ${bad}`];
+  const b = BundleShape.safeParse(raw);
+  if (!b.success) return [`bundle shape: ${b.error.issues[0]?.path.join(".")} ${b.error.issues[0]?.message}`];
+  const out: string[] = [];
+  let ih = "", oh = "";
+  try { ih = inputHash(b.data.input as unknown as TrialInput); } catch { out.push("input cannot be hashed"); }
+  try { oh = outputHash(b.data.output as unknown as TrialOutput); } catch { out.push("output cannot be hashed"); }
+  if (ih && ih !== b.data.inputHash) out.push("stored input checksum does not match the bundled input");
+  if (oh && oh !== b.data.outputHash) out.push("stored output checksum does not match the bundled results");
+  if (contentHash(b.data.inputHash, b.data.outputHash) !== b.data.contentHash) out.push("stored content checksum does not match the input/output checksums");
+  return out;
+}
 /** Strict, bounded parse + exact deterministic re-execution. Accepts raw JSON text or an object. */
 export function verifyBundle(raw: string | unknown): ReplayStatus {
   try { return verifyBundleInner(raw); } catch (e) { return { status: "invalid", detail: `Bundle could not be checked: ${String((e as Error)?.message ?? e).slice(0, 160)}` }; }
@@ -325,7 +341,7 @@ function verifyBundleInner(raw: string | unknown): ReplayStatus {
   let obj: unknown = raw;
   if (typeof raw === "string") {
     if (raw.length > LIMITS.bundleBytes) return { status: "invalid", detail: "Bundle is larger than the 2 MB limit." };
-    try { obj = JSON.parse(raw); } catch { return { status: "invalid", detail: "Not valid JSON." }; }
+    try { obj = parseStrictJson(raw, { maxBytes: LIMITS.bundleBytes, maxDepth: 14 }); } catch (e) { return { status: "invalid", detail: `Not valid strict JSON: ${(e as Error).message}.` }; }
   }
   const bad = boundedJson(obj);
   if (bad) return { status: "invalid", detail: `Bundle rejected: ${bad}.` };

@@ -4,7 +4,7 @@ import { Keypair } from "@solana/web3.js";
 import { generatePqKeypair, type PqKeypair } from "@/pq/mldsa";
 import { DOMAIN, identityFor, runFixture } from "@/pq/receipt-fixtures";
 import { receiptMemo, signReceipt, verifyReceiptBundle } from "@/pq/receipt";
-import { confirmReceiptAnchor, exportBundle, prepareReceipt, submitReceiptSignature } from "./research.server";
+import { anchorCostTarget, confirmReceiptAnchor, exportBundle, prepareReceipt, resumeDraft, submitReceiptSignature, verifiedEvidenceForRuns } from "./research.server";
 import { utf8 } from "@/pq/canonical";
 
 const OWNER = "11111111-1111-4111-8111-111111111111", IDT = "44444444-4444-4444-8444-444444444444", REQ = "55555555-5555-4555-8555-555555555555";
@@ -15,7 +15,11 @@ function fakeDb() {
   const t: Record<string, any[]> = { research_receipts: [], greenhouse_runs: [{ ...run, owner_id: OWNER, status: "done" }], pq_identities: [idRow] };
   const from = (name: string) => {
     const f: [string, any][] = [];
-    const q: any = { select: () => q, eq: (k: string, v: any) => (f.push([k, v]), q), maybeSingle: async () => ({ data: t[name].find((r) => f.every(([k, v]) => r[k] === v)) ?? null, error: null }) };
+    const ins: [string, any[]][] = [];
+    const rows = () => t[name].filter((r) => f.every(([k, v]) => r[k] === v) && ins.every(([k, vs]) => vs.includes(r[k])));
+    const q: any = { select: () => q, eq: (k: string, v: any) => (f.push([k, v]), q), in: (k: string, vs: any[]) => (ins.push([k, vs]), q), limit: () => q,
+      then: (res: any, rej: any) => Promise.resolve({ data: rows(), error: null }).then(res, rej),
+      maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }) };
     return q;
   };
   const rpc = vi.fn(async (n: string, a: any) => {
@@ -92,4 +96,39 @@ describe("research receipt orchestration", () => {
     expect((await confirmReceiptAnchor(db, prep, tx(), MEMO, OWNER)).status).toBe("confirmed");
     expect(db.rpc).toHaveBeenLastCalledWith("research_record_anchor", expect.objectContaining({ _ok: true, _signature: "SIG", _slot: 7 }));
   });
+
+  it("new drafts omit the private request id; owner-only resume returns the exact stored binding", async () => {
+    const db = fakeDb();
+    const d = await prepareReceipt(db, OWNER, { requestId: REQ, runId: run.id, identityId: IDT }, DOMAIN);
+    expect(JSON.stringify(d.manifest)).not.toContain(REQ);
+    expect(d.manifest.schema).toBe("fleuri.research-receipt/v2");
+    const r = await resumeDraft(db, OWNER, d.id);
+    expect(r).toMatchObject({ id: d.id, requestId: REQ, runId: run.id, identityId: IDT, manifestHash: d.manifestHash, status: "draft" });
+    await expect(resumeDraft(db, "22222222-2222-4222-8222-222222222222", d.id)).rejects.toThrow(/not found/);
+    db.t.research_receipts[0].manifest_hash = "0".repeat(64);
+    await expect(resumeDraft(db, OWNER, d.id)).rejects.toThrow(/inconsistent/);
+  });
+  it("proposal evidence returns only fully verified, run-bound receipts with anchors as recorded metadata", async () => {
+    const db = fakeDb();
+    const d = await prepareReceipt(db, OWNER, { requestId: REQ, runId: run.id, identityId: IDT }, DOMAIN);
+    expect(await verifiedEvidenceForRuns(db, OWNER, [run.id])).toEqual([]); // drafts never count
+    const s = signReceipt(d.manifest, kp); await submitReceiptSignature(db, OWNER, { id: d.id, publicKey: s.publicKey, signature: s.signature });
+    Object.assign(db.t.research_receipts[0], { anchor_status: "confirmed", anchor_signature: "5".repeat(88), anchor_slot: 9, published: false, signed_at: "x" });
+    const ok = await verifiedEvidenceForRuns(db, OWNER, [run.id]);
+    expect(ok).toHaveLength(1);
+    expect(ok[0]).toMatchObject({ verified: { signature: true, integrity: true, replay: "pass" }, anchor: { recorded: "confirmed", chainVerified: false }, legacy: false });
+    expect(await verifiedEvidenceForRuns(db, "22222222-2222-4222-8222-222222222222", [run.id])).toEqual([]);
+    // a signed row that no longer verifies (e.g. tampered signature) is dropped, not painted as signed
+    const good = db.t.research_receipts[0].signature; db.t.research_receipts[0].signature = good.replace(/^./, good[0] === "A" ? "B" : "A");
+    expect(await verifiedEvidenceForRuns(db, OWNER, [run.id])).toEqual([]);
+    db.t.research_receipts[0].signature = good;
+    db.t.greenhouse_runs[0].content_hash = "f".repeat(64); // the stored run moved away from the receipt
+    expect(await verifiedEvidenceForRuns(db, OWNER, [run.id])).toEqual([]);
+  });
+  it("anchor fee simulation always targets the stored preparation message", () => {
+    const decode = (x: string) => utf8(x);
+    expect(anchorCostTarget({ message_b64: "stored" }, decode)).toEqual(utf8("stored"));
+    expect(() => anchorCostTarget({ message_b64: "" }, decode)).toThrow(/no stored message/);
+  });
 });
+

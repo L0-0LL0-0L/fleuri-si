@@ -5,9 +5,12 @@ import { z } from "zod";
 import { b64, canonicalize, domainHash, fromB64, utf8 } from "./canonical";
 import { CTX_RECEIPT, PQ_ALG, pqKeyHash, pqSign, pqVerify } from "./mldsa";
 import { GENESIS, isSolanaAddress, validateIdentityProof } from "./registration";
-import { BUNDLE_FORMAT, SUPPORTED_ENGINES, boundedJson, hashOf, verifyBundle } from "@/domain/greenhouse";
+import { BUNDLE_FORMAT, SUPPORTED_ENGINES, boundedJson, bundleIntegrity, hashOf, verifyBundle } from "@/domain/greenhouse";
+import { jsonByteLength, parseStrictJson } from "./strict-json";
 
-export const RECEIPT_SCHEMA = "fleuri.research-receipt/v1";
+/** v2 is current. v1 (legacy) also committed a private server idempotency id; it still verifies offline. */
+export const RECEIPT_SCHEMA = "fleuri.research-receipt/v2";
+export const RECEIPT_SCHEMA_V1 = "fleuri.research-receipt/v1";
 export const RECEIPT_BUNDLE_FORMAT = "fleuri.research-receipt-bundle/v1";
 export const RECEIPT_MAX_BYTES = 2_600_000;
 export const RECEIPT_SCOPE = "Attests that this registered Fleuri identity reviewed this saved Greenhouse trial: a deterministic vSOL sandbox run of the scheduled rules engine (archetype and risk only). Free-text strategy was recorded but not executed. Not AI training, not a safety or performance certification, not on-chain trading.";
@@ -19,11 +22,9 @@ const h64 = z.string().regex(/^[0-9a-f]{64}$/);
 const uuid = z.string().uuid();
 const addr = z.string().refine(isSolanaAddress, "Invalid Solana address");
 const iso = z.string().max(40).refine((s) => Number.isFinite(Date.parse(s)), "Invalid timestamp");
-export const ReceiptManifest = z.object({
-  schema: z.literal(RECEIPT_SCHEMA),
+const Common = {
   domain: z.string().min(3).max(120),
   receiptId: uuid,
-  requestId: uuid,
   createdAt: iso,
   cluster: z.enum(["devnet", "mainnet-beta"]),
   genesisHash: addr,
@@ -39,9 +40,13 @@ export const ReceiptManifest = z.object({
     policies: z.array(z.object({ agentId: z.string().max(40), handle: z.string().max(20), archetype: z.string().max(20), risk: z.number().int().min(1).max(5), policyHash: h64 }).strict()).min(1).max(4),
   }).strict(),
   scope: z.literal(RECEIPT_SCOPE),
-}).strict();
+};
+const ManifestV2 = z.object({ schema: z.literal(RECEIPT_SCHEMA), ...Common }).strict();
+const ManifestV1 = z.object({ schema: z.literal(RECEIPT_SCHEMA_V1), requestId: uuid, ...Common }).strict();
+export const ReceiptManifest = z.discriminatedUnion("schema", [ManifestV2, ManifestV1]);
 export type ReceiptManifestT = z.infer<typeof ReceiptManifest>;
-export const receiptHash = (m: ReceiptManifestT) => domainHash("fleuri:research-receipt:v1", m);
+export const isLegacyManifest = (m: { schema: string }) => m.schema === RECEIPT_SCHEMA_V1;
+export const receiptHash = (m: ReceiptManifestT) => domainHash(m.schema === RECEIPT_SCHEMA_V1 ? "fleuri:research-receipt:v1" : "fleuri:research-receipt:v2", m);
 
 export interface IdentityProof { owner_id: string; wallet: string; cluster: string; genesis_hash: string; public_key: string; key_hash: string; statement: string; registration_hash: string; wallet_signature: string; pq_signature: string }
 const ProofShape = z.object({ owner_id: uuid, wallet: z.string().max(60), cluster: z.string().max(20), genesis_hash: z.string().max(60), public_key: z.string().max(4096), key_hash: h64, statement: z.string().max(16384), registration_hash: h64, wallet_signature: z.string().max(200), pq_signature: z.string().max(6000) }).strict();
@@ -65,18 +70,19 @@ export interface DraftSource {
   run: { id: string; created_at: string; finished_at: string | null; input: any; output: any; input_hash: string; output_hash: string | null; content_hash: string | null };
   experiment: unknown; // bundleFromStored(run)
   identity: IdentityProof;
-  receiptId: string; requestId: string; createdAt: string; domain: string;
+  receiptId: string; createdAt: string; domain: string;
 }
 /** Builds the immutable manifest. The caller must already have verified the experiment replays. */
 export function buildManifest(d: DraftSource): ReceiptManifestT {
   const i = d.run.input;
   const cl = d.identity.cluster as keyof typeof GENESIS;
+  if (!/^[0-9a-f]{64}$/.test(d.run.output_hash ?? "") || !/^[0-9a-f]{64}$/.test(d.run.content_hash ?? "")) throw new Error("The trial is missing its stored output/content checksums.");
   const m = {
-    schema: RECEIPT_SCHEMA, domain: d.domain, receiptId: d.receiptId, requestId: d.requestId, createdAt: d.createdAt,
+    schema: RECEIPT_SCHEMA, domain: d.domain, receiptId: d.receiptId, createdAt: d.createdAt,
     cluster: cl, genesisHash: GENESIS[cl],
     issuer: { wallet: d.identity.wallet, alg: PQ_ALG, keyHash: d.identity.key_hash, registrationHash: d.identity.registration_hash },
     source: { runId: d.run.id, runCreatedAt: d.run.created_at, runFinishedAt: d.run.finished_at, bundleFormat: BUNDLE_FORMAT, engineVersion: i.engineVersion, scenarioVersion: i.scenarioVersion,
-      inputHash: d.run.input_hash, outputHash: d.run.output_hash ?? "", contentHash: d.run.content_hash ?? "", experimentDigest: experimentDigest(d.experiment) },
+      inputHash: d.run.input_hash, outputHash: d.run.output_hash!, contentHash: d.run.content_hash!, experimentDigest: experimentDigest(d.experiment) },
     trial: { seed: i.config.seed, repetitions: i.config.repetitions, cycles: i.config.cycles, scenarios: i.config.scenarios, agentIds: i.config.agentIds,
       policies: i.policies.map((p: any) => ({ agentId: p.agentId, handle: p.handle, archetype: p.archetype, risk: p.risk, policyHash: p.policyHash })) },
     scope: RECEIPT_SCOPE,
@@ -91,7 +97,7 @@ export function parseReceiptManifest(raw: unknown): ReceiptManifestT {
   return r.data;
 }
 /** Exact message bytes signed with the dedicated research-receipt context. */
-export const receiptMessage = (m: ReceiptManifestT) => utf8(`Fleuri research receipt\n${receiptHash(m)}`);
+export const receiptMessage = (m: ReceiptManifestT) => utf8(`${m.schema === RECEIPT_SCHEMA_V1 ? "Fleuri research receipt" : "Fleuri research receipt v2"}\n${receiptHash(m)}`);
 export function signReceipt(m: ReceiptManifestT, kp: { publicKey: Uint8Array; secretKey: Uint8Array }) {
   const manifest = parseReceiptManifest(m);
   if (pqKeyHash(kp.publicKey) !== manifest.issuer.keyHash) throw new Error("The unlocked key is not the identity named in this receipt.");
@@ -116,6 +122,7 @@ export function commitmentProblems(m: ReceiptManifestT, experiment: any): string
   if (!eq({ seed: c.seed, repetitions: c.repetitions, cycles: c.cycles, scenarios: c.scenarios, agentIds: c.agentIds }, { seed: m.trial.seed, repetitions: m.trial.repetitions, cycles: m.trial.cycles, scenarios: m.trial.scenarios, agentIds: m.trial.agentIds })) out.push("trial settings");
   const pols = Array.isArray(i.policies) ? i.policies.map((p: any) => ({ agentId: p?.agentId, handle: p?.handle, archetype: p?.archetype, risk: p?.risk, policyHash: p?.policyHash })) : null;
   if (!pols || !eq(pols, m.trial.policies)) out.push("policy snapshots");
+  out.push(...bundleIntegrity(experiment));
   return out;
 }
 
@@ -128,16 +135,17 @@ export function verifyReceiptBundle(raw: unknown, opts: { domain?: string } = {}
   const fail = (detail: string): ReceiptVerification => ({ checks: [{ id: "schema", label: "Schema & bounds", status: "fail", detail }], manifest: null, bundle: null, valid: false });
   try {
     let obj = raw;
-    if (typeof raw === "string") { if (raw.length > RECEIPT_MAX_BYTES) return fail("Receipt is larger than the 2.6 MB limit."); try { obj = JSON.parse(raw); } catch { return fail("Not valid JSON."); } }
+    if (typeof raw === "string") { try { obj = parseStrictJson(raw, { maxBytes: RECEIPT_MAX_BYTES, maxDepth: 16 }); } catch (e) { return fail(`Rejected: ${(e as Error).message}.`); } }
     const bad = boundedJson(obj, 14);
     if (bad) return fail(`Rejected: ${bad}.`);
+    if (typeof raw !== "string" && jsonByteLength(obj) > RECEIPT_MAX_BYTES) return fail("Receipt is larger than the 2.6 MB limit.");
     const b = ReceiptBundle.safeParse(obj);
     if (!b.success) return fail(`Unexpected or missing field: ${b.error.issues[0]?.path.join(".") || "(root)"} ${b.error.issues[0]?.message}`);
     let m: ReceiptManifestT;
     try { m = parseReceiptManifest(b.data.manifest); } catch (e) { return fail((e as Error).message); }
-    const checks: RCheck[] = [{ id: "schema", label: "Schema & bounds", status: "pass", detail: `${RECEIPT_SCHEMA}, strict fields, bounded size and depth.` }];
+    const checks: RCheck[] = [{ id: "schema", label: "Schema & bounds", status: "pass", detail: isLegacyManifest(m) ? `${RECEIPT_SCHEMA_V1} (legacy): strict fields, bounded size and depth. This older format also commits a private request identifier.` : `${RECEIPT_SCHEMA}, strict fields, no duplicate keys, bounded size and depth.` }];
     const probs = receiptHash(m) !== b.data.manifestHash ? ["manifest hash"] : commitmentProblems(m, b.data.experiment);
-    checks.push({ id: "commitments", label: "Commitment integrity", status: probs.length ? "fail" : "pass", detail: probs.length ? `Does not match the signed manifest: ${probs.join("; ")}.` : "Manifest hash, experiment digest, stored checksums, settings and every policy snapshot match." });
+    checks.push({ id: "commitments", label: "Commitment integrity", status: probs.length ? "fail" : "pass", detail: probs.length ? `Integrity failed: ${probs.join("; ")}.` : "Manifest hash, experiment digest, every policy snapshot and settings match, and the stored input/output/content checksums recompute over the bundled data." });
     let idOk = false, idDetail = "";
     try {
       const f = validateIdentityProof(b.data.identityProof, opts.domain);

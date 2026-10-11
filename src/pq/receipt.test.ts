@@ -14,7 +14,7 @@ let kp: PqKeypair, wallet: Keypair, identity: IdentityProof, run: any;
 function make(over: { run?: any; id?: IdentityProof } = {}) {
   const r = over.run ?? run, idt = over.id ?? identity;
   const experiment = bundleFromStored(r);
-  const manifest = buildManifest({ run: r, experiment, identity: idt, receiptId: "44444444-4444-4444-8444-444444444444", requestId: "55555555-5555-4555-8555-555555555555", createdAt: "2026-10-11T01:00:00Z", domain: DOMAIN });
+  const manifest = buildManifest({ run: r, experiment, identity: idt, receiptId: "44444444-4444-4444-8444-444444444444", createdAt: "2026-10-11T01:00:00Z", domain: DOMAIN });
   const s = signReceipt(manifest, kp);
   return { format: RECEIPT_BUNDLE_FORMAT, manifest, manifestHash: s.manifestHash, alg: "ML-DSA-65", publicKey: s.publicKey, signature: s.signature, identityProof: idt, experiment, anchorHint: null } as any;
 }
@@ -61,8 +61,8 @@ describe("research receipts", () => {
   it("stored checksum mismatch is caught even when the manifest commits to it", () => {
     const bad = { ...run, output_hash: "f".repeat(64) };
     const v = verifyReceiptBundle(make({ run: bad }));
-    expect(st(v, "commitments")).toBe("pass"); // the signer did commit to these bytes…
-    expect(st(v, "replay")).toBe("fail"); // …but replay exposes the inconsistent stored claim
+    expect(st(v, "commitments")).toBe("fail"); // integrity recomputes the stored claim even though the signer committed to it
+    expect(st(v, "replay")).toBe("fail");
     expect(v.valid).toBe(false);
   });
   it("preserves exact floats: no rounding or relabelling of Greenhouse results", () => {
@@ -72,12 +72,13 @@ describe("research receipts", () => {
   });
   it("unsupported engine shows unsupported replay, not verified or failed", () => {
     const old = structuredClone(run); old.input.engineVersion = "greenhouse-rules-1";
+    old.input_hash = inputHash(old.input); old.content_hash = contentHash(old.input_hash, old.output_hash); // internally consistent legacy run
     const v = verifyReceiptBundle(make({ run: old }));
-    expect(st(v, "replay")).toBe("unsupported"); expect(st(v, "signature")).toBe("pass");
+    expect(st(v, "replay")).toBe("unsupported"); expect(st(v, "signature")).toBe("pass"); expect(st(v, "commitments")).toBe("pass");
   });
   it("bounded strict parser: oversize, deep, unexpected and duplicate-shaped inputs are rejected", () => {
     expect(verifyReceiptBundle("x".repeat(2_600_001)).valid).toBe(false);
-    expect(verifyReceiptBundle("{").checks[0].detail).toMatch(/JSON/);
+    expect(verifyReceiptBundle("{").checks[0].detail).toMatch(/Rejected/);
     let deep: any = 1; for (let i = 0; i < 100; i++) deep = { a: deep };
     expect(verifyReceiptBundle({ ...make(), experiment: deep }).checks[0].status).toBe("fail");
     expect(verifyReceiptBundle({ ...make(), extra: 1 }).checks[0].detail).toMatch(/Unexpected/);

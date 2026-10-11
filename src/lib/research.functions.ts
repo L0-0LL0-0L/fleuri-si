@@ -68,11 +68,12 @@ export const rrPrepareAnchor = createServerFn({ method: "POST" }).middleware([re
   .inputValidator((d: unknown) => z.object({ id: uuid }).strict().parse(d))
   .handler(async ({ data, context }) => { try { const s = await import("./pq.server"); return { ok: true as const, data: await s.prepareReceiptAnchor(context.userId, data.id) }; } catch (e) { return fail(e); } });
 
-/** Signed receipts for these runs (caller's own), used as proposal-review evidence. */
+/** Fully verified, caller-owned receipt evidence for these runs (proposal review). */
 export const rrForRuns = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ runIds: z.array(uuid).max(50) }).strict().parse(d))
-  .handler(async ({ data, context }) => {
-    if (!data.runIds.length) return { ok: true as const, data: [] as any[] };
-    const r = await (await admin()).from("research_receipts").select("id,run_id,manifest,manifest_hash,anchor_status,published,signed_at").eq("owner_id", context.userId).eq("status", "signed").in("run_id", data.runIds);
-    return r.error ? fail(new Error(r.error.message)) : { ok: true as const, data: (r.data as any[]).map((x) => ({ id: x.id, run_id: x.run_id, manifest_hash: x.manifest_hash, anchor_status: x.anchor_status, published: x.published, signed_at: x.signed_at, issuer_key: x.manifest.issuer.keyHash, engine_version: x.manifest.source.engineVersion, policies: x.manifest.trial.policies })) };
-  });
+  .handler(async ({ data, context }) => { try { const s = await import("./research.server"); return { ok: true as const, data: await s.verifiedEvidenceForRuns(await admin(), context.userId, data.runIds) }; } catch (e) { return fail(e); } });
+
+/** Owner-only exact draft recovery by id (another device / lost local storage). */
+export const rrResume = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: uuid }).strict().parse(d))
+  .handler(async ({ data, context }) => { try { const s = await import("./research.server"); return { ok: true as const, data: await s.resumeDraft(await admin(), context.userId, data.id) }; } catch (e) { return fail(e); } });
