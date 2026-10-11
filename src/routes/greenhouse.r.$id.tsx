@@ -27,7 +27,7 @@ function Report() {
   const [err, setErr] = useState("");
   useEffect(() => {
     let live = true;
-    setErr("");
+    setErr(""); setRow(null); // never show the previous id/owner's report while the new context loads
     (async () => {
       if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("That is not a trial id.");
       const r = userId ? await ghRun({ data: { id } }) : await ghPublicRun({ data: { id } });
@@ -41,7 +41,7 @@ function Report() {
       <PageHeader title="trial report" kicker="greenhouse"><SandboxBadge /></PageHeader>
       <FlowerTiles count={8} cols={8} start={5} />
       <ExecutionModeNote />
-      {err ? <EmptyState title="report unavailable" body={err} action={<Link to="/greenhouse" className="btn btn-paper">Open the greenhouse</Link>} /> : !row ? <ListSkeleton /> : <TrialReport row={row} handles={{}} />}
+      {err ? <EmptyState title="report unavailable" body={err} action={<Link to="/greenhouse" className="btn btn-paper">Open the greenhouse</Link>} /> : !row ? <ListSkeleton /> : <TrialReport key={row.id} row={row} handles={{}} />}
       <MetricDefinitions />
     </div>
   );

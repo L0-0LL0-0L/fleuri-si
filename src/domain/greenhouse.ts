@@ -3,11 +3,12 @@
 // with an external shock tape that is independent of agent randomness and selection order.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { z } from "zod";
-import { quoteSell } from "./curve";
+import { CREATOR_FEE_SHARE, quoteSell } from "./curve";
 import { buy as engineBuy, runCycle, MIN_TRADE, type Decision } from "./engine";
 import { DomainError, type Agent, type Archetype, type Coin, type GardenEvent, type GardenState } from "./types";
 
-export const ENGINE_VERSION = "greenhouse-rules-1";
+// rules-2: NLV includes the creator half-fee rebate on the hypothetical sell (rules-1 omitted it).
+export const ENGINE_VERSION = "greenhouse-rules-2";
 export const SCENARIO_VERSION = "greenhouse-scenarios-1";
 export const BUNDLE_FORMAT = "fleuri.greenhouse.bundle.v1";
 export const SUPPORTED_ENGINES = [ENGINE_VERSION] as const;
@@ -133,11 +134,20 @@ export function applyShock(s: GardenState, sh: Shock) {
   if (sh.kind === "liquidity") { const keep = Math.min(1, Math.max(1 - sh.magnitude, 1 / c.vSol)); c.vSol *= keep; c.vTok *= keep; } // price preserved, depth reduced; removed reserves leave the sim
   if (sh.kind === "sell") { const newSol = Math.max(1, c.vSol * (1 - sh.magnitude)); const k = c.vSol * c.vTok; c.vTok = k / newSol; c.vSol = newSol; c.raised = Math.max(0, c.raised - sh.magnitude * c.raised); }
 }
-/** Net liquidation value: cash plus what selling every position into the current curve would return after fees and price impact. */
+/**
+ * Net liquidation value: cash plus what selling each whole position into its current curve would
+ * pay, after the 1% fee and price impact — exactly what engine sell(..., 1) credits. When the
+ * participant created that coin, the engine also pays it the creator half of that sell fee.
+ */
 export function netLiquidationValue(s: GardenState, agentId: string) {
   const a = s.agents[agentId];
   let v = a.cash;
-  for (const [sy, h] of Object.entries(a.holdings)) { const c = s.coins[sy]; if (c && h.amount > 0) v += quoteSell(c.vSol, c.vTok, h.amount).solOut; }
+  for (const [sy, h] of Object.entries(a.holdings)) {
+    const c = s.coins[sy];
+    if (!c || !(h.amount > 0)) continue;
+    const q = quoteSell(c.vSol, c.vTok, h.amount);
+    v += q.solOut + (c.creatorId === agentId ? q.fee * CREATOR_FEE_SHARE : 0);
+  }
   return v;
 }
 
@@ -231,6 +241,13 @@ export function scorecards(runs: RunResult[], baselines: RunResult[]): Scorecard
 export interface TrialInput { engineVersion: string; scenarioVersion: string; config: TrialConfig; market: FrozenMarket; policies: PolicySnapshot[] }
 export interface TrialOutput { runs: RunResult[]; baselines: RunResult[]; scorecards: Scorecard[]; tapes: Record<string, Shock[]> }
 
+/** Canonical config: sorted agents, scenarios in SCENARIOS order. Used for equality/conflict checks. */
+export function normalizeConfig(config: TrialConfig): TrialConfig {
+  const cfg = ConfigSchema.parse(config);
+  return { ...cfg, agentIds: [...cfg.agentIds].sort(), scenarios: SCENARIOS.filter((x) => cfg.scenarios.includes(x)) };
+}
+export const sameConfig = (a: TrialConfig, b: unknown) => { try { return stableJson(normalizeConfig(a)) === stableJson(normalizeConfig(b as TrialConfig)); } catch { return false; } };
+
 export function makeInput(config: TrialConfig, market: FrozenMarket, policies: PolicySnapshot[]): TrialInput {
   const cfg = ConfigSchema.parse(config);
   const m = MarketSchema.parse(market);
@@ -239,6 +256,20 @@ export function makeInput(config: TrialConfig, market: FrozenMarket, policies: P
   const ids = [...cfg.agentIds].sort();
   if (stableJson(ids) !== stableJson(pols.map((p) => p.agentId))) throw new DomainError("Policies must match the selected agents.");
   return { engineVersion: ENGINE_VERSION, scenarioVersion: SCENARIO_VERSION, config: { ...cfg, agentIds: ids, scenarios: SCENARIOS.filter((x) => cfg.scenarios.includes(x)) }, market: m, policies: pols };
+}
+/**
+ * Rebuild a stored input WITHOUT relabelling: its own engine/scenario versions must be supported
+ * by this build, it must already be canonical, and it must hash to the stored input_hash.
+ */
+export function restoreInput(raw: unknown, storedHash: string): TrialInput {
+  const r = raw as Partial<TrialInput> | null;
+  if (!r || typeof r !== "object") throw new DomainError("Stored trial inputs are missing.");
+  if (!SUPPORTED_ENGINES.includes(r.engineVersion as any) || r.scenarioVersion !== SCENARIO_VERSION)
+    throw new DomainError(`Stored trial uses unsupported engine ${String(r.engineVersion)}/${String(r.scenarioVersion)}; this build cannot recompute it.`);
+  const rebuilt = makeInput(r.config as TrialConfig, r.market as FrozenMarket, r.policies as PolicySnapshot[]);
+  if (stableJson(rebuilt) !== stableJson(r)) throw new DomainError("Stored trial inputs are not canonical.");
+  if (inputHash(rebuilt) !== storedHash) throw new DomainError("Stored trial inputs failed their checksum.");
+  return rebuilt;
 }
 export const inputHash = (i: TrialInput) => hashOf("fleuri.greenhouse.input.v1", i);
 export const outputHash = (o: TrialOutput) => hashOf("fleuri.greenhouse.output.v1", o);
@@ -263,16 +294,41 @@ export function makeBundle(input: TrialInput, output: TrialOutput, runId: string
   const ih = inputHash(input), oh = outputHash(output);
   return { format: BUNDLE_FORMAT, runId, createdAt, input, inputHash: ih, output, outputHash: oh, contentHash: contentHash(ih, oh), note: "vSOL sandbox stress model. SHA-256 checksums detect changes; they are not signatures and nothing here is on chain." };
 }
+/** Export exactly what was stored: original input/output and the ORIGINAL stored checksum claims. */
+export function bundleFromStored(row: { id: string; created_at: string; input: unknown; output: unknown; input_hash: string; output_hash: string | null; content_hash: string | null }) {
+  return { format: BUNDLE_FORMAT, runId: row.id, createdAt: row.created_at, input: row.input, inputHash: row.input_hash, output: row.output, outputHash: row.output_hash ?? "", contentHash: row.content_hash ?? "",
+    note: "vSOL sandbox stress model exported as stored. SHA-256 checksums detect changes; they are not signatures, do not authenticate the source, and nothing here is on chain." };
+}
+/** Bounded structural walk: depth, node count and finite numbers. Avoids stack/work blow-ups before hashing. */
+export function boundedJson(v: unknown, maxDepth = 12, maxNodes = 600_000): string | null {
+  let nodes = 0;
+  const stack: [unknown, number][] = [[v, 0]];
+  while (stack.length) {
+    const [x, d] = stack.pop()!;
+    if (++nodes > maxNodes) return "too many values";
+    if (d > maxDepth) return "nested too deeply";
+    if (typeof x === "number" && !Number.isFinite(x)) return "non-finite number";
+    if (x && typeof x === "object") for (const k of Object.values(x as object)) stack.push([k, d + 1]);
+    else if (x !== null && !["string", "number", "boolean"].includes(typeof x)) return `unsupported ${typeof x}`;
+  }
+  return null;
+}
 export type ReplayStatus = { status: "verified" | "mismatch" | "unsupported" | "invalid"; detail: string; recomputed?: { inputHash: string; outputHash: string } };
-const BundleShape = z.object({ format: z.literal(BUNDLE_FORMAT), runId: z.string().max(64).nullable(), createdAt: z.string().max(40).nullable(), input: z.object({ engineVersion: z.string().max(40), scenarioVersion: z.string().max(40), config: z.unknown(), market: z.unknown(), policies: z.array(z.unknown()).max(LIMITS.agents) }).strict(), inputHash: z.string(), output: z.unknown(), outputHash: z.string(), contentHash: z.string(), note: z.string().max(400) }).strict();
+const hex64 = z.string().regex(/^[0-9a-f]{64}$/, "must be a 64-hex checksum");
+const BundleShape = z.object({ format: z.literal(BUNDLE_FORMAT), runId: z.string().max(64).nullable(), createdAt: z.string().max(40).nullable(), input: z.object({ engineVersion: z.string().max(40), scenarioVersion: z.string().max(40), config: z.unknown(), market: z.unknown(), policies: z.array(z.unknown()).max(LIMITS.agents) }).strict(), inputHash: hex64, output: z.object({ runs: z.array(z.unknown()).max(1000), baselines: z.array(z.unknown()).max(1000), scorecards: z.array(z.unknown()).max(1000), tapes: z.record(z.string().max(40), z.array(z.unknown()).max(LIMITS.cyclesMax)) }).strict(), outputHash: hex64, contentHash: hex64, note: z.string().max(400) }).strict();
 
 /** Strict, bounded parse + exact deterministic re-execution. Accepts raw JSON text or an object. */
 export function verifyBundle(raw: string | unknown): ReplayStatus {
+  try { return verifyBundleInner(raw); } catch (e) { return { status: "invalid", detail: `Bundle could not be checked: ${String((e as Error)?.message ?? e).slice(0, 160)}` }; }
+}
+function verifyBundleInner(raw: string | unknown): ReplayStatus {
   let obj: unknown = raw;
   if (typeof raw === "string") {
     if (raw.length > LIMITS.bundleBytes) return { status: "invalid", detail: "Bundle is larger than the 2 MB limit." };
     try { obj = JSON.parse(raw); } catch { return { status: "invalid", detail: "Not valid JSON." }; }
   }
+  const bad = boundedJson(obj);
+  if (bad) return { status: "invalid", detail: `Bundle rejected: ${bad}.` };
   const b = BundleShape.safeParse(obj);
   if (!b.success) return { status: "invalid", detail: `Bundle shape rejected: ${b.error.issues[0]?.path.join(".")} ${b.error.issues[0]?.message}` };
   const bd = b.data;
@@ -283,14 +339,14 @@ export function verifyBundle(raw: string | unknown): ReplayStatus {
   if (stableJson(input) !== stableJson(bd.input)) return { status: "invalid", detail: "Inputs are not in canonical form (reordered or normalized fields)." };
   const ih = inputHash(input);
   if (ih !== bd.inputHash) return { status: "mismatch", detail: "Input hash does not match the inputs — config, market or policies were changed." };
+  let claimedOut: string;
+  try { claimedOut = outputHash(bd.output as TrialOutput); } catch { return { status: "mismatch", detail: "Bundled results are malformed." }; }
+  if (claimedOut !== bd.outputHash) return { status: "mismatch", detail: "Stored results do not hash to the stored output checksum — results were edited." };
+  if (contentHash(ih, bd.outputHash) !== bd.contentHash) return { status: "mismatch", detail: "Stored content checksum does not match the stored input and output checksums." };
   const out = runTrial(input);
   const oh = outputHash(out);
   if (oh !== bd.outputHash) return { status: "mismatch", detail: "Re-running the frozen inputs gives a different output hash than the bundle claims.", recomputed: { inputHash: ih, outputHash: oh } };
-  let claimed: string;
-  try { claimed = outputHash(bd.output as TrialOutput); } catch { return { status: "mismatch", detail: "Bundled results are malformed." }; }
-  if (claimed !== oh) return { status: "mismatch", detail: "Bundled results were edited: they don't hash to the replayed output.", recomputed: { inputHash: ih, outputHash: oh } };
-  if (contentHash(ih, oh) !== bd.contentHash) return { status: "mismatch", detail: "Content hash does not match." };
-  return { status: "verified", detail: "Exact replay: recomputed input and output hashes match the bundle.", recomputed: { inputHash: ih, outputHash: oh } };
+  return { status: "verified", detail: "Exact replay: recomputed input, output and content checksums all equal the stored claims. Checksums are not signatures.", recomputed: { inputHash: ih, outputHash: oh } };
 }
 
 // ---------- proposal evidence status ----------

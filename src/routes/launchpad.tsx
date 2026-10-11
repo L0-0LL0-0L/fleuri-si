@@ -10,8 +10,9 @@ import { b64 } from "@/pq/canonical";
 import { loadLocal, usePqLocal, withSecret } from "@/pq/local";
 import { parseManifest, signPassport, type PassportManifest, type SignedPassportT } from "@/pq/passport";
 import { useGarden } from "@/store/garden";
-import { AttachEvidence, EvidenceList, originAgentId, type EvidenceRow } from "@/components/greenhouse/ProposalEvidence";
+import { AttachEvidence, EvidenceList, FrozenEvidence, freezeReview, originAgentId, type EvidenceRow, type FrozenReview } from "@/components/greenhouse/ProposalEvidence";
 import { ghEvidence, ghMyRuns } from "@/lib/greenhouse.functions";
+import { createFence } from "@/lib/greenhouse-session";
 import type { WalletKind } from "@/services/wallet";
 
 export const Route = createFileRoute("/launchpad")({
@@ -31,21 +32,24 @@ function Launchpad() {
   const [manifest,setManifest]=useState<PassportManifest|null>(null); const [signed,setSigned]=useState<SignedPassportT|null>(null);
   const [reviewAck,setReviewAck]=useState(false); const [done,setDone]=useState<{signature:string;hash:string}|null>(null);
   const [proposals,setProposals]=useState<any[]>([]); const [usedProposal,setUsedProposal]=useState<string|null>(null);
-  const [evidence,setEvidence]=useState<EvidenceRow[]>([]); const [ghRuns,setGhRuns]=useState<any[]>([]); const [frozenEvidence,setFrozenEvidence]=useState<EvidenceRow[]|null>(null);
+  const [evidence,setEvidence]=useState<EvidenceRow[]>([]); const [ghRuns,setGhRuns]=useState<any[]>([]); const [frozenEvidence,setFrozenEvidence]=useState<FrozenReview|null>(null);
+  const fence=useRef(createFence()).current;
   const identity=mine?.identities.find(i=>i.key_hash===local.envelope?.keyHash && i.cluster===readiness?.cluster && i.status==="anchored");
   async function refresh() {
-    if(store.get().userId) {const r=await pqMine(); if(r.ok) setMine(r.data); else setError(r.error);}
+    const g=fence.current();
+    if(store.get().userId) {const r=await pqMine(); if(!fence.guard(g)) return; if(r.ok) setMine(r.data); else setError(r.error);}
     const r=await pqPublicLaunches(); if(r.ok) setLaunches(r.data); else setReadError(r.error);
     const pr=await pqLaunchProposals(); if(pr.ok) setProposals(pr.data);
-    if(store.get().userId && pr.ok) await loadEvidence(pr.data);
+    if(store.get().userId && pr.ok && fence.guard(g)) await loadEvidence(pr.data,g);
   }
-  async function loadEvidence(list:any[]=proposals) {
+  async function loadEvidence(list:any[]=proposals,g=fence.current()) {
     const [ev,rs]=await Promise.all([ghEvidence({data:{proposalIds:list.map(p=>p.id)}}),ghMyRuns()]);
+    if(!fence.guard(g)) return; // a previous workspace's late response
     if(ev.ok) setEvidence(ev.data as EvidenceRow[]); if(rs.ok) setGhRuns(rs.data);
   }
   function useProposal(p:any) {
     setDone(null); setManifest(null); setSigned(null); setReviewAck(false);
-    setFrozenEvidence(structuredClone(evidence.filter(e=>e.proposal_id===p.id)));
+    setFrozenEvidence(freezeReview(p,evidence,garden?.agents??{},new Date()));
     setName(p.name); setSymbol(p.symbol); setWebsite(""); setTwitter("");
     setFile(null); setImageUri(""); setImageHash(null); setUsedProposal(p.id);
     window.scrollTo({top:0,behavior:"smooth"});
@@ -56,7 +60,11 @@ function Launchpad() {
     catch(e) {setReadError((e as Error).message);}
   }
   useEffect(()=>{loadLocal(); void checkReadiness();},[]);
-  useEffect(()=>{void refresh().catch(e=>setReadError(e.message));},[userId]);
+  useEffect(()=>{ // workspace change: drop owner-scoped data and the frozen review, fence old responses
+    fence.bump(); setMine(null); setEvidence([]); setGhRuns([]); setFrozenEvidence(null); setUsedProposal(null);
+    setManifest(null); setSigned(null); setReviewAck(false); mint.current=null;
+    void refresh().catch(e=>setReadError(e.message));
+  },[userId]);
   async function run(label:string,fn:()=>Promise<void>) {
     setBusy(label); setError("");
     try {await fn();} catch(e) {setError((e as Error).message); await refresh().catch(()=>{});} finally {setBusy(null);}
@@ -113,7 +121,7 @@ function Launchpad() {
     </Panel>
     {!userId && <Panel title="Your workspace"><p className="text-sm">Use your existing workspace session to register an identity and view your launches.</p><button type="button" className="btn btn-ink" disabled={!!busy} onClick={()=>void run("Opening workspace…",async()=>{await store.startSandbox();await refresh();})}>{busy??"Open workspace"}</button></Panel>}
     {!canReview && !manifest && <p className="hair bg-paper-light p-3 text-sm">Before launching: <Link to="/identity" className="font-semibold underline">create or restore your key, download its backup, unlock it and anchor it</Link>. Launching also requires every network readiness check to pass.</p>}
-    {done?<Panel title="Your bloom is on chain"><p className="display text-2xl">planted. signed. yours.</p><a className="block break-all text-xs underline" href={explorerTx(done.signature,readiness.cluster)} target="_blank" rel="noreferrer">View confirmed launch transaction</a><Link to="/passport/$hash" params={{hash:done.hash}} className="btn btn-red">Open the public passport</Link><button type="button" className="btn btn-paper" onClick={()=>{setDone(null);setManifest(null);setSigned(null);setName("");setSymbol("");setFile(null);setImageUri("");setImageHash(null);setWebsite("");setTwitter("");setUsedProposal(null);}}>Plant another token</button></Panel>
+    {done?<Panel title="Your bloom is on chain"><p className="display text-2xl">planted. signed. yours.</p><a className="block break-all text-xs underline" href={explorerTx(done.signature,readiness.cluster)} target="_blank" rel="noreferrer">View confirmed launch transaction</a><Link to="/passport/$hash" params={{hash:done.hash}} className="btn btn-red">Open the public passport</Link><button type="button" className="btn btn-paper" onClick={()=>{setDone(null);setManifest(null);setSigned(null);setName("");setSymbol("");setFile(null);setImageUri("");setImageHash(null);setWebsite("");setTwitter("");setUsedProposal(null);setFrozenEvidence(null);}}>Plant another token</button></Panel>
     :!manifest?<>
     {!!proposals.length && <Panel title="Agent proposals · drafted in the garden, launched by you">
       <p className="text-xs text-ink-soft">Your agents draft these during their cycles. Nothing here is on chain — a draft only becomes real when you review it, sign the passport and approve the launch in your wallet.</p>
@@ -130,7 +138,7 @@ function Launchpad() {
         </div>
       </div>)}
     </Panel>}
-    {usedProposal && frozenEvidence && <Panel title="Greenhouse evidence for this review"><EvidenceList rows={frozenEvidence} agents={garden?.agents??{}} frozen/></Panel>}
+    {frozenEvidence && <Panel title="Greenhouse evidence for this review"><FrozenEvidence review={frozenEvidence}/><button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>{setFrozenEvidence(null);setUsedProposal(null);setName("");setSymbol("");mint.current=null;}}>Start a fresh token instead</button></Panel>}
     <Panel title="Your next bloom">
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();void run("Reading exact chain terms…",review);}}>
         <label className="text-sm font-semibold">Token name<input required maxLength={32} value={name} onChange={e=>setName(e.target.value)} className="hair mt-1 h-11 w-full bg-paper-light px-3" placeholder="a strange little bloom"/></label>
@@ -144,6 +152,7 @@ function Launchpad() {
       </form>
     </Panel></>:<Panel title={signed?"Signed passport · ready for your wallet":"Review before signing"}>
       <PassportTerms manifest={manifest}/>
+      {frozenEvidence && <div className="hair bg-paper-light p-2"><p className="text-xs font-semibold">Greenhouse evidence you reviewed (advisory, not signed)</p><FrozenEvidence review={frozenEvidence}/></div>}
       {!signed?<><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={reviewAck} onChange={e=>setReviewAck(e.target.checked)}/><span>I have reviewed the exact fees, LP shares, authority policy and graduation terms above.</span></label><button type="button" className="btn btn-red" disabled={!reviewAck||!local.unlocked||!!busy} onClick={()=>void run("Signing with ML-DSA-65…",async()=>{setSigned(withSecret(kp=>signPassport(manifest,kp)));})}>Sign launch passport</button><button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>setManifest(null)}>Edit draft</button></>
       :<><p className="break-all font-mono text-xs">{signed.manifestHash}</p><button type="button" className="btn btn-paper" onClick={()=>downloadPassport(signed)}>Download signed passport</button><p className="text-xs text-ink-soft">Your wallet pays the signed pool creation fee, account rent and network fees. It must match the creator address above. Nothing is sent until you approve the transaction in your wallet.</p><WalletButtons avail={wallets} busy={busy} action="Launch with" onPick={k=>void run("Preparing launch…",()=>launch(k))}/><button type="button" className="btn btn-paper" disabled={!!busy} onClick={()=>void run("Checking for submitted transactions…",rebuildDraft)}>Rebuild an expired unsigned draft</button></>}
     </Panel>}

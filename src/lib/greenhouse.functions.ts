@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ConfigSchema } from "@/domain/greenhouse";
+import { startTrial } from "./greenhouse-start";
 
 const uuid = z.string().uuid();
 const LIST_COLS = "id,status,engine_version,agent_ids,input_hash,output_hash,content_hash,published,published_at,attempts,error,created_at,finished_at";
@@ -19,48 +20,18 @@ function publicClient() {
 }
 
 /**
- * Start or recover a trial. Idempotent per (owner, requestId): the first call freezes the
- * public market + policy snapshots; every retry re-uses exactly those stored inputs.
+ * Start or recover a trial. Idempotent per (owner, requestId). The stored request is looked up
+ * FIRST, so recovery never reads live agents/market. Only the caller that acquires the lease
+ * computes and finalizes; finalize/fail are fenced by that lease token.
  */
 export const ghStart = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ requestId: uuid, config: ConfigSchema }).strict().parse(d))
   .handler(async ({ data, context }) => {
-    const { userId } = context;
     try {
       const G = await import("@/domain/greenhouse");
-      const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
-      const { peekGarden } = await import("./garden.server");
-      const live = await peekGarden(null); // public ecosystem only: no owner row is loaded
-      const policies = data.config.agentIds.map((id) => {
-        const a = live.agents[id];
-        if (!a) throw new Error("One of the selected agents no longer exists.");
-        return G.snapshotPolicy(a);
-      });
-      const fresh = G.makeInput(data.config, G.freezeMarket(live, Date.now()), policies);
-      const claim = await db.rpc("greenhouse_claim_run", { _owner: userId, _request: data.requestId, _engine: G.ENGINE_VERSION, _agents: fresh.config.agentIds, _input: fresh as any, _input_hash: G.inputHash(fresh) });
-      if (claim.error) throw new Error(claim.error.message);
-      const row = claim.data as any;
-      if (row.status !== "running") return { ok: true as const, data: { id: row.id as string, status: row.status as string, recovered: true } };
-      const stored = row.input as any;
-      let input;
-      try { input = G.makeInput(stored.config, stored.market, stored.policies); } catch (e) {
-        await db.rpc("greenhouse_fail_run", { _id: row.id, _owner: userId, _reason: `Stored inputs invalid: ${(e as Error).message}` });
-        throw e;
-      }
-      if (G.inputHash(input) !== row.input_hash) {
-        await db.rpc("greenhouse_fail_run", { _id: row.id, _owner: userId, _reason: "Stored input hash mismatch" });
-        throw new Error("Stored trial inputs failed their checksum.");
-      }
-      let output;
-      try { output = G.runTrial(input); } catch (e) {
-        await db.rpc("greenhouse_fail_run", { _id: row.id, _owner: userId, _reason: (e as Error).message });
-        throw e;
-      }
-      const oh = G.outputHash(output);
-      const fin = await db.rpc("greenhouse_finalize_run", { _id: row.id, _owner: userId, _input_hash: row.input_hash, _output: output as any, _output_hash: oh, _content_hash: G.contentHash(row.input_hash, oh) });
-      if (fin.error) throw new Error(fin.error.message);
-      return { ok: true as const, data: { id: row.id as string, status: "done", recovered: row.attempts > 1 } };
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      return await startTrial(G, supabaseAdmin as any, context.userId, data, async () => (await import("./garden.server")).peekGarden(null));
     } catch (e) { return fail(e); }
   });
 
