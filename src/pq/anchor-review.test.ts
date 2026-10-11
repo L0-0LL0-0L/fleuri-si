@@ -23,7 +23,7 @@ describe("anchor preparation review", () => {
   it("disables signing on simulation failure/unavailability or insufficient balance", () => {
     expect(reviewAnchorPrep({ ...ok(), cost: { ok: false, error: "Simulation failed: X" } }, ex).problems.join()).toMatch(/simulation failed/);
     expect(reviewAnchorPrep({ ...ok(), cost: null }, ex).ok).toBe(false);
-    expect(reviewAnchorPrep({ ...ok(), cost: { ok: true, balanceLamports: 10, simulatedChangeLamports: 5000 } }, ex).problems.join()).toMatch(/balance/);
+    expect(reviewAnchorPrep({ ...ok(), cost: { ok: true, balanceLamports: 10, simulatedChangeLamports: 5000, networkFeeLamports: 5000 } }, ex).problems.join()).toMatch(/balance/);
   });
   it("refuses expired preps, wrong network/genesis, other memo, other fee payer or extra instructions", () => {
     expect(reviewAnchorPrep({ ...ok(), expiresAt: new Date(Date.now() - 1).toISOString() }, ex).problems.join()).toMatch(/expired/);
