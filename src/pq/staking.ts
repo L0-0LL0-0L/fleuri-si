@@ -35,7 +35,7 @@ export function derive(programId: string, stakeMint = STAKE_MINT) {
 export const dfsEventAuthority = () => PublicKey.findProgramAddressSync([enc("__event_authority")], pk(DFS_PROGRAM))[0];
 export const ata = (owner: string, mint: string) => PublicKey.findProgramAddressSync([pk(owner).toBytes(), pk(TOKEN_PROGRAM).toBytes(), pk(mint).toBytes()], pk(ATA_PROGRAM))[0];
 
-const disc = (kind: "instructions" | "accounts" | "events", name: string): number[] => {
+export const disc = (kind: "instructions" | "accounts" | "events", name: string): number[] => {
   const x = (STAKING_IDL[kind] as any[]).find((i) => i.name === name);
   if (!x) throw new Error(`IDL has no ${name}`);
   return x.discriminator;
