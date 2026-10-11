@@ -493,12 +493,14 @@ export async function prepareReceiptAnchor(ownerId: string, receiptId: string) {
   const e = env();
   if (row.manifest.cluster !== e.cluster) throw new Error(`This receipt was issued on ${row.manifest.cluster}; the server is on ${e.cluster}.`);
   const conn = sol.connection();
-  await sol.assertGenesis(conn, e.cluster);
+  const genesisHash = await sol.assertGenesis(conn, e.cluster);
   const { receiptMemo } = await import("@/pq/receipt");
   const memo = receiptMemo(row.manifest_hash);
   const wallet = row.manifest.issuer.wallet;
   const built = await sol.buildMemoTx(conn, wallet, memo);
-  const cost = await sol.estimateWalletCost(conn, built.message, wallet);
   const prep = must(await d.rpc("research_create_anchor_preparation", { _owner: ownerId, _id: receiptId, _row: { wallet, cluster: e.cluster, subject: receiptId, message_hash: messageHash(built.message), message_b64: b64(built.message), transaction_b64: sol.unsignedB64(built.tx), payload: { memo, receiptId, manifestHash: row.manifest_hash, lastValidBlockHeight: built.lastValidBlockHeight }, expires_at: new Date(Date.now() + PREP_TTL_MS).toISOString() } }), "Could not prepare the anchor");
-  return { preparationId: prep.id, expiresAt: prep.expires_at, transaction: prep.transaction_b64, memo: prep.payload.memo, wallet: prep.wallet, cluster: prep.cluster, cost, reused: prep.transaction_b64 !== sol.unsignedB64(built.tx) };
+  // Estimate the EXACT stored message the wallet will sign (a reused preparation keeps its original bytes).
+  const { anchorCostTarget } = await import("./research.server");
+  const cost = await sol.estimateWalletCost(conn, anchorCostTarget(prep, fromB64), wallet).catch((err: Error) => ({ ok: false as const, error: `Fee simulation unavailable: ${err.message}`.slice(0, 300) }));
+  return { preparationId: prep.id, expiresAt: prep.expires_at, transaction: prep.transaction_b64, memo: prep.payload.memo, wallet: prep.wallet, cluster: prep.cluster, genesisHash, cost, reused: prep.transaction_b64 !== sol.unsignedB64(built.tx) };
 }
