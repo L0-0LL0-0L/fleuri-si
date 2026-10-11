@@ -36,6 +36,11 @@ export default defineConfig({
           if (specifier === "base64-js" && isBuild) {
             return fileURLToPath(new URL("./node_modules/base64-js/index.js", import.meta.url));
           }
+          // ieee754 is buffer's other CommonJS-only dependency with the same failure
+          // ("No such module ieee754" on /identity in production).
+          if (specifier === "ieee754" && isBuild) {
+            return fileURLToPath(new URL("./node_modules/ieee754/index.js", import.meta.url));
+          }
           if (specifier === "bigint-buffer") {
             return fileURLToPath(new URL("./node_modules/bigint-buffer/dist/browser.js", import.meta.url));
           }
@@ -43,7 +48,7 @@ export default defineConfig({
         },
       },
     ],
-    optimizeDeps: { include: ["buffer", "base64-js"] },
+    optimizeDeps: { include: ["buffer", "base64-js", "ieee754"] },
     resolve: { alias: [
       { find: /^@coral-xyz\/anchor$/, replacement: fileURLToPath(new URL("./node_modules/@coral-xyz/anchor/dist/browser/index.js", import.meta.url)) },
     ] },
