@@ -21,6 +21,7 @@ import { Route as LaunchConfigRouteImport } from './routes/launch-config'
 import { Route as LaunchpadRouteImport } from './routes/launchpad'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as PollenRouteImport } from './routes/pollen'
+import { Route as StakingRouteImport } from './routes/staking'
 import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as AHandleRouteImport } from './routes/a.$handle'
@@ -90,6 +91,11 @@ const PollenRoute = PollenRouteImport.update({
   path: '/pollen',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StakingRoute = StakingRouteImport.update({
+  id: '/staking',
+  path: '/staking',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TerminalRoute = TerminalRouteImport.update({
   id: '/terminal',
   path: '/terminal',
@@ -144,6 +150,7 @@ export interface FileRoutesByFullPath {
   '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
   '/pollen': typeof PollenRoute
+  '/staking': typeof StakingRoute
   '/terminal': typeof TerminalRoute
   '/verify': typeof VerifyRoute
   '/a/$handle': typeof AHandleRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
   '/pollen': typeof PollenRoute
+  '/staking': typeof StakingRoute
   '/terminal': typeof TerminalRoute
   '/verify': typeof VerifyRoute
   '/a/$handle': typeof AHandleRoute
@@ -189,6 +197,7 @@ export interface FileRoutesById {
   '/launchpad': typeof LaunchpadRoute
   '/me': typeof MeRoute
   '/pollen': typeof PollenRoute
+  '/staking': typeof StakingRoute
   '/terminal': typeof TerminalRoute
   '/verify': typeof VerifyRoute
   '/a/$handle': typeof AHandleRoute
@@ -213,6 +222,7 @@ export interface FileRouteTypes {
     | '/launchpad'
     | '/me'
     | '/pollen'
+    | '/staking'
     | '/terminal'
     | '/verify'
     | '/a/$handle'
@@ -235,6 +245,7 @@ export interface FileRouteTypes {
     | '/launchpad'
     | '/me'
     | '/pollen'
+    | '/staking'
     | '/terminal'
     | '/verify'
     | '/a/$handle'
@@ -257,6 +268,7 @@ export interface FileRouteTypes {
     | '/launchpad'
     | '/me'
     | '/pollen'
+    | '/staking'
     | '/terminal'
     | '/verify'
     | '/a/$handle'
@@ -280,6 +292,7 @@ export interface RootRouteChildren {
   LaunchpadRoute: typeof LaunchpadRoute
   MeRoute: typeof MeRoute
   PollenRoute: typeof PollenRoute
+  StakingRoute: typeof StakingRoute
   TerminalRoute: typeof TerminalRoute
   VerifyRoute: typeof VerifyRoute
   AHandleRoute: typeof AHandleRoute
@@ -376,6 +389,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PollenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/staking': {
+      id: '/staking'
+      path: '/staking'
+      fullPath: '/staking'
+      preLoaderRoute: typeof StakingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terminal': {
       id: '/terminal'
       path: '/terminal'
@@ -448,6 +468,7 @@ const rootRouteChildren: RootRouteChildren = {
   LaunchpadRoute: LaunchpadRoute,
   MeRoute: MeRoute,
   PollenRoute: PollenRoute,
+  StakingRoute: StakingRoute,
   TerminalRoute: TerminalRoute,
   VerifyRoute: VerifyRoute,
   AHandleRoute: AHandleRoute,
