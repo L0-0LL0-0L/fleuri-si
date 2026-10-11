@@ -15,13 +15,13 @@ jobs:
         run: |
           sh -c "$(curl -sSfL https://release.anza.xyz/v2.3.13/install)"
           echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
-      - run: cargo test -p pollen-staking --lib
-      - run: cargo build-sbf --manifest-path programs/pollen-staking/Cargo.toml
+      - run: cargo test --locked -p pollen-staking --lib
+      - run: cargo build-sbf --manifest-path programs/pollen-staking/Cargo.toml -- --locked
       - name: Dump Meteora DFS program
-        run: solana program dump -u mainnet-beta dfsdo2UqvwfN8DuUVrMRNfQe11VaiNoKcMqLHVvDPzh tests-integration/fixtures/dfs.so
+        run: mkdir -p tests-integration/fixtures && solana program dump -u mainnet-beta dfsdo2UqvwfN8DuUVrMRNfQe11VaiNoKcMqLHVvDPzh tests-integration/fixtures/dfs.so
       - name: Program tests (LiteSVM)
         working-directory: onchain/pollen-staking/tests-integration
-        run: PS_SO=../target/deploy/pollen_staking.so cargo test
+        run: PS_SO=../target/deploy/pollen_staking.so cargo test --locked
       - name: Expected ELF hash (same normalization as the server)
         working-directory: .
         run: |
@@ -29,5 +29,7 @@ jobs:
           python3 -c "import hashlib,sys;b=open(sys.argv[1],'rb').read().rstrip(b'\\x00');print(hashlib.sha256(b).hexdigest())" $f
       - name: IDL is current
         run: |
-          cargo test -p pollen-staking --features idl-build __anchor_private_print_idl -- --show-output --quiet > /tmp/idl.out
-          grep -q '"name": "harvest_fees"' /tmp/idl.out
+          cargo test --locked -p pollen-staking --features idl-build __anchor_private_print_idl -- --show-output --quiet > /tmp/idl.out
+          python3 scripts/idl.py check /tmp/idl.out
+      - name: Layout fixture is current
+        run: cargo test --locked -p pollen-staking --lib layout_fixture

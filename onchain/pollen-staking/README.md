@@ -32,7 +32,8 @@ cargo test -p pollen-staking --lib                                   # accountin
 cargo build-sbf --manifest-path programs/pollen-staking/Cargo.toml   # -> target/deploy/pollen_staking.so
 # Regenerate the IDL:
 cargo test -p pollen-staking --features idl-build __anchor_private_print_idl -- --show-output --quiet
-# (or `anchor build` with Anchor CLI 0.32.1), then diff against idl/pollen_staking.json.
+# then: python3 scripts/idl.py check <output>   (or `build` to rewrite idl/pollen_staking.json)
+# `anchor build` with Anchor CLI 0.32.1 also works; Anchor.toml is included.
 # Regenerate the TS layout fixture after a layout change:
 WRITE_FIXTURES=1 cargo test -p pollen-staking --lib layout_fixture
 ```
@@ -40,6 +41,7 @@ WRITE_FIXTURES=1 cargo test -p pollen-staking --lib layout_fixture
 ## Program tests
 
 ```sh
+mkdir -p tests-integration/fixtures
 solana program dump -u mainnet-beta dfsdo2UqvwfN8DuUVrMRNfQe11VaiNoKcMqLHVvDPzh tests-integration/fixtures/dfs.so
 cd tests-integration && PS_SO=../target/deploy/pollen_staking.so cargo test
 ```
@@ -59,7 +61,7 @@ The tests cover:
 
 ## Deploy (manual only, never automatic)
 
-1. `solana-keygen new -o target/deploy/pollen_staking-keypair.json`, then `anchor keys sync`. This replaces the placeholder ID. Rebuild.
+1. `solana-keygen new -o target/deploy/pollen_staking-keypair.json`, then `anchor keys sync` (Anchor CLI 0.32.1, uses Anchor.toml) **or** `python3 scripts/sync-program-id.py $(solana-keygen pubkey target/deploy/pollen_staking-keypair.json)`. Either replaces the placeholder in `declare_id!`, Anchor.toml and the IDL. Rebuild, run `scripts/idl.py build`, rerun all tests.
 2. Run a verifiable build (`solana-verify build`) and record the ELF SHA-256 with `bun scripts/staking-elf-hash.ts <so>` (SHA-256 after trimming all trailing zero bytes — the same normalization the server applies to ProgramData).
 3. Deploy to devnet first: `solana program deploy target/deploy/pollen_staking.so --program-id target/deploy/pollen_staking-keypair.json`.
 4. Create a DFS wSOL vault that has the **pool PDA** (derived from the new program ID and the mint) as a recipient.

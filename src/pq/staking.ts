@@ -1,5 +1,6 @@
 // Pollen Staking: pure layout, PDA, instruction and accounting helpers mirroring
 // onchain/pollen-staking (Rust). Cross-checked against the generated IDL and a Rust-written fixture.
+import { Buffer } from "buffer";
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import idl from "../../onchain/pollen-staking/idl/pollen_staking.json";
 import { FLEURI_MINT } from "@/lib/token";
@@ -15,7 +16,7 @@ export const UPGRADEABLE_LOADER = "BPFLoaderUpgradeab1e11111111111111111111111";
 export const DEFAULT_TERM_SECONDS = 7 * 86_400;
 export const STAKE_MINT = FLEURI_MINT;
 /** Local placeholder from declare_id!; never treated as a deployment. */
-export const PLACEHOLDER_PROGRAM_ID: string = STAKING_IDL.address;
+export const PLACEHOLDER_PROGRAM_ID = "59vLvCAQFHcZg3eYC4ehKQQKeWysUPTS1iQANPzJHQmk";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const pk = (s: string | PublicKey) => (typeof s === "string" ? new PublicKey(s) : s);

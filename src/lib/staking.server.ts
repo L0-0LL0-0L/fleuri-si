@@ -100,6 +100,7 @@ export async function prepare(savePrep: SavePrep, ownerId: string, input: { wall
   const pos = st.position;
   const tx = new Transaction();
   if (input.action === "harvest") {
+    if (!st.feeSource || BigInt(st.feeSource.unclaimedForPool ?? 0) <= 0n) throw new Error("The Pollen vault has nothing claimable for this pool yet.");
     tx.add(buildHarvestIx(programId, input.wallet, st.pool.feeVault, st.pool.feeTokenVault));
   } else {
     if (input.action === "stake") { if (!amount || amount <= 0n) throw new Error("Enter an amount."); if (BigInt(st.balances?.fleuri ?? 0) < amount) throw new Error("Wallet FLEURI balance is too low."); }
@@ -115,7 +116,17 @@ export async function prepare(savePrep: SavePrep, ownerId: string, input: { wall
   const cost = await sol.estimateWalletCost(conn, built.message, input.wallet);
   if (!cost.ok) throw new Error(cost.error);
   const prep = await savePrep(ownerId, `staking_${input.action}`, input.wallet, d.pool.toBase58(), built, { action: input.action, programId, amount: amount?.toString() ?? null, position: input.action === "harvest" ? null : d.position(input.wallet).toBase58(), before: pos ?? null, expectedClaim: input.action === "claim" ? pos?.claimable : null });
-  return { preparationId: prep.id, transaction: sol.unsignedB64(built.tx), cluster: st.cluster, cost, review: { action: input.action, amount: amount?.toString() ?? null, pool: d.pool.toBase58(), programId } };
+  const L = st.pool.ledger;
+  const review = {
+    action: input.action, amount: amount?.toString() ?? null, pool: d.pool.toBase58(), programId, chainTime: st.chainTime ?? null,
+    cooldownSeconds: input.action === "request_unstake" ? String(L.cooldown) : null,
+    unlockAtChainTime: input.action === "request_unstake" && st.chainTime ? String(BigInt(st.chainTime) + BigInt(L.cooldown)) : input.action === "withdraw" ? pos?.unlockTs ?? null : null,
+    pendingAmount: input.action === "withdraw" || input.action === "cancel_unstake" ? pos?.pendingAmount ?? null : null,
+    expectedClaim: input.action === "claim" ? pos?.claimable ?? null : null,
+    harvestable: input.action === "harvest" ? String(st.feeSource.unclaimedForPool) : null,
+    createsTokenAccount: tx.instructions.length > 1,
+  };
+  return { preparationId: prep.id, transaction: sol.unsignedB64(built.tx), cluster: st.cluster, cost, review };
 }
 
 /** Confirmation accepts only this program's own events matching the prepared action. */

@@ -112,6 +112,15 @@ impl Ledger {
         Ok(u)
     }
 
+    /// When stake goes from zero to positive, rewards held as unallocated re-enter the stream
+    /// automatically (same deadline rule as funding), so a first staker never needs a separate call.
+    /// Must run after `update` and after the position checkpoint, so only future releases are earned.
+    pub fn resume_if_idle(&mut self, was_idle: bool, now: i64) -> std::result::Result<(), MathError> {
+        if !was_idle || self.unallocated == 0 || self.total_active == 0 { return Ok(()); }
+        let u = self.unallocated; self.unallocated = 0;
+        self.restream(u, now)
+    }
+
     /// Tokens the reward vault must hold for all current and future obligations.
     pub fn liabilities_upper_bound(&self) -> u64 {
         (self.dfs_funded_total as u128 + self.treasury_total as u128 - self.claimed_total as u128) as u64
@@ -138,8 +147,9 @@ impl PositionState {
 pub fn stake(l: &mut Ledger, p: &mut PositionState, amount: u64, now: i64) -> std::result::Result<(), MathError> {
     if amount == 0 { return Err(MathError::Zero); }
     l.update(now)?; p.settle(l.acc_per_share)?;
+    let was_idle = l.total_active == 0;
     p.active = add(p.active, amount)?; l.total_active = add(l.total_active, amount)?;
-    Ok(())
+    l.resume_if_idle(was_idle, now)
 }
 
 /// Stops earning immediately. Only one pending lot, so an existing cooldown is never extended.
@@ -158,8 +168,10 @@ pub fn cancel_unstake(l: &mut Ledger, p: &mut PositionState, now: i64) -> std::r
     let a = p.pending_amount;
     if a == 0 { return Err(MathError::NoPending); }
     l.update(now)?; p.settle(l.acc_per_share)?;
+    let was_idle = l.total_active == 0;
     p.active = add(p.active, a)?; l.total_active = add(l.total_active, a)?;
     p.pending_amount = 0; p.unlock_ts = 0;
+    l.resume_if_idle(was_idle, now)?;
     Ok(a)
 }
 
@@ -225,7 +237,7 @@ mod tests {
         assert_eq!(l.unallocated, 1_000);
         assert_eq!(l.release_unallocated(D), Err(MathError::NoStake));
         stake(&mut l, &mut a, 5, D).unwrap();
-        assert_eq!(l.release_unallocated(D).unwrap(), 1_000);
+        assert_eq!(l.unallocated, 0, "stake resumed it automatically"); assert_eq!(l.release_unallocated(D), Err(MathError::Nothing));
         assert_eq!(owed(&l, &a, 2 * D), 1_000);
     }
     #[test] fn staggered_release_and_refill_preserves_accrued() {
@@ -276,6 +288,22 @@ mod tests {
         let topups = ((D - 1) / 3_600 + 1) as u64;
         assert_eq!(l.stream_end, D);
         assert_eq!(owed(&l, &a, D), 1_000_000 + topups, "old tranche fully released by its old deadline");
+    }
+    #[test] fn first_staker_resumes_unallocated_automatically() {
+        let mut l = l0(); let mut a = PositionState::default();
+        l.fund(1_000, true, 0).unwrap();
+        l.update(D).unwrap(); assert_eq!(l.unallocated, 1_000);
+        stake(&mut l, &mut a, 10, D).unwrap();
+        assert_eq!(l.unallocated, 0); assert_eq!(l.stream_end, 2 * D, "ended window -> fresh window");
+        assert_eq!(owed(&l, &a, D), 0, "nothing before staking");
+        assert_eq!(owed(&l, &a, 2 * D), 1_000);
+        // cancel path: unstake all, idle accrual, cancel resumes it within the open window
+        let mut l = l0(); let mut b = PositionState::default();
+        stake(&mut l, &mut b, 10, 0).unwrap(); request_unstake(&mut l, &mut b, 10, 0).unwrap();
+        l.fund(500, false, 0).unwrap(); l.update(D / 2).unwrap(); assert_eq!(l.unallocated, 250);
+        cancel_unstake(&mut l, &mut b, D / 2).unwrap();
+        assert_eq!(l.stream_end, D, "open window deadline kept");
+        assert_eq!(owed(&l, &b, D), 500);
     }
     #[test] fn double_claim_rejected() {
         let mut l = l0(); let mut a = PositionState::default();

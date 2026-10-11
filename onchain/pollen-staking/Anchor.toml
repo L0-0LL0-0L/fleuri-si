@@ -1,0 +1,24 @@
+# Anchor CLI 0.32.1 workspace. The program ID below is the LOCAL PLACEHOLDER from declare_id!,
+# not a deployment. Use `anchor keys sync` (or scripts/sync-program-id.py) before any real build.
+[toolchain]
+anchor_version = "0.32.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+pollen_staking = "59vLvCAQFHcZg3eYC4ehKQQKeWysUPTS1iQANPzJHQmk"
+
+[programs.devnet]
+pollen_staking = "59vLvCAQFHcZg3eYC4ehKQQKeWysUPTS1iQANPzJHQmk"
+
+[workspace]
+members = ["programs/pollen-staking"]
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cd tests-integration && PS_SO=../target/deploy/pollen_staking.so cargo test --locked"
