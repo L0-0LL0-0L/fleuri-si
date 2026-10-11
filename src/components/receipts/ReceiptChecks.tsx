@@ -44,12 +44,12 @@ export function AnchorRpcCheck({ v }: { v: ReceiptVerification }) {
 
 /** File verifier. Each selection, owner change (parent re-keys) or unmount invalidates older reads. */
 export function ReceiptFileVerifier() {
-  const [v, setV] = useState<ReceiptVerification | null>(null); const [busy, setBusy] = useState(false); const [name, setName] = useState("");
+  const [v, setV] = useState<ReceiptVerification | null>(null); const [busy, setBusy] = useState(false); const [name, setName] = useState(""); const [readErr, setReadErr] = useState("");
   const scope = useLiveScope("file");
   return <Panel title="Verify a receipt file offline">
     <p className="text-xs">Runs entirely in your browser: strict parsing (duplicate keys rejected), commitments, stored checksums, identity binding, the ML-DSA-65 receipt signature and an exact Greenhouse replay where this build supports the engine. No Fleuri database is used. CLI: <span className="font-mono">bun scripts/verify-receipt.ts receipt.json [--rpc URL]</span></p>
     <input type="file" accept="application/json,.json" aria-label="Research receipt file" onChange={async (e) => {
-      scope.bump(); const t = scope.token(); setV(null); setName("");
+      scope.bump(); const t = scope.token(); setV(null); setName(""); setReadErr("");
       const f = e.target.files?.[0]; if (!f) { setBusy(false); return; }
       setBusy(true);
       try {
@@ -60,8 +60,11 @@ export function ReceiptFileVerifier() {
         const out = text == null ? { checks: [{ id: "schema" as const, label: "Schema & bounds", status: "fail" as const, detail: "Receipt is larger than the 2.6 MB limit." }], manifest: null, bundle: null, valid: false } : verifyReceiptBundle(text);
         if (!scope.live(t)) return;
         setV(out); setName(f.name);
+      } catch (err) {
+        if (scope.live(t)) setReadErr(`Could not read ${f.name}: ${(err as Error)?.message ?? "unknown error"}. Choose the file again to retry.`);
       } finally { if (scope.live(t)) setBusy(false); }
     }} />
+    {readErr && <p role="alert" className="text-sm text-poppy-deep">{readErr}</p>}
     {busy && <p className="text-sm" role="status">Verifying and replaying…</p>}
     {v && <><p role="status" className={cn("hair p-2 text-sm font-semibold", v.valid ? "bg-sprout text-paper-light" : "bg-poppy-deep text-paper-light")}>{v.valid ? "Valid signed research receipt." : "Not a valid receipt."} <span className="font-normal">{name}</span> Signature validity shows which key attested these bytes; it does not make the strategy good.</p><ChecksList checks={v.checks} /><AnchorRpcCheck key={`${v.bundle?.manifestHash}|${name}`} v={v} /></>}
   </Panel>;
