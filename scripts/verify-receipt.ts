@@ -9,9 +9,8 @@ const file = args.find((a, k) => !a.startsWith("--") && args[k - 1] !== "--rpc")
 if (!file) { console.error("usage: bun scripts/verify-receipt.ts receipt.json [--rpc URL]"); process.exit(2); }
 const v = verifyReceiptBundle(readFileSync(file, "utf8"));
 if (rpc && v.manifest && v.bundle) {
-  const [{ rpcConnection }, { readConfirmedTxEx }] = await Promise.all([import("../src/pq/evidence-reader"), import("../src/pq/chain-read")]);
-  const conn = rpcConnection(rpc);
-  const a = await verifyAnchor(v.manifest, v.bundle.manifestHash, v.bundle.anchorHint, { genesis: () => conn.getGenesisHash(), tx: (s) => readConfirmedTxEx(conn, s) as any });
+  const { memoReader } = await import("../src/pq/memo-reader"); // same browser-safe reader the UI uses
+  const a = await verifyAnchor(v.manifest, v.bundle.manifestHash, v.bundle.anchorHint, memoReader(rpc)).catch((e) => ({ id: "anchor" as const, label: "Optional Memo anchor", status: "unavailable" as const, detail: String(e?.message ?? e) }));
   v.checks[v.checks.findIndex((c) => c.id === "anchor")] = a;
 }
 for (const c of v.checks) console.log(`${c.status.toUpperCase().padEnd(11)} ${c.label} — ${c.detail}`);
