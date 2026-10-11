@@ -4,7 +4,7 @@ import { PublicKey, Transaction, TransactionInstruction, type Connection } from 
 import { GENESIS } from "@/pq/registration";
 import {
   ATA_PROGRAM, PLACEHOLDER_PROGRAM_ID, STAKE_MINT, SYSTEM_PROGRAM, TOKEN_PROGRAM, WSOL, ata, buildHarvestIx, buildIx, claimableAt,
-  blockers, checkFeeVault, checkTokenAccount, decodeMintStrict, decodePool, decodePosition, decodeProgramAccount, decodeProgramData, derive, matchConfirmation, programElf, readiness, type ReadinessFacts, type StakingAction,
+  CLOCK_SYSVAR, IncoherentSnapshot, positionView, blockers, checkFeeVault, checkTokenAccount, decodeMintStrict, decodePool, decodePosition, decodeProgramAccount, decodeProgramData, derive, matchConfirmation, programElf, readiness, type ReadinessFacts, type StakingAction,
 } from "@/pq/staking";
 import * as sol from "./solana.server";
 
@@ -20,7 +20,32 @@ export function stakingEnv() {
 const big = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === "bigint" ? v.toString() : v]));
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
 
-async function tokenAmount(conn: Connection, a: PublicKey) { const i = await conn.getAccountInfo(a); if (!i || i.owner.toBase58() !== TOKEN_PROGRAM || i.data.length !== 165) return null; return new DataView(i.data.buffer, i.data.byteOffset).getBigUint64(64, true); }
+
+type Acc = { owner: string; data: Uint8Array } | null;
+const toAcc = (i: any): Acc => (i ? { owner: i.owner.toBase58(), data: new Uint8Array(i.data) } : null);
+function amountOf(a: Acc) { if (!a || a.owner !== TOKEN_PROGRAM || a.data.length !== 165) return null; return new DataView(a.data.buffer, a.data.byteOffset).getBigUint64(64, true).toString(); }
+
+/**
+ * Reads pool, position, vaults, wallet token accounts, fee vault and the Clock sysvar in ONE
+ * getMultipleAccountsInfoAndContext call (one confirmed bank). The fee vault address comes from the
+ * pool, so if the pool's fee vault differs from the first guess it re-reads. Incoherent results retry.
+ */
+export async function readSnapshot(conn: Pick<Connection, "getMultipleAccountsInfoAndContext">, programId: string, d: ReturnType<typeof derive>, wallet: string | null, tries = 3) {
+  let feeGuess: string | null = stakingEnv().feeVault; let lastErr: Error | null = null;
+  for (let i = 0; i < tries; i++) {
+    const keys = [d.pool, wallet ? d.position(wallet) : d.pool, d.principal, d.reward, wallet ? ata(wallet, STAKE_MINT) : d.pool, wallet ? ata(wallet, WSOL) : d.pool, new PublicKey(CLOCK_SYSVAR), new PublicKey(feeGuess ?? d.pool)];
+    const r = await conn.getMultipleAccountsInfoAndContext(keys, { commitment: "confirmed" });
+    const v = r.value.map(toAcc);
+    const accounts = { pool: v[0], position: wallet ? v[1] : null, principal: v[2], reward: v[3], ataF: wallet ? v[4] : null, ataW: wallet ? v[5] : null, clock: v[6], feeVault: feeGuess ? v[7] : null };
+    if (!accounts.pool || accounts.pool.owner !== programId) return { slot: r.context.slot, view: null, accounts, feeVaultKey: feeGuess };
+    try {
+      const view = positionView(programId, accounts.pool, accounts.position, accounts.clock);
+      if (view.pool.feeVault !== feeGuess) { feeGuess = view.pool.feeVault; continue; }
+      return { slot: r.context.slot, view, accounts, feeVaultKey: feeGuess };
+    } catch (x) { if (!(x instanceof IncoherentSnapshot)) throw x; lastErr = x; }
+  }
+  throw new Error(`Could not read a coherent chain snapshot: ${lastErr?.message ?? "fee vault kept changing"}`);
+}
 
 /** Reads everything needed for the page and for gating; unknowns stay unknown. */
 export async function readState(wallet: string | null) {
@@ -47,36 +72,31 @@ export async function readState(wallet: string | null) {
         const pd = await conn.getAccountInfo(d.programData);
         if (pd) { const h = decodeProgramData(pd.data); facts.programUpgradeable = h.upgradeable; facts.upgradeAuthority = h.authority; facts.actualHash = hex(await crypto.subtle.digest("SHA-256", programElf(pd.data) as any)); }
       }
-      const pi = await conn.getAccountInfo(d.pool);
-      if (pi && pi.owner.toBase58() === s.programId) {
-        const p = decodePool(pi.data);
+      // ONE confirmed bank: pool, position, vaults, wallet token accounts, fee vault and Clock.
+      const snap = await readSnapshot(conn, s.programId, d, wallet);
+      out.slot = snap.slot; out.chainTime = Number(snap.view?.clock.unixTimestamp ?? out.chainTime); out.asOf = { slot: snap.slot, unixTimestamp: out.chainTime, source: "clock sysvar in the same multi-account read" };
+      if (snap.view) {
+        facts.rpcFresh = Math.abs(Date.now() / 1000 - out.chainTime) < 180;
+        const p = snap.view.pool; const A = snap.accounts;
         facts.pool = { stakeMint: p.stakeMint, rewardMint: p.rewardMint, principalVault: p.principalVault, rewardVault: p.rewardVault, feeVault: p.feeVault };
-        const [pv, rv] = await Promise.all([conn.getAccountInfo(d.principal), conn.getAccountInfo(d.reward)]);
-        const acc = (i: any) => (i ? { owner: i.owner.toBase58(), data: new Uint8Array(i.data) } : null);
-        const pIssues = checkTokenAccount(acc(pv), { mint: p.stakeMint, authority: d.pool.toBase58() });
-        const rIssues = checkTokenAccount(acc(rv), { mint: WSOL, authority: d.pool.toBase58() });
+        const pIssues = checkTokenAccount(A.principal, { mint: p.stakeMint, authority: d.pool.toBase58() });
+        const rIssues = checkTokenAccount(A.reward, { mint: WSOL, authority: d.pool.toBase58() });
         facts.vaultsOk = !pIssues.length && !rIssues.length;
         out.vaultIssues = { principal: pIssues, reward: rIssues };
-        out.pool = { address: d.pool.toBase58(), ...p, ledger: big(p.ledger), principalBalance: (await tokenAmount(conn, d.principal))?.toString() ?? null, rewardBalance: (await tokenAmount(conn, d.reward))?.toString() ?? null };
-        try {
-          const fvAcc = acc(await conn.getAccountInfo(new PublicKey(p.feeVault)));
-          const chk = checkFeeVault(p.feeVault, fvAcc, { feeTokenVault: p.feeTokenVault, pool: d.pool.toBase58(), index: p.recipientIndex });
-          const issues = [...chk.issues];
-          if (s.feeVault && s.feeVault !== p.feeVault) issues.push("pool fee source differs from the configured vault");
-          let v: any = null;
-          try { const { readVault } = await import("./pollen.server"); v = await readVault(conn, p.feeVault); if (v.pdaIssues?.length) issues.push(...v.pdaIssues); } catch (x) { issues.push(`vault unreadable: ${(x as Error).message}`); }
-          const ok = issues.length === 0;
-          facts.feeSourceOk = ok;
-          facts.feeSourceDetail = ok ? `Pool PDA is recipient #${p.recipientIndex} (${((chk.share! / chk.totalShare!) * 100).toFixed(2)}% of shares) of DFS PDA vault ${p.feeVault}. Anyone can fund a DFS vault manually, so claims prove Pollen funding, not trading-fee origin; which DBC/DAMM pools route into it is unverified.` : `Fee source rejected: ${issues.join("; ")}.`;
-          const me = v?.recipients?.find((r: any) => r.address === d.pool.toBase58());
-          out.feeSource = { address: p.feeVault, funded: v?.funded ?? null, recipientIndex: p.recipientIndex, share: chk.share, totalShare: chk.totalShare, unclaimedForPool: me?.unclaimed ?? null, issues };
-        } catch (x) { facts.feeSourceDetail = `Fee vault unreadable: ${(x as Error).message}`; }
+        out.pool = { address: d.pool.toBase58(), ...p, ledger: big(p.ledger), principalBalance: amountOf(A.principal), rewardBalance: amountOf(A.reward) };
+        const chk = p.feeVault === snap.feeVaultKey ? checkFeeVault(p.feeVault, A.feeVault, { feeTokenVault: p.feeTokenVault, pool: d.pool.toBase58(), index: p.recipientIndex }) : { issues: ["fee vault not in snapshot"], share: null, totalShare: null, claimable: null };
+        const issues = [...chk.issues];
+        if (s.feeVault && s.feeVault !== p.feeVault) issues.push("pool fee source differs from the configured vault");
+        let v: any = null;
+        try { const { readVault } = await import("./pollen.server"); v = await readVault(conn, p.feeVault); if (v.pdaIssues?.length) issues.push(...v.pdaIssues); } catch (x) { issues.push(`vault unreadable: ${(x as Error).message}`); }
+        const ok = issues.length === 0;
+        facts.feeSourceOk = ok;
+        facts.feeSourceDetail = ok ? `Pool PDA is recipient #${p.recipientIndex} (${((chk.share! / chk.totalShare!) * 100).toFixed(2)}% of shares) of DFS PDA vault ${p.feeVault}. Anyone can fund a DFS vault manually, so claims prove Pollen funding, not trading-fee origin. No verified fee routing into it is configured.` : `Fee source rejected: ${issues.join("; ")}.`;
+        out.feeSource = { address: p.feeVault, funded: v?.funded ?? null, recipientIndex: p.recipientIndex, share: chk.share, totalShare: chk.totalShare, unclaimedForPool: chk.claimable?.toString() ?? null, issues };
         if (wallet) {
-          const posAddr = d.position(wallet); const ps = await conn.getAccountInfo(posAddr);
-          const pos = ps && ps.owner.toBase58() === s.programId ? decodePosition(ps.data) : null;
-          const now = BigInt(out.chainTime ?? 0);
-          out.position = pos ? { address: posAddr.toBase58(), ...big(pos.state), claimable: out.chainTime ? claimableAt(p.ledger, pos.state, now).toString() : null } : null;
-          out.balances = { fleuri: (await tokenAmount(conn, ata(wallet, STAKE_MINT)))?.toString() ?? null, wsol: (await tokenAmount(conn, ata(wallet, WSOL)))?.toString() ?? null };
+          const pos = snap.view.position;
+          out.position = pos ? { address: d.position(wallet).toBase58(), ...big(pos.state), claimable: pos.claimable.toString() } : null;
+          out.balances = { fleuri: amountOf(A.ataF), wsol: amountOf(A.ataW) };
         }
       } else facts.feeSourceDetail = "No pool, so no fee source.";
     } catch (x) { out.errors.push((x as Error).message); }
