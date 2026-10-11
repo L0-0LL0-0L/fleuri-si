@@ -70,11 +70,20 @@ function NewReceiptScoped() {
         if (d.data.status === "signed") { void navigate({ to: "/receipts/$id", params: { id: d.data.id } }); return; }
         if (receiptHash(d.data.manifest) !== d.data.manifestHash || d.data.manifest.source.runId !== d.data.runId) return setErr("The stored draft does not match its hash or trial.");
         rid = d.data.runId; setRunId(rid);
-        const prior = readReceiptPending(userId, rid, localStorage); // captured BEFORE it is overwritten below
+        // Durably migrate a legacy run-scoped signature for this exact receipt/hash into the per-draft
+        // record BEFORE the run record is overwritten; if that write fails, keep the old record intact.
+        let sig = readReceiptSig(userId, d.data.id, d.data.manifestHash, localStorage);
+        const legacy = sig ? null : legacySig(readReceiptPending(userId, rid, localStorage), d.data.id, d.data.manifestHash);
+        let migrated = !legacy;
+        if (legacy && ownerLive(userId)) {
+          try { writeReceiptSig(userId, legacy, localStorage); migrated = readReceiptSig(userId, legacy.receiptId, legacy.manifestHash, localStorage)?.signature === legacy.signature; } catch { migrated = false; }
+          sig = legacy;
+        }
         const p: ReceiptPending = { requestId: d.data.requestId, runId: rid, identityId: d.data.identityId, receiptId: d.data.id, manifestHash: d.data.manifestHash };
-        writeReceiptPending(userId, p, localStorage); setPending(p); setPick(p.identityId);
+        if (migrated) writeReceiptPending(userId, p, localStorage);
+        setPending(p); setPick(p.identityId);
         setDraft({ id: d.data.id, manifest: d.data.manifest, manifestHash: d.data.manifestHash });
-        setSaved(readReceiptSig(userId, d.data.id, d.data.manifestHash, localStorage) ?? legacySig(prior, d.data.id, d.data.manifestHash));
+        setSaved(sig);
       } else {
         const p = readReceiptPending(userId, rid!, localStorage); setPending(p); if (p) setPick(p.identityId);
       }
