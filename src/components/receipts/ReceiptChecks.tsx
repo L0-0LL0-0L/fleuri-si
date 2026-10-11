@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Panel } from "@/components/pq/ui";
-import { verifyAnchor, verifyReceiptBundle, type RCheck, type ReceiptVerification } from "@/pq/receipt";
+import { RECEIPT_MAX_BYTES, verifyAnchor, verifyReceiptBundle, type RCheck, type ReceiptVerification } from "@/pq/receipt";
+import { memoReader } from "@/pq/memo-reader";
+import { useLiveScope } from "@/lib/live-scope";
 import { cn } from "@/lib/utils";
 
 const TONE: Record<string, string> = { pass: "bg-sprout text-paper-light", fail: "bg-poppy-deep text-paper-light", unavailable: "bg-paper-deep", unsupported: "bg-paper-deep" };
@@ -12,37 +14,55 @@ export function ChecksList({ checks }: { checks: RCheck[] }) {
     </li>))}</ul>;
 }
 
-/** Optional, caller-chosen RPC check of an exported anchor hint. Never trusts the hint itself. */
+/** Optional, caller-chosen RPC check of an exported anchor hint. Never trusts the hint itself. Results are
+ * bound to (receipt, signature, RPC, operation) so an old pass can never appear for a new file or URL. */
 export function AnchorRpcCheck({ v }: { v: ReceiptVerification }) {
   const [rpc, setRpc] = useState(v.manifest?.cluster === "devnet" ? "https://api.devnet.solana.com" : "https://api.mainnet-beta.solana.com");
-  const [res, setRes] = useState<RCheck | null>(null); const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState<{ key: string; check: RCheck } | null>(null); const [busy, setBusy] = useState(false);
+  const base = `${v.bundle?.manifestHash ?? ""}|${v.bundle?.anchorHint?.signature ?? ""}|${rpc}`;
+  const scope = useLiveScope(base);
+  const ctrl = useRef<AbortController | null>(null);
+  useEffect(() => () => ctrl.current?.abort(), []);
+  useEffect(() => { ctrl.current?.abort(); setBusy(false); }, [base]);
   if (!v.manifest || !v.bundle?.anchorHint) return null;
   async function run() {
-    setBusy(true); setRes(null);
-    try {
-      const { Buffer } = await import("buffer"); (globalThis as any).Buffer ??= Buffer;
-      const [{ rpcConnection }, { readConfirmedTxEx }] = await Promise.all([import("@/pq/evidence-reader"), import("@/pq/chain-read")]);
-      const conn = rpcConnection(rpc);
-      setRes(await verifyAnchor(v.manifest!, v.bundle!.manifestHash, v.bundle!.anchorHint, { genesis: () => conn.getGenesisHash(), tx: (s) => readConfirmedTxEx(conn, s) as any }));
-    } catch (e) { setRes({ id: "anchor", label: "Optional Memo anchor", status: "unavailable", detail: (e as Error).message.slice(0, 200) }); }
-    finally { setBusy(false); }
+    ctrl.current?.abort(); const c = new AbortController(); ctrl.current = c;
+    scope.bump(); const t = scope.token(); setBusy(true); setRes(null);
+    let check: RCheck;
+    try { check = await verifyAnchor(v.manifest!, v.bundle!.manifestHash, v.bundle!.anchorHint, memoReader(rpc, { signal: c.signal })); }
+    catch (e) { check = { id: "anchor", label: "Optional Memo anchor", status: "unavailable", detail: (e as Error).message.slice(0, 200) }; }
+    if (!scope.live(t)) return;
+    setRes({ key: t.key, check }); setBusy(false);
   }
+  const shown = res && res.key === base ? res.check : null;
   return <div className="space-y-2">
-    <label className="block text-xs font-semibold">Check the anchor hint with an RPC you choose (https)<input value={rpc} onChange={(e) => { setRpc(e.target.value); setRes(null); }} className="field mt-1 w-full font-mono text-xs" /></label>
+    <label className="block text-xs font-semibold">Re-read the anchor on chain with an RPC you choose (https)<input value={rpc} onChange={(e) => { setRpc(e.target.value); setRes(null); }} className="field mt-1 w-full font-mono text-xs" /></label>
     <button type="button" className="btn btn-paper" disabled={busy} onClick={() => void run()}>{busy ? "Reading chain…" : "Check anchor on chain"}</button>
-    {res && <ChecksList checks={[res]} />}
+    {shown && <ChecksList checks={[shown]} />}
   </div>;
 }
 
+/** File verifier. Each selection, owner change (parent re-keys) or unmount invalidates older reads. */
 export function ReceiptFileVerifier() {
-  const [v, setV] = useState<ReceiptVerification | null>(null); const [busy, setBusy] = useState(false);
+  const [v, setV] = useState<ReceiptVerification | null>(null); const [busy, setBusy] = useState(false); const [name, setName] = useState("");
+  const scope = useLiveScope("file");
   return <Panel title="Verify a receipt file offline">
-    <p className="text-xs">Runs entirely in your browser: strict parsing, commitments, identity binding, the ML-DSA-65 receipt signature and an exact Greenhouse replay. No Fleuri database is used. CLI: <span className="font-mono">bun scripts/verify-receipt.ts receipt.json [--rpc URL]</span></p>
+    <p className="text-xs">Runs entirely in your browser: strict parsing (duplicate keys rejected), commitments, stored checksums, identity binding, the ML-DSA-65 receipt signature and an exact Greenhouse replay where this build supports the engine. No Fleuri database is used. CLI: <span className="font-mono">bun scripts/verify-receipt.ts receipt.json [--rpc URL]</span></p>
     <input type="file" accept="application/json,.json" aria-label="Research receipt file" onChange={async (e) => {
-      const f = e.target.files?.[0]; if (!f) return; setBusy(true); setV(null);
-      try { await new Promise((r) => setTimeout(r, 20)); setV(f.size > 2_600_000 ? verifyReceiptBundle("x".repeat(2_600_001)) : verifyReceiptBundle(await f.text())); } finally { setBusy(false); }
+      scope.bump(); const t = scope.token(); setV(null); setName("");
+      const f = e.target.files?.[0]; if (!f) { setBusy(false); return; }
+      setBusy(true);
+      try {
+        const text = f.size > RECEIPT_MAX_BYTES ? null : await f.text();
+        if (!scope.live(t)) return;
+        await new Promise((r) => setTimeout(r, 20));
+        if (!scope.live(t)) return;
+        const out = text == null ? { checks: [{ id: "schema" as const, label: "Schema & bounds", status: "fail" as const, detail: "Receipt is larger than the 2.6 MB limit." }], manifest: null, bundle: null, valid: false } : verifyReceiptBundle(text);
+        if (!scope.live(t)) return;
+        setV(out); setName(f.name);
+      } finally { if (scope.live(t)) setBusy(false); }
     }} />
     {busy && <p className="text-sm" role="status">Verifying and replaying…</p>}
-    {v && <><p role="status" className={cn("hair p-2 text-sm font-semibold", v.valid ? "bg-sprout text-paper-light" : "bg-poppy-deep text-paper-light")}>{v.valid ? "Valid signed research receipt." : "Not a valid receipt."} Signature validity shows which key attested these bytes; it does not make the strategy good.</p><ChecksList checks={v.checks} /><AnchorRpcCheck v={v} /></>}
+    {v && <><p role="status" className={cn("hair p-2 text-sm font-semibold", v.valid ? "bg-sprout text-paper-light" : "bg-poppy-deep text-paper-light")}>{v.valid ? "Valid signed research receipt." : "Not a valid receipt."} <span className="font-normal">{name}</span> Signature validity shows which key attested these bytes; it does not make the strategy good.</p><ChecksList checks={v.checks} /><AnchorRpcCheck key={`${v.bundle?.manifestHash}|${name}`} v={v} /></>}
   </Panel>;
 }
