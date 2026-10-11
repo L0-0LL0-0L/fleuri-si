@@ -1,15 +1,16 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { EmptyState, ListSkeleton, PageHeader, SandboxBadge } from "@/components/bits";
 import { FlowerTiles } from "@/components/PixelFlower";
 import { Panel } from "@/components/pq/ui";
 import { ExecutionModeNote, MetricDefinitions, TrialReport, type TrialRow } from "@/components/greenhouse/TrialReport";
-import { LIMITS, SCENARIOS, SCENARIO_INFO, verifyBundle, type ReplayStatus, type Scenario, type TrialConfig } from "@/domain/greenhouse";
+import { LIMITS, SCENARIOS, SCENARIO_INFO, verifyBundle, type ReplayStatus, type Scenario } from "@/domain/greenhouse";
 import { ghMyRuns, ghPublish, ghRun, ghStart } from "@/lib/greenhouse.functions";
 import { cn } from "@/lib/utils";
 import { useGarden } from "@/store/garden";
+import { clearPending, createFence, readPending, writePending, type Pending } from "@/lib/greenhouse-session";
 
 export const Route = createFileRoute("/greenhouse/")({
   validateSearch: z.object({ agent: z.string().max(20).optional(), run: z.string().uuid().optional() }),
@@ -26,9 +27,6 @@ export const Route = createFileRoute("/greenhouse/")({
   component: Greenhouse,
 });
 
-const PENDING = "fleuri.greenhouse.pending.v1";
-type Pending = { requestId: string; config: TrialConfig };
-function readPending(): Pending | null { try { const p = JSON.parse(localStorage.getItem(PENDING) ?? "null"); return p && typeof p.requestId === "string" ? p : null; } catch { return null; } }
 
 function Greenhouse() {
   const { agent: preselect, run: runParam } = Route.useSearch();
@@ -49,32 +47,41 @@ function Greenhouse() {
 
   const agents = state ? Object.values(state.agents).filter((a) => a.status !== "archived").sort((a, b) => a.handle.localeCompare(b.handle)) : [];
   const handles = Object.fromEntries(agents.map((a) => [a.id, a.handle]));
-  useEffect(() => { setPending(readPending()); }, []);
+  const fence = useRef(createFence()).current;
+  // Session change: drop every owner-scoped view and fence out late responses for the old owner.
+  useEffect(() => {
+    fence.bump();
+    setCurrent(null); setRuns(null); setError(""); setBusy(null); setImported(null);
+    setPending(readPending(userId, localStorage));
+  }, [userId]);
   useEffect(() => {
     if (!state || !preselect) return;
     const a = Object.values(state.agents).find((x) => x.handle === preselect);
     if (a) setPicked((p) => (p.includes(a.id) ? p : [a.id, ...p].slice(0, LIMITS.agents)));
   }, [state?.version, preselect]);
-  async function loadRuns() { if (!store.get().userId) return setRuns(null); const r = await ghMyRuns(); if (r.ok) setRuns(r.data); else setError(r.error); }
+  async function loadRuns(g = fence.current()) { if (!store.get().userId) return setRuns(null); const r = await ghMyRuns(); if (!fence.guard(g)) return; if (r.ok) setRuns(r.data); else setError(r.error); }
   useEffect(() => { void loadRuns(); }, [userId]);
-  async function open(id: string) {
+  async function open(id: string, g = fence.current()) {
     setBusy("Loading trial…"); setError("");
-    try { const r = await ghRun({ data: { id } }); if (!r.ok) throw new Error(r.error); setCurrent(r.data as TrialRow); void navigate({ search: (s) => ({ ...s, run: id }), replace: true }); }
-    catch (e) { setError((e as Error).message); } finally { setBusy(null); }
+    try { const r = await ghRun({ data: { id } }); if (!fence.guard(g)) return; if (!r.ok) throw new Error(r.error); setCurrent(r.data as TrialRow); void navigate({ search: (s) => ({ ...s, run: id }), replace: true }); }
+    catch (e) { if (fence.guard(g)) setError((e as Error).message); } finally { if (fence.guard(g)) setBusy(null); }
   }
   useEffect(() => { if (userId && runParam && current?.id !== runParam) void open(runParam); }, [userId, runParam]);
 
   async function start(p: Pending) {
+    const owner = userId; if (!owner) return;
+    const g = fence.current();
     setBusy("Running trial on the server…"); setError("");
-    localStorage.setItem(PENDING, JSON.stringify(p)); setPending(p); // saved before the first request: reloads recover the same run
+    writePending(owner, p, localStorage); setPending(p); // saved before the first request: reloads recover the same run
     try {
       const r = await ghStart({ data: p });
+      if (!fence.guard(g)) return;
       if (!r.ok) throw new Error(r.error);
-      if (r.data.status === "running") throw new Error("This trial is still running elsewhere. Try recovering it in a minute.");
-      localStorage.removeItem(PENDING); setPending(null);
+      if (r.data.status === "running") throw new Error("This trial is still running in another attempt. Nothing was recomputed; try recovering it in a minute.");
+      clearPending(owner, localStorage); setPending(null);
       if (r.data.status === "failed") toast.error("That trial failed and was recorded as failed."); else toast.success(r.data.recovered ? "Recovered the saved trial" : "Trial saved");
-      await loadRuns(); await open(r.data.id);
-    } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
+      await loadRuns(g); await open(r.data.id, g);
+    } catch (e) { if (fence.guard(g)) setError((e as Error).message); } finally { if (fence.guard(g)) setBusy(null); }
   }
   function submit() {
     if (!picked.length) return setError("Pick at least one agent.");
@@ -85,7 +92,7 @@ function Greenhouse() {
   async function onImport(file: File) {
     if (file.size > LIMITS.bundleBytes) return setImported({ status: "invalid", detail: "Bundle is larger than the 2 MB limit." });
     setBusy("Verifying bundle…"); await new Promise((r) => setTimeout(r, 20));
-    try { setImported(verifyBundle(await file.text())); } finally { setBusy(null); }
+    try { setImported(verifyBundle(await file.text())); } catch (e) { setImported({ status: "invalid", detail: (e as Error).message }); } finally { setBusy(null); }
   }
 
   if (!state) return <ListSkeleton />;
@@ -106,7 +113,7 @@ function Greenhouse() {
         </Panel>
       ) : (
         <Panel title="Set up a trial">
-          {pending && !busy && <div className="hair space-y-2 bg-paper-deep p-2 text-sm" role="status"><p>An unfinished trial from this browser was not confirmed as saved. Recovering re-uses the same request, so it returns the originally frozen run — never a new snapshot.</p><div className="flex flex-wrap gap-2"><button type="button" className="btn btn-red" onClick={() => void start(pending)}>Recover unfinished trial</button><button type="button" className="btn btn-paper" onClick={() => { localStorage.removeItem(PENDING); setPending(null); }}>Forget it</button></div></div>}
+          {pending && !busy && <div className="hair space-y-2 bg-paper-deep p-2 text-sm" role="status"><p>An unfinished trial from this browser was not confirmed as saved. Recovering re-uses the same request, so it returns the originally frozen run — never a new snapshot.</p><div className="flex flex-wrap gap-2"><button type="button" className="btn btn-red" onClick={() => void start(pending)}>Recover unfinished trial</button><button type="button" className="btn btn-paper" onClick={() => { clearPending(userId, localStorage); setPending(null); }}>Forget it</button></div></div>}
           {!agents.length ? <EmptyState title="no agents yet" body="The garden has no agents to trial." /> : <>
             <fieldset className="space-y-2">
               <legend className="text-sm font-semibold">Agents ({picked.length}/{LIMITS.agents})</legend>
@@ -136,7 +143,7 @@ function Greenhouse() {
       )}
       {error && <p role="alert" className="hair break-words bg-poppy-deep p-2 text-sm text-paper-light">{error}</p>}
 
-      {current && <TrialReport row={current} handles={handles} onPublish={async (pub) => { const r = await ghPublish({ data: { id: current.id, published: pub } }); if (!r.ok) throw new Error(r.error); setCurrent({ ...current, published: r.data.published }); await loadRuns(); }} />}
+      {current && <TrialReport key={current.id} row={current} handles={handles} onPublish={async (pub) => { const r = await ghPublish({ data: { id: current.id, published: pub } }); if (!r.ok) throw new Error(r.error); setCurrent({ ...current, published: r.data.published }); await loadRuns(); }} />}
 
       {userId && <Panel title="Your trials">
         {runs == null ? <p className="text-sm">Loading…</p> : !runs.length ? <p className="text-sm">No trials yet. Your saved trials will appear here.</p> :
