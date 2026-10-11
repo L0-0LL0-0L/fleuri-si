@@ -45,7 +45,7 @@ describe("CA button", () => {
   it("says the token is live on the Meteora bonding curve and keeps the safety warning", () => {
     render(<CaChip />);
     open();
-    expect(screen.getByText(/live/i)).toBeInTheDocument();
+    expect(screen.getByText(/^live$/i)).toBeInTheDocument();
     expect(screen.queryByText(/not live yet|pre-launch/i)).toBeNull();
     expect(screen.queryByText(/graduated|DAMM v2 pool confirmed/i)).toBeNull();
     expect(screen.getByText(/independently verified on Meteora/i)).toBeInTheDocument();
