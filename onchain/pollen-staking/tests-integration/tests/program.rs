@@ -46,7 +46,10 @@ fn put_tok(svm: &mut LiteSVM, mint: Pubkey, owner: Pubkey, amount: u64) -> Pubke
 fn bal(svm: &LiteSVM, k: Pubkey) -> u64 { TokAcc::unpack(&svm.get_account(&k).unwrap().data).unwrap().amount }
 fn now(svm: &mut LiteSVM, t: i64) { let mut c: Clock = svm.get_sysvar(); c.unix_timestamp = t; svm.set_sysvar(&c); svm.expire_blockhash(); }
 
+/// Fresh blockhash per call so identical instructions reach the program (duplicate *bytes* are
+/// covered by `duplicate_signed_bytes_are_rejected`).
 fn send(svm: &mut LiteSVM, ix: Instruction, signers: &[&Keypair]) -> Result<(), String> {
+    svm.expire_blockhash();
     let tx = Transaction::new_signed_with_payer(&[ix], Some(&signers[0].pubkey()), signers, svm.latest_blockhash());
     svm.send_transaction(tx).map(|_| ()).map_err(|e| format!("{:?} {:?}", e.err, e.meta.logs))
 }
@@ -234,4 +237,15 @@ fn harvest_rejects_wrong_program_and_exits_do_not_need_dfs() {
     let s = t0(&e); now(&mut e.svm, s + 7 * DAY);
     withdraw(&mut e, &alice, alice.pubkey(), at).unwrap();
     assert_eq!(bal(&e.svm, at), 10);
+}
+
+#[test]
+fn duplicate_signed_bytes_are_rejected() {
+    let mut e = ready();
+    let (alice, at, _) = user(&mut e, 10);
+    let ix = Instruction { program_id: ps::ID, data: ps::instruction::Stake { amount: 5 }.data(), accounts: ps::accounts::Stake { owner: alice.pubkey(), pool: e.pool, position: position(&e, alice.pubkey()), owner_token: at, principal_vault: e.principal, token_program: spl_token::id(), system_program: system_program::id() }.to_account_metas(None) };
+    let tx = Transaction::new_signed_with_payer(&[ix], Some(&alice.pubkey()), &[&alice], e.svm.latest_blockhash());
+    e.svm.send_transaction(tx.clone()).unwrap();
+    assert!(e.svm.send_transaction(tx).is_err(), "resending identical bytes cannot double-stake");
+    assert_eq!(bal(&e.svm, e.principal), 5);
 }
