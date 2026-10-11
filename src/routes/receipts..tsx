@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { useGarden } from "@/store/garden";
 import type { WalletKind } from "@/services/wallet";
 
-export const Route = createFileRoute("/receipts/$id")({
+export const Route = createFileRoute("/receipts/")({
   head: () => ({ meta: [
     { title: "Research receipt — fleuri" },
     { name: "description", content: "A signed, replayable research receipt for a Greenhouse trial, verifiable offline." },
