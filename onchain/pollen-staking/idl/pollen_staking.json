@@ -1,0 +1,1011 @@
+{
+  "address": "59vLvCAQFHcZg3eYC4ehKQQKeWysUPTS1iQANPzJHQmk",
+  "metadata": {
+    "name": "pollen_staking",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Fleuri Pollen Staking: stake a fixed SPL mint, earn actually collected wSOL fees",
+    "note": "Generated from source with `cargo test --features idl-build __anchor_private_print_idl`; address is a local placeholder, not a deployment."
+  },
+  "instructions": [
+    {
+      "name": "initialize_pool",
+      "discriminator": [
+        95,
+        180,
+        10,
+        172,
+        84,
+        174,
+        232,
+        40
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "program"
+        },
+        {
+          "name": "program_data"
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "stake_mint"
+        },
+        {
+          "name": "reward_mint"
+        },
+        {
+          "name": "principal_vault",
+          "writable": true
+        },
+        {
+          "name": "reward_vault",
+          "writable": true
+        },
+        {
+          "name": "fee_vault"
+        },
+        {
+          "name": "fee_token_vault"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "release_duration",
+          "type": "i64"
+        },
+        {
+          "name": "cooldown",
+          "type": "i64"
+        },
+        {
+          "name": "recipient_index",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "stake",
+      "discriminator": [
+        206,
+        176,
+        202,
+        18,
+        200,
+        209,
+        179,
+        108
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "owner_token",
+          "writable": true
+        },
+        {
+          "name": "principal_vault",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "request_unstake",
+      "discriminator": [
+        44,
+        154,
+        110,
+        253,
+        160,
+        202,
+        54,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "position",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "cancel_unstake",
+      "discriminator": [
+        64,
+        65,
+        53,
+        227,
+        125,
+        153,
+        3,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "position",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "withdraw",
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "pool"
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "owner_token",
+          "writable": true
+        },
+        {
+          "name": "principal_vault",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "claim",
+      "discriminator": [
+        62,
+        198,
+        214,
+        193,
+        213,
+        159,
+        108,
+        210
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "owner_reward",
+          "writable": true
+        },
+        {
+          "name": "reward_vault",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "harvest_fees",
+      "docs": [
+        "Permissionless. Claims this pool's share from the one configured DFS vault."
+      ],
+      "discriminator": [
+        90,
+        149,
+        158,
+        241,
+        163,
+        186,
+        155,
+        202
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "reward_vault",
+          "writable": true
+        },
+        {
+          "name": "reward_mint"
+        },
+        {
+          "name": "fee_vault",
+          "writable": true
+        },
+        {
+          "name": "fee_token_vault",
+          "writable": true
+        },
+        {
+          "name": "dfs_fee_vault_authority"
+        },
+        {
+          "name": "dfs_event_authority"
+        },
+        {
+          "name": "dfs_program"
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "fund_treasury",
+      "docs": [
+        "Treasury funding: tracked separately and never labelled as verified Meteora fees."
+      ],
+      "discriminator": [
+        71,
+        154,
+        45,
+        220,
+        206,
+        32,
+        174,
+        239
+      ],
+      "accounts": [
+        {
+          "name": "funder",
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "funder_token",
+          "writable": true
+        },
+        {
+          "name": "reward_vault",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "release_unallocated",
+      "docs": [
+        "Permissionless. Re-streams rewards released while nobody was staked."
+      ],
+      "discriminator": [
+        18,
+        166,
+        39,
+        110,
+        224,
+        122,
+        47,
+        151
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Pool",
+      "discriminator": [
+        241,
+        154,
+        109,
+        4,
+        17,
+        177,
+        109,
+        188
+      ]
+    },
+    {
+      "name": "Position",
+      "discriminator": [
+        170,
+        188,
+        143,
+        228,
+        122,
+        64,
+        247,
+        208
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "initializer",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "reward_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "principal_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "reward_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_token_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient_index",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "ledger",
+            "type": {
+              "defined": {
+                "name": "Ledger"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Position",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "state",
+            "type": {
+              "defined": {
+                "name": "PositionState"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Ledger",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "duration",
+            "type": "i64"
+          },
+          {
+            "name": "cooldown",
+            "type": "i64"
+          },
+          {
+            "name": "total_active",
+            "type": "u64"
+          },
+          {
+            "name": "acc_per_share",
+            "type": "u128"
+          },
+          {
+            "name": "carry",
+            "type": "u128"
+          },
+          {
+            "name": "stream_amount",
+            "type": "u64"
+          },
+          {
+            "name": "stream_start",
+            "type": "i64"
+          },
+          {
+            "name": "stream_released",
+            "type": "u64"
+          },
+          {
+            "name": "unallocated",
+            "type": "u64"
+          },
+          {
+            "name": "last_update",
+            "type": "i64"
+          },
+          {
+            "name": "verified_fees_total",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_total",
+            "type": "u64"
+          },
+          {
+            "name": "distributed_total",
+            "type": "u64"
+          },
+          {
+            "name": "claimed_total",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PositionState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "active",
+            "type": "u64"
+          },
+          {
+            "name": "checkpoint",
+            "type": "u128"
+          },
+          {
+            "name": "frac",
+            "type": "u128"
+          },
+          {
+            "name": "owed",
+            "type": "u64"
+          },
+          {
+            "name": "pending_amount",
+            "type": "u64"
+          },
+          {
+            "name": "unlock_ts",
+            "type": "i64"
+          },
+          {
+            "name": "claimed_total",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Claimed",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "FeesHarvested",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "PoolInitialized",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "fee_vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "release_duration",
+            "type": "i64"
+          },
+          {
+            "name": "cooldown",
+            "type": "i64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "Staked",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "active",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "TreasuryFunded",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "funder",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "UnallocatedReleased",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "UnstakeCancelled",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "UnstakeRequested",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "unlock_ts",
+            "type": "i64"
+          }
+        ],
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "Withdrawn",
+      "type": {
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ],
+        "kind": "struct"
+      }
+    }
+  ],
+  "events": [
+    {
+      "discriminator": [
+        217,
+        192,
+        123,
+        72,
+        108,
+        150,
+        248,
+        33
+      ],
+      "name": "Claimed"
+    },
+    {
+      "discriminator": [
+        30,
+        236,
+        182,
+        190,
+        77,
+        254,
+        76,
+        10
+      ],
+      "name": "FeesHarvested"
+    },
+    {
+      "discriminator": [
+        100,
+        118,
+        173,
+        87,
+        12,
+        198,
+        254,
+        229
+      ],
+      "name": "PoolInitialized"
+    },
+    {
+      "discriminator": [
+        11,
+        146,
+        45,
+        205,
+        230,
+        58,
+        213,
+        240
+      ],
+      "name": "Staked"
+    },
+    {
+      "discriminator": [
+        172,
+        66,
+        241,
+        101,
+        216,
+        219,
+        147,
+        130
+      ],
+      "name": "TreasuryFunded"
+    },
+    {
+      "discriminator": [
+        97,
+        59,
+        190,
+        180,
+        185,
+        194,
+        62,
+        203
+      ],
+      "name": "UnallocatedReleased"
+    },
+    {
+      "discriminator": [
+        102,
+        223,
+        189,
+        101,
+        201,
+        223,
+        180,
+        38
+      ],
+      "name": "UnstakeCancelled"
+    },
+    {
+      "discriminator": [
+        21,
+        253,
+        177,
+        85,
+        129,
+        206,
+        42,
+        152
+      ],
+      "name": "UnstakeRequested"
+    },
+    {
+      "discriminator": [
+        20,
+        89,
+        223,
+        198,
+        194,
+        124,
+        219,
+        13
+      ],
+      "name": "Withdrawn"
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotUpgradeAuthority",
+      "msg": "Signer is not the program upgrade authority"
+    },
+    {
+      "code": 6001,
+      "name": "MintAuthorityPresent",
+      "msg": "Stake mint still has a mint authority"
+    },
+    {
+      "code": 6002,
+      "name": "FreezeAuthorityPresent",
+      "msg": "Stake mint still has a freeze authority"
+    },
+    {
+      "code": 6003,
+      "name": "BadMint",
+      "msg": "Wrong mint"
+    },
+    {
+      "code": 6004,
+      "name": "BadTerms",
+      "msg": "Release duration and cooldown must be between 1 hour and 365 days"
+    },
+    {
+      "code": 6005,
+      "name": "BadFeeVault",
+      "msg": "Fee vault is not the configured Dynamic Fee Sharing wSOL vault"
+    },
+    {
+      "code": 6006,
+      "name": "BadRecipient",
+      "msg": "Pool PDA is not the fee vault recipient at this index"
+    },
+    {
+      "code": 6007,
+      "name": "BadProgram",
+      "msg": "Wrong program"
+    },
+    {
+      "code": 6008,
+      "name": "BadVault",
+      "msg": "Wrong vault"
+    },
+    {
+      "code": 6009,
+      "name": "WrongOwner",
+      "msg": "Wrong position owner"
+    },
+    {
+      "code": 6010,
+      "name": "DelegatedDestination",
+      "msg": "Destination has a delegate or close authority"
+    },
+    {
+      "code": 6011,
+      "name": "ZeroAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6012,
+      "name": "InsufficientBalance",
+      "msg": "Insufficient balance"
+    },
+    {
+      "code": 6013,
+      "name": "PendingExists",
+      "msg": "A withdrawal is already pending"
+    },
+    {
+      "code": 6014,
+      "name": "NoPending",
+      "msg": "No pending withdrawal"
+    },
+    {
+      "code": 6015,
+      "name": "Cooling",
+      "msg": "Cooldown has not ended"
+    },
+    {
+      "code": 6016,
+      "name": "NoStake",
+      "msg": "No active stake"
+    },
+    {
+      "code": 6017,
+      "name": "NothingToClaim",
+      "msg": "Nothing to claim"
+    },
+    {
+      "code": 6018,
+      "name": "NothingToHarvest",
+      "msg": "Harvest received nothing"
+    },
+    {
+      "code": 6019,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    }
+  ]
+}
