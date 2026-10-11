@@ -80,7 +80,7 @@ function StakingPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Deposit readiness">
           <ul className="space-y-1 text-sm">
-            {st.checks.map((c: any) => <li key={c.id} className="flex gap-2"><span aria-hidden className={c.ok ? "text-leaf" : "text-poppy-deep"}>{c.ok ? "✓" : "✕"}</span><span className="min-w-0 break-words"><strong>{c.label}.</strong> {c.detail}</span></li>)}
+            {st.checks.map((c: any) => <li key={c.id} className="flex gap-2"><span aria-hidden className={c.ok ? "text-sprout" : "text-poppy-deep"}>{c.ok ? "✓" : "✕"}</span><span className="min-w-0 break-words"><strong>{c.label}.</strong> {c.detail}</span></li>)}
           </ul>
           <p className="text-xs">{st.depositsEnabled ? "All checks pass." : "Deposits stay blocked until every check passes."}</p>
         </Panel>
