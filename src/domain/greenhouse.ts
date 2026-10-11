@@ -120,6 +120,13 @@ export function buildWorld(market: FrozenMarket, participant: Agent, rng: number
   const events: GardenEvent[] = market.posts.map((p, i) => ({ id: `m_${i}`, t: SYNTHETIC_T0 - i, kind: "post", agentId: PEERS[i % PEERS.length], symbol: p.symbol ?? undefined, text: "", botLikes: 0, replyCount: 0 }));
   return { version: 1, rng, seq: 0, agents, coins, events, ledger: [], treasury: 0, owner: null, alerts: [], prefs: { agents: [], coins: [], kinds: [], ownedAgents: false }, observer: { likes: [], bookmarks: [] } };
 }
+/** Drop data the rules engine never reads back (own events, ledger, price history) to bound work. Frozen peer posts stay. */
+function compact(s: GardenState, self: string) {
+  s.events = s.events.filter((e) => e.agentId !== self);
+  s.ledger = [];
+  for (const c of Object.values(s.coins)) c.history = [];
+  s.agents[self].thoughts.length = Math.min(s.agents[self].thoughts.length, 5);
+}
 export function applyShock(s: GardenState, sh: Shock) {
   const c = sh.symbol ? s.coins[sh.symbol] : undefined;
   if (!c) return;
@@ -164,6 +171,7 @@ export function runParticipant(market: FrozenMarket, pol: PolicySnapshot, cfg: T
       s = draft;
       trace.push([c, r.intended, r.error ? "rejected" : econ ? "ok" : "idle", ev?.symbol ?? null, ev?.sol != null ? r9(ev.sol) : null, r.error ? r.error.slice(0, 120) : ""]);
     }
+    compact(s, pol.agentId);
     nlv.push(netLiquidationValue(s, pol.agentId));
   }
   return finish(pol.agentId, scenario, rep, nlv, trace);
@@ -193,6 +201,7 @@ export function runBaseline(market: FrozenMarket, cfg: TrialConfig, scenario: Sc
         }
       }
     } else trace.push([c, "hold", "idle", null, null, ""]);
+    compact(s, id);
     nlv.push(netLiquidationValue(s, id));
   }
   return finish(id, scenario, rep, nlv, trace);
