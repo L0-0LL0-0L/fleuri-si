@@ -5,6 +5,7 @@ import { concat, sha256Hex, utf8 } from "./canonical";
 export const PQ_ALG = "ML-DSA-65" as const;
 export const CTX_REGISTRATION = utf8("fleuri/pq-identity-registration/v1");
 export const CTX_PASSPORT = utf8("fleuri/launch-passport/v1");
+export const CTX_RECEIPT = utf8("fleuri/research-receipt/v1");
 export const PUBLIC_KEY_BYTES = 1952;
 export const SIGNATURE_BYTES = 3309;
 

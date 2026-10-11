@@ -28,6 +28,8 @@ import { Route as AHandleRouteImport } from './routes/a.$handle'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
 import { Route as GreenhouseIndexRouteImport } from './routes/greenhouse.index'
 import { Route as PassportHashRouteImport } from './routes/passport.$hash'
+import { Route as ReceiptsIndexRouteImport } from './routes/receipts.index'
+import { Route as ReceiptsNewRouteImport } from './routes/receipts.new'
 import { Route as TMintRouteImport } from './routes/t.$mint'
 import { Route as GreenhouseRIdRouteImport } from './routes/greenhouse.r.$id'
 import { Route as ApiPublicBotanistReportRouteImport } from './routes/api/public/botanist/report'
@@ -128,6 +130,16 @@ const PassportHashRoute = PassportHashRouteImport.update({
   path: '/passport/$hash',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReceiptsIndexRoute = ReceiptsIndexRouteImport.update({
+  id: '/receipts/',
+  path: '/receipts/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceiptsNewRoute = ReceiptsNewRouteImport.update({
+  id: '/receipts/new',
+  path: '/receipts/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TMintRoute = TMintRouteImport.update({
   id: '/t/$mint',
   path: '/t/$mint',
@@ -168,8 +180,10 @@ export interface FileRoutesByFullPath {
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
+  '/receipts/new': typeof ReceiptsNewRoute
   '/t/$mint': typeof TMintRoute
   '/greenhouse/': typeof GreenhouseIndexRoute
+  '/receipts/': typeof ReceiptsIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
   '/api/public/botanist/report': typeof ApiPublicBotanistReportRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
@@ -193,8 +207,10 @@ export interface FileRoutesByTo {
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
+  '/receipts/new': typeof ReceiptsNewRoute
   '/t/$mint': typeof TMintRoute
   '/greenhouse': typeof GreenhouseIndexRoute
+  '/receipts': typeof ReceiptsIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
   '/api/public/botanist/report': typeof ApiPublicBotanistReportRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
@@ -219,8 +235,10 @@ export interface FileRoutesById {
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
+  '/receipts/new': typeof ReceiptsNewRoute
   '/t/$mint': typeof TMintRoute
   '/greenhouse/': typeof GreenhouseIndexRoute
+  '/receipts/': typeof ReceiptsIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
   '/api/public/botanist/report': typeof ApiPublicBotanistReportRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
@@ -246,8 +264,10 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/c/$symbol'
     | '/passport/$hash'
+    | '/receipts/new'
     | '/t/$mint'
     | '/greenhouse/'
+    | '/receipts/'
     | '/greenhouse/r/$id'
     | '/api/public/botanist/report'
     | '/api/public/garden/tick'
@@ -271,8 +291,10 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/c/$symbol'
     | '/passport/$hash'
+    | '/receipts/new'
     | '/t/$mint'
     | '/greenhouse'
+    | '/receipts'
     | '/greenhouse/r/$id'
     | '/api/public/botanist/report'
     | '/api/public/garden/tick'
@@ -296,8 +318,10 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/c/$symbol'
     | '/passport/$hash'
+    | '/receipts/new'
     | '/t/$mint'
     | '/greenhouse/'
+    | '/receipts/'
     | '/greenhouse/r/$id'
     | '/api/public/botanist/report'
     | '/api/public/garden/tick'
@@ -322,8 +346,10 @@ export interface RootRouteChildren {
   AHandleRoute: typeof AHandleRoute
   CSymbolRoute: typeof CSymbolRoute
   PassportHashRoute: typeof PassportHashRoute
+  ReceiptsNewRoute: typeof ReceiptsNewRoute
   TMintRoute: typeof TMintRoute
   GreenhouseIndexRoute: typeof GreenhouseIndexRoute
+  ReceiptsIndexRoute: typeof ReceiptsIndexRoute
   GreenhouseRIdRoute: typeof GreenhouseRIdRoute
   ApiPublicBotanistReportRoute: typeof ApiPublicBotanistReportRoute
   ApiPublicGardenTickRoute: typeof ApiPublicGardenTickRoute
@@ -464,6 +490,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PassportHashRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/receipts/': {
+      id: '/receipts/'
+      path: '/receipts'
+      fullPath: '/receipts/'
+      preLoaderRoute: typeof ReceiptsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/receipts/new': {
+      id: '/receipts/new'
+      path: '/receipts/new'
+      fullPath: '/receipts/new'
+      preLoaderRoute: typeof ReceiptsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/t/$mint': {
       id: '/t/$mint'
       path: '/t/$mint'
@@ -514,8 +554,10 @@ const rootRouteChildren: RootRouteChildren = {
   AHandleRoute: AHandleRoute,
   CSymbolRoute: CSymbolRoute,
   PassportHashRoute: PassportHashRoute,
+  ReceiptsNewRoute: ReceiptsNewRoute,
   TMintRoute: TMintRoute,
   GreenhouseIndexRoute: GreenhouseIndexRoute,
+  ReceiptsIndexRoute: ReceiptsIndexRoute,
   GreenhouseRIdRoute: GreenhouseRIdRoute,
   ApiPublicBotanistReportRoute: ApiPublicBotanistReportRoute,
   ApiPublicGardenTickRoute: ApiPublicGardenTickRoute,

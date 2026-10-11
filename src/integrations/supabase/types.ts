@@ -1090,6 +1090,100 @@ export type Database = {
         }
         Relationships: []
       }
+      research_receipts: {
+        Row: {
+          anchor_preparation_id: string | null
+          anchor_signature: string | null
+          anchor_slot: number | null
+          anchor_status: string
+          anchored_at: string | null
+          created_at: string
+          experiment: Json
+          id: string
+          identity_id: string
+          identity_proof: Json | null
+          manifest: Json
+          manifest_hash: string
+          owner_id: string
+          public_key: string | null
+          published: boolean
+          published_at: string | null
+          request_id: string
+          run_id: string
+          signature: string | null
+          signed_at: string | null
+          status: string
+        }
+        Insert: {
+          anchor_preparation_id?: string | null
+          anchor_signature?: string | null
+          anchor_slot?: number | null
+          anchor_status?: string
+          anchored_at?: string | null
+          created_at?: string
+          experiment: Json
+          id: string
+          identity_id: string
+          identity_proof?: Json | null
+          manifest: Json
+          manifest_hash: string
+          owner_id: string
+          public_key?: string | null
+          published?: boolean
+          published_at?: string | null
+          request_id: string
+          run_id: string
+          signature?: string | null
+          signed_at?: string | null
+          status?: string
+        }
+        Update: {
+          anchor_preparation_id?: string | null
+          anchor_signature?: string | null
+          anchor_slot?: number | null
+          anchor_status?: string
+          anchored_at?: string | null
+          created_at?: string
+          experiment?: Json
+          id?: string
+          identity_id?: string
+          identity_proof?: Json | null
+          manifest?: Json
+          manifest_hash?: string
+          owner_id?: string
+          public_key?: string | null
+          published?: boolean
+          published_at?: string | null
+          request_id?: string
+          run_id?: string
+          signature?: string | null
+          signed_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "research_receipts_anchor_preparation_id_fkey"
+            columns: ["anchor_preparation_id"]
+            isOneToOne: false
+            referencedRelation: "chain_preparations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "research_receipts_identity_id_fkey"
+            columns: ["identity_id"]
+            isOneToOne: false
+            referencedRelation: "pq_identities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "research_receipts_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "greenhouse_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saves: {
         Row: {
           event_id: string
@@ -1733,6 +1827,63 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      research_create_anchor_preparation: {
+        Args: { _id: string; _owner: string; _row: Json }
+        Returns: {
+          cluster: string
+          confirmed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          kind: string
+          message_b64: string
+          message_hash: string
+          owner_id: string
+          payload: Json
+          signature: string | null
+          signed_transaction_b64: string | null
+          subject: string
+          submitted_at: string | null
+          transaction_b64: string | null
+          wallet: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "chain_preparations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      research_create_draft: {
+        Args: { _owner: string; _r: Json; _request: string }
+        Returns: Json
+      }
+      research_record_anchor: {
+        Args: {
+          _id: string
+          _ok: boolean
+          _owner: string
+          _prep: string
+          _signature: string
+          _slot: number
+        }
+        Returns: Json
+      }
+      research_set_published: {
+        Args: { _id: string; _owner: string; _published: boolean }
+        Returns: Json
+      }
+      research_sign: {
+        Args: {
+          _hash: string
+          _id: string
+          _owner: string
+          _proof: Json
+          _public_key: string
+          _signature: string
+        }
+        Returns: Json
       }
     }
     Enums: {

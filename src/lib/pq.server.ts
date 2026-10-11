@@ -130,6 +130,7 @@ export async function confirmPrepared(ownerId: string, preparationId: string): P
   if (!tx) return { status: "pending", detail: "Waiting for confirmation…" };
   if (messageHash(tx.serialized) !== prep.message_hash) throw new Error("Confirmed transaction differs from the prepared message.");
   if (!tx.signers.includes(prep.wallet)) throw new Error("Wallet did not sign the confirmed transaction.");
+  if (prep.kind === "receipt_anchor") { const rr = await import("./research.server"); return rr.confirmReceiptAnchor(d, prep, tx, sol.MEMO_PROGRAM_ID.toBase58(), ownerId); }
   if (tx.err) {
     // Confirmation is terminal even when the chain reports failure. Keep the
     // signed audit record, clear the pending queue, and never publish a launch.
@@ -482,4 +483,22 @@ export async function verifyPublic(input: { passport?: unknown; hash?: string })
     } else if(ok) add("image","Image content hash","unavailable","Passport binds the immutable image CID; no separate SHA-256 image hash was supplied.");
   } catch(err) {add("metadata","Pinned passport and image URI","unavailable",(err as Error).message);}
   return {checks,passport:signed,launch,metadataUri:rec.metadata_uri};
+}
+
+// ---------- research receipt anchors ----------
+export async function prepareReceiptAnchor(ownerId: string, receiptId: string) {
+  const d = await db();
+  const row = must(await d.from("research_receipts").select("id,status,manifest,manifest_hash,anchor_status").eq("id", receiptId).eq("owner_id", ownerId).maybeSingle());
+  if (!row || row.status !== "signed") throw new Error("Only your own signed receipts can be anchored.");
+  const e = env();
+  if (row.manifest.cluster !== e.cluster) throw new Error(`This receipt was issued on ${row.manifest.cluster}; the server is on ${e.cluster}.`);
+  const conn = sol.connection();
+  await sol.assertGenesis(conn, e.cluster);
+  const { receiptMemo } = await import("@/pq/receipt");
+  const memo = receiptMemo(row.manifest_hash);
+  const wallet = row.manifest.issuer.wallet;
+  const built = await sol.buildMemoTx(conn, wallet, memo);
+  const cost = await sol.estimateWalletCost(conn, built.message, wallet);
+  const prep = must(await d.rpc("research_create_anchor_preparation", { _owner: ownerId, _id: receiptId, _row: { wallet, cluster: e.cluster, subject: receiptId, message_hash: messageHash(built.message), message_b64: b64(built.message), transaction_b64: sol.unsignedB64(built.tx), payload: { memo, receiptId, manifestHash: row.manifest_hash, lastValidBlockHeight: built.lastValidBlockHeight }, expires_at: new Date(Date.now() + PREP_TTL_MS).toISOString() } }), "Could not prepare the anchor");
+  return { preparationId: prep.id, expiresAt: prep.expires_at, transaction: prep.transaction_b64, memo: prep.payload.memo, wallet: prep.wallet, cluster: prep.cluster, cost, reused: prep.transaction_b64 !== sol.unsignedB64(built.tx) };
 }
