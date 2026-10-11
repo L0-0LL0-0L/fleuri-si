@@ -44,8 +44,9 @@ create table if not exists public.greenhouse_evidence (
 );
 
 revoke all on public.greenhouse_runs, public.greenhouse_evidence from anon, authenticated;
-grant select on public.greenhouse_runs to anon, authenticated;
-grant select on public.greenhouse_evidence to authenticated;
+-- Column grants: owner_id/request_id are never readable through the Data API.
+grant select (id,status,engine_version,agent_ids,input,input_hash,output,output_hash,content_hash,published,published_at,attempts,error,created_at,claimed_at,finished_at) on public.greenhouse_runs to anon, authenticated;
+grant select (id,proposal_id,run_id,origin_agent_id,run_policy_hash,proposal_policy_hash,engine_version,content_hash,repetitions,scenarios,attached_at) on public.greenhouse_evidence to authenticated;
 grant all on public.greenhouse_runs, public.greenhouse_evidence to service_role;
 alter table public.greenhouse_runs enable row level security;
 alter table public.greenhouse_evidence enable row level security;
