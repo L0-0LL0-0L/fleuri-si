@@ -90,8 +90,9 @@ function Launchpad() {
     try {await fn();} catch(e) {if(mounted.current&&fence.guard(g)) {setError((e as Error).message); await refresh().catch(()=>{});}} finally {if(mounted.current) setBusy(null);}
   }
   async function review() {
-    const rk=reviewRef.current; const g=fence.current();
-    const stale=()=>!mounted.current||!fence.guard(g)||reviewRef.current!==rk;
+    const rk=reviewRef.current; const g=fence.current(); const owner=store.get().userId;
+    const stale=()=>!mounted.current||!fence.guard(g)||reviewRef.current!==rk||store.get().userId!==owner;
+    if(stale()) return;
     if(!identity || !local.unlocked || !local.backupAck || !readiness?.ready) throw new Error("Back up, unlock and anchor your identity, then resolve the readiness checks.");
     let uri=imageUri, hash=imageHash;
     if(file) {
@@ -115,15 +116,16 @@ function Launchpad() {
     // Capture the exact signed passport, co-signer and approval scope BEFORE any await.
     const passport=signed, coSigner=mint.current, proposal=usedProposal;
     if(!passport || !coSigner) throw new Error("Sign this draft before launching.");
-    const scope=scopeRef.current, coKey=coSigner.publicKey.toBase58(), g=fence.current();
-    const live=()=>mounted.current&&fence.guard(g)&&scopeRef.current===scope&&mint.current?.publicKey.toBase58()===coKey;
+    const scope=scopeRef.current, coKey=coSigner.publicKey.toBase58(), g=fence.current(), owner=store.get().userId;
+    const live=()=>mounted.current&&fence.guard(g)&&store.get().userId===owner&&(userId??null)===owner&&scopeRef.current===scope&&mint.current?.publicKey.toBase58()===coKey;
+    if(!live()) throw new ScopeChangedError("The account or review changed. Nothing was sent.");
     walletCtrl.current?.abort(); const ctrl=new AbortController(); walletCtrl.current=ctrl;
     setBusy("Preparing immutable metadata and the Meteora transaction…");
     const p=await pqPrepareLaunch({data:{passport}});
     if(!live()||ctrl.signal.aborted) throw new ScopeChangedError("The review, account or mint changed while preparing. Nothing was sent.");
     if(!p.ok) throw new Error(p.error);
     const r=await signSubmitConfirm(kind,p.data,{coSign:[coSigner],onStatus:(x)=>{if(live()) setBusy(x);},guard:live,signal:ctrl.signal});
-    if(!mounted.current||!fence.guard(g)) return;
+    if(!live()) return;
     setDone({signature:r.signature,hash:passport.manifestHash}); if(mint.current?.publicKey.toBase58()===coKey) mint.current=null;
     if(proposal) {await pqSetProposalStatus({data:{id:proposal,status:"launched"}}); if(mounted.current&&fence.guard(g)) setUsedProposal(null);}
     if(!mounted.current||!fence.guard(g)) return;

@@ -23,12 +23,12 @@ vi.mock("@/components/receipts/ManifestReview", () => ({ ManifestReview: ({ hash
 vi.mock("@/components/greenhouse/TrialReport", () => ({ TrialReport: () => null }));
 vi.mock("@/components/PixelFlower", () => ({ FlowerTiles: () => null }));
 vi.mock("@/components/bits", () => ({ PageHeader: () => null, ListSkeleton: () => <p>loading</p>, EmptyState: ({ body }: any) => <p>{body}</p>, CopyLink: () => null }));
-vi.mock("./receipts.index", () => ({ ScopeNote: () => null }));
+vi.mock("@/routes/receipts.index", () => ({ ScopeNote: () => null }));
 vi.mock("@/pq/receipt", () => ({ verifyReceiptBundle: () => ({ valid: true, checks: [] }), isLegacyManifest: () => false }));
 vi.mock("@/pq/anchor-review", () => ({ reviewAnchorPrep: () => ({ ok: true, problems: [], memo: "m", feePayer: "W", signers: ["W"] }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), info: vi.fn() } }));
 
-import { ReceiptPage } from "./receipts.$id";
+import { ReceiptPage } from "@/routes/receipts.$id";
 import { rrGet, rrPrepareAnchor, rrPublic } from "@/lib/research.functions";
 
 const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";

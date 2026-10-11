@@ -69,6 +69,7 @@ export function ReceiptPage() {
 
 function ReceiptDetail({ row, reload, owner }: { row: any; reload: () => Promise<void>; owner: string | null }) {
   const wallets = useWallets();
+  const { store } = useGarden(); const ownerLive = () => store.get().userId === owner; // the store can change before props
   const v = useMemo(() => (row.bundle ? verifyReceiptBundle(JSON.parse(JSON.stringify(row.bundle)), { domain: row.manifest.domain }) : null), [row]);
   const [busy, setBusy] = useState<string | null>(null); const [msg, setMsg] = useState("");
   const [reviewPub, setReviewPub] = useState(false); const [anchor, setAnchor] = useState<AnchorPrep | null>(null);
@@ -84,14 +85,15 @@ function ReceiptDetail({ row, reload, owner }: { row: any; reload: () => Promise
   const review = useMemo(() => anchor ? reviewAnchorPrep(anchor, { wallet: row.manifest.issuer.wallet, cluster: row.manifest.cluster, genesisHash: row.manifest.genesisHash, manifestHash: row.manifest_hash }) : null, [anchor, row]);
   const trial: TrialRow = { id: row.manifest.source.runId, status: "done", engine_version: row.experiment.input.engineVersion, agent_ids: row.experiment.input.config.agentIds, input: row.experiment.input, output: row.experiment.output, input_hash: row.experiment.inputHash, output_hash: row.experiment.outputHash, content_hash: row.experiment.contentHash, published: false, created_at: row.experiment.createdAt, finished_at: null, error: null };
   async function loadPreps() {
-    if (!row.mine) return; const t = scope.token();
+    if (!row.mine || !ownerLive()) return; const t = scope.token();
     const m = await pqMine().catch((e) => ({ ok: false as const, error: (e as Error).message }));
-    if (!scope.live(t)) return;
+    if (!scope.live(t) || !ownerLive()) return;
     if (m.ok) { setPreps(m.data.preparations.filter((p: any) => p.kind === "receipt_anchor" && p.subject === row.id)); setPrepErr(""); } else setPrepErr(m.error);
   }
   useEffect(() => { void loadPreps(); }, [row.id]);
   async function act(label: string, fn: (live: () => boolean) => Promise<void>) {
-    const t = scope.token(); const op = ++opRef.current; const live = () => scope.live(t);
+    const t = scope.token(); const op = ++opRef.current; const live = () => scope.live(t) && ownerLive();
+    if (!live()) return;
     setBusy(label); setMsg("");
     // Only the owning (latest) operation clears busy; an older completion never clears a newer one.
     try { await fn(live); } catch (e) { if (live() && opRef.current === op) setMsg((e as Error).message); } finally { if (live() && opRef.current === op) setBusy(null); }
@@ -103,7 +105,7 @@ function ReceiptDetail({ row, reload, owner }: { row: any; reload: () => Promise
     const prep = anchor; const scopeKey = scope.token();
     walletCtrl.current?.abort(); const ctrl = new AbortController(); walletCtrl.current = ctrl;
     return act("Preparing…", async (live) => {
-      const r = await signSubmitConfirm(k, prep, { onStatus: (s) => live() && setBusy(s), guard: () => scope.live(scopeKey) && !ctrl.signal.aborted && anchorRef.current?.preparationId === prep.preparationId && Date.parse(prep.expiresAt) > Date.now(), signal: ctrl.signal });
+      const r = await signSubmitConfirm(k, prep, { onStatus: (s) => live() && setBusy(s), guard: () => scope.live(scopeKey) && ownerLive() && !ctrl.signal.aborted && anchorRef.current?.preparationId === prep.preparationId && Date.parse(prep.expiresAt) > Date.now(), signal: ctrl.signal });
       if (!live() || ctrl.signal.aborted || anchorRef.current?.preparationId !== prep.preparationId) return; // cancelled or replaced
       setAnchor(null); toast.success(r.detail); await reload(); await loadPreps();
     });
@@ -142,7 +144,7 @@ function ReceiptDetail({ row, reload, owner }: { row: any; reload: () => Promise
       {msg && <p role="alert" className="break-words text-sm text-poppy-deep">{msg}</p>}
     </Panel>
     {row.mine && prepErr && <p role="alert" className="text-sm text-poppy-deep">Could not load pending transactions: {prepErr}</p>}
-    {row.mine && <PendingTransactions rows={preps} onRefresh={async () => { const t = scope.token(); if (!scope.live(t)) return; await reload(); if (scope.live(t)) await loadPreps(); }} />}
+    {row.mine && <PendingTransactions rows={preps} onRefresh={async () => { const t = scope.token(); if (!scope.live(t) || !ownerLive()) return; await reload(); if (scope.live(t)) await loadPreps(); }} />}
     <ScopeNote />
     <Panel title="Signed manifest"><ManifestReview m={row.manifest} hash={row.manifest_hash} /></Panel>
     <TrialReport key={trial.id} row={trial} handles={{}} receiptView />
