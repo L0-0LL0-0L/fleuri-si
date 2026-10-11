@@ -3,7 +3,7 @@
  *
  * Verified on chain, 11 October 2026 (~14:00 UTC): the mint exists with supply
  * 999,999,999.999908 (6 decimals), mint authority revoked, freeze authority still
- * set. It trades on a Meteora DBC bonding curve — pool `Doz2NHbYq3suCN2bHTqEUYPVZdpobVgfqqhZEWR3AWnK`
+ * set. Re-read 11 October 2026 ~15:20 UTC: freeze authority is now revoked as well (always read live). It trades on a Meteora DBC bonding curve — pool `Doz2NHbYq3suCN2bHTqEUYPVZdpobVgfqqhZEWR3AWnK`
  * (launch tx `549h8cejoCkTeTjFuHBTnHpPU3ndHabbGyFBS5L8hjg1q2uy7WDMft7JKZ9gKpAjvDNjo8rZTDKmbzc87J8dQGRB`).
  * The pool uses Meteora config `BLFWLUXLc5Ba6ihWBRcEb3xdMXx2YUJtZJHqRsK3MMqu`, so this
  * launch is NOT recorded through fleuri's own launchpad (its config is `GCUPDN6mau1Y2wAUGLtFBiTaiddZwB8592qAG4mKY8Ta`)
