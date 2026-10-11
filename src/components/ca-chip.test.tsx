@@ -42,11 +42,14 @@ describe("CA button", () => {
     expect(screen.getByRole("button", { name: /copied/i })).toBeInTheDocument();
   });
 
-  it("says the address is not live yet instead of implying a live market", () => {
+  it("says the token is live on the Meteora bonding curve and keeps the safety warning", () => {
     render(<CaChip />);
     open();
-    expect(screen.getByText(/not live yet/i)).toBeInTheDocument();
-    expect(screen.queryByText(/live price|graduated|holders/i)).toBeNull();
+    expect(screen.getByText(/live/i)).toBeInTheDocument();
+    expect(screen.queryByText(/not live yet|pre-launch/i)).toBeNull();
+    expect(screen.queryByText(/graduated|DAMM v2 pool confirmed/i)).toBeNull();
+    expect(screen.getByText(/independently verified on Meteora/i)).toBeInTheDocument();
+    expect(screen.getByText(/minted and trading on a Meteora bonding curve/i)).toBeInTheDocument();
   });
 
   it("closes on Escape", () => {
