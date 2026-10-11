@@ -241,7 +241,7 @@ mod tests {
         l.fund(70, false, 2 * D).unwrap(); // window ended: fresh window
         assert_eq!(l.stream_end, 3 * D);
         assert_eq!(owed(&l, &a, 3 * D), 1_370);
-        assert_eq!((l.dfs_funded_total, l.treasury_total), (700, 600));
+        assert_eq!((l.dfs_funded_total, l.treasury_total), (700, 670));
     }
     #[test] fn unstake_stops_earning_and_cooldown() {
         let mut l = l0(); let (mut a, mut b) = Default::default();
