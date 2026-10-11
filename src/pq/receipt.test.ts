@@ -12,7 +12,7 @@ import { bundleFromStored, contentHash, freezeMarket, inputHash, makeInput, outp
 import { DOMAIN, identityFor, runFixture } from "./receipt-fixtures";
 let kp: PqKeypair, wallet: Keypair, identity: IdentityProof, run: any;
 function make(over: { run?: any; id?: IdentityProof } = {}) {
-  const r = over.run ?? run, idt = over.id ?? identity;
+  const r = structuredClone(over.run ?? run), idt = over.id ?? identity; // edits in one test must not leak into the shared fixture
   const experiment = bundleFromStored(r);
   const manifest = buildManifest({ run: r, experiment, identity: idt, receiptId: "44444444-4444-4444-8444-444444444444", createdAt: "2026-10-11T01:00:00Z", domain: DOMAIN });
   const s = signReceipt(manifest, kp);
