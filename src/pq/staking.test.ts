@@ -4,21 +4,21 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 import fixture from "../../onchain/pollen-staking/fixtures/layout.json";
 import {
   ACTIONS, PLACEHOLDER_PROGRAM_ID, STAKE_MINT, STAKING_IDL, TOKEN_PROGRAM, WSOL, buildHarvestIx, buildIx, claimableAt, decodePool, decodeProgramData,
-  derive, fixtureReader, parseEvents, readLedger, readPositionState, readiness, updateLedger, type Ledger, type PositionState, type ReadinessFacts,
+  derive, fixtureReader, parseEvents, readLedger, readPositionState, readiness, updateLedger, fundLedger, type Ledger, type PositionState, type ReadinessFacts,
 } from "./staking";
 import { dbcPartnerRouting } from "./pollen";
 import { FLEURI_MINT } from "@/lib/token";
 
 const hex = (s: string) => Uint8Array.from(s.match(/../g)!.map((h) => parseInt(h, 16)));
 const D = 7n * 86_400n;
-const zeroL = (): Ledger => ({ duration: D, cooldown: D, totalActive: 0n, accPerShare: 0n, carry: 0n, streamAmount: 0n, streamStart: 0n, streamReleased: 0n, unallocated: 0n, lastUpdate: 0n, verifiedFeesTotal: 0n, treasuryTotal: 0n, distributedTotal: 0n, claimedTotal: 0n });
+const zeroL = (): Ledger => ({ duration: D, cooldown: D, totalActive: 0n, accPerShare: 0n, carry: 0n, streamAmount: 0n, streamStart: 0n, streamEnd: 0n, streamReleased: 0n, unallocated: 0n, lastUpdate: 0n, dfsFundedTotal: 0n, treasuryTotal: 0n, distributedTotal: 0n, claimedTotal: 0n });
 const zeroP = (): PositionState => ({ active: 0n, checkpoint: 0n, frac: 0n, owed: 0n, pendingAmount: 0n, unlockTs: 0n, claimedTotal: 0n });
 const settle = (l: Ledger, p: PositionState) => { const num = p.active * (l.accPerShare - p.checkpoint) + p.frac; p.owed += num >> 64n; p.frac = num & ((1n << 64n) - 1n); p.checkpoint = l.accPerShare; };
-const fund = (l: Ledger, amt: bigint, now: bigint) => { const u = updateLedger(l, now); const rem = u.streamAmount - u.streamReleased; return { ...u, streamAmount: rem + amt, streamStart: now, streamReleased: 0n }; };
+const fund = (l: Ledger, amt: bigint, now: bigint) => fundLedger(l, amt, false, now);
 
 describe("Rust layout cross-check", () => {
   it("decodes the Rust-written fixture exactly", () => {
-    expect(readLedger(fixtureReader(hex(fixture.ledger)))).toEqual({ duration: D, cooldown: D, totalActive: 3n, accPerShare: 1n << 70n, carry: 5n, streamAmount: 9n, streamStart: -1n, streamReleased: 2n, unallocated: 4n, lastUpdate: 7n, verifiedFeesTotal: 11n, treasuryTotal: 12n, distributedTotal: 13n, claimedTotal: 14n });
+    expect(readLedger(fixtureReader(hex(fixture.ledger)))).toEqual({ duration: D, cooldown: D, totalActive: 3n, accPerShare: 1n << 70n, carry: 5n, streamAmount: 9n, streamStart: -1n, streamEnd: 6n, streamReleased: 2n, unallocated: 4n, lastUpdate: 7n, dfsFundedTotal: 11n, treasuryTotal: 12n, distributedTotal: 13n, claimedTotal: 14n });
     expect(readPositionState(fixtureReader(hex(fixture.position)))).toEqual({ active: 21n, checkpoint: (1n << 128n) - 1n, frac: 22n, owed: 23n, pendingAmount: 24n, unlockTs: 25n, claimedTotal: 26n });
   });
   it("builds instructions with the IDL's exact account order, writability and signers", () => {
