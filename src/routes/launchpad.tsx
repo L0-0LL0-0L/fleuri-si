@@ -33,9 +33,11 @@ function Launchpad() {
   const [manifest,setManifest]=useState<PassportManifest|null>(null); const [signed,setSigned]=useState<SignedPassportT|null>(null);
   const [reviewAck,setReviewAck]=useState(false); const [done,setDone]=useState<{signature:string;hash:string}|null>(null);
   const [proposals,setProposals]=useState<any[]>([]); const [usedProposal,setUsedProposal]=useState<string|null>(null);
-  const [evidence,setEvidence]=useState<EvidenceRow[]>([]); const [ghRuns,setGhRuns]=useState<any[]>([]); const [frozenEvidence,setFrozenEvidence]=useState<FrozenReview|null>(null);
+  const [evidence,setEvidence]=useState<EvidenceRow[]>([]); const [ghRuns,setGhRuns]=useState<any[]>([]); const [frozenEvidence,setFrozenEvidence]=useState<FrozenReview|null>(null); const [evidenceError,setEvidenceError]=useState("");
+  const walletCtrl=useRef<AbortController|null>(null); const scopeRef=useRef("");
   const fence=useRef(createFence()).current;
   const identity=mine?.identities.find(i=>i.key_hash===local.envelope?.keyHash && i.cluster===readiness?.cluster && i.status==="anchored");
+  scopeRef.current=`${userId??"guest"}|${usedProposal??"-"}|${frozenEvidence?.frozenAt??"-"}|${signed?.manifestHash??"-"}`;
   async function refresh() {
     const g=fence.current();
     if(store.get().userId) {const r=await pqMine(); if(!fence.guard(g)) return; if(r.ok) setMine(r.data); else setError(r.error);}
@@ -46,10 +48,18 @@ function Launchpad() {
   async function loadEvidence(list:any[]=proposals,g=fence.current()) {
     const [ev,rs]=await Promise.all([ghEvidence({data:{proposalIds:list.map(p=>p.id)}}),ghMyRuns()]);
     if(!fence.guard(g)) return; // a previous workspace's late response
-    let rows=(ev.ok?ev.data:[]) as EvidenceRow[];
-    const runIds=[...new Set(rows.map(e=>e.run_id))].slice(0,50);
-    if(runIds.length) {const rc=await rrForRuns({data:{runIds}}); if(!fence.guard(g)) return; if(rc.ok) rows=rows.map(e=>({...e,receipts:rc.data.filter((r:any)=>r.run_id===e.run_id)}));}
-    if(ev.ok) setEvidence(rows); if(rs.ok) setGhRuns(rs.data);
+    // Errors never fall back to older evidence: a failed read clears it and is shown/frozen as an error.
+    if(!ev.ok) {setEvidence([]); setEvidenceError(ev.error);} else {
+      let rows=ev.data as EvidenceRow[];
+      const runIds=[...new Set(rows.map(e=>e.run_id))].slice(0,50);
+      if(runIds.length) {
+        const rc=await rrForRuns({data:{runIds}}).catch((e)=>({ok:false as const,error:(e as Error).message}));
+        if(!fence.guard(g)) return;
+        rows=rc.ok?rows.map(e=>({...e,receipts:(rc.data as any[]).filter(r=>r.run_id===e.run_id)})):rows.map(e=>({...e,receipts:[],receiptsError:rc.error}));
+      }
+      setEvidence(rows); setEvidenceError("");
+    }
+    if(rs.ok) setGhRuns(rs.data);
   }
   function useProposal(p:any) {
     setDone(null); setManifest(null); setSigned(null); setReviewAck(false);
@@ -65,7 +75,7 @@ function Launchpad() {
   }
   useEffect(()=>{loadLocal(); void checkReadiness();},[]);
   useEffect(()=>{ // workspace change: drop owner-scoped data and the frozen review, fence old responses
-    fence.bump(); setMine(null); setEvidence([]); setGhRuns([]); setFrozenEvidence(null); setUsedProposal(null);
+    fence.bump(); walletCtrl.current?.abort(); setMine(null); setEvidence([]); setEvidenceError(""); setGhRuns([]); setFrozenEvidence(null); setUsedProposal(null);
     setManifest(null); setSigned(null); setReviewAck(false); mint.current=null;
     void refresh().catch(e=>setReadError(e.message));
   },[userId]);
@@ -94,7 +104,9 @@ function Launchpad() {
     if(!signed || !mint.current) throw new Error("Sign this draft before launching.");
     setBusy("Preparing immutable metadata and the Meteora transaction…");
     const p=await pqPrepareLaunch({data:{passport:signed}}); if(!p.ok) throw new Error(p.error);
-    const r=await signSubmitConfirm(kind,p.data,{coSign:[mint.current],onStatus:setBusy});
+    // The wallet result is only submitted if the account, proposal, frozen evidence and signed passport are unchanged.
+    const scope=scopeRef.current; walletCtrl.current?.abort(); const ctrl=new AbortController(); walletCtrl.current=ctrl;
+    const r=await signSubmitConfirm(kind,p.data,{coSign:[mint.current],onStatus:setBusy,guard:()=>scopeRef.current===scope,signal:ctrl.signal});
     setDone({signature:r.signature,hash:signed.manifestHash}); mint.current=null;
     if(usedProposal) {await pqSetProposalStatus({data:{id:usedProposal,status:"launched"}}); setUsedProposal(null);}
     toast.success(r.detail); await refresh();
