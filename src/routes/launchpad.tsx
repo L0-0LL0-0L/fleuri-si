@@ -12,6 +12,7 @@ import { parseManifest, signPassport, type PassportManifest, type SignedPassport
 import { useGarden } from "@/store/garden";
 import { AttachEvidence, EvidenceList, FrozenEvidence, freezeReview, originAgentId, type EvidenceRow, type FrozenReview } from "@/components/greenhouse/ProposalEvidence";
 import { ghEvidence, ghMyRuns } from "@/lib/greenhouse.functions";
+import { rrForRuns } from "@/lib/research.functions";
 import { createFence } from "@/lib/greenhouse-session";
 import type { WalletKind } from "@/services/wallet";
 
@@ -45,7 +46,10 @@ function Launchpad() {
   async function loadEvidence(list:any[]=proposals,g=fence.current()) {
     const [ev,rs]=await Promise.all([ghEvidence({data:{proposalIds:list.map(p=>p.id)}}),ghMyRuns()]);
     if(!fence.guard(g)) return; // a previous workspace's late response
-    if(ev.ok) setEvidence(ev.data as EvidenceRow[]); if(rs.ok) setGhRuns(rs.data);
+    let rows=(ev.ok?ev.data:[]) as EvidenceRow[];
+    const runIds=[...new Set(rows.map(e=>e.run_id))].slice(0,50);
+    if(runIds.length) {const rc=await rrForRuns({data:{runIds}}); if(!fence.guard(g)) return; if(rc.ok) rows=rows.map(e=>({...e,receipts:rc.data.filter((r:any)=>r.run_id===e.run_id)}));}
+    if(ev.ok) setEvidence(rows); if(rs.ok) setGhRuns(rs.data);
   }
   function useProposal(p:any) {
     setDone(null); setManifest(null); setSigned(null); setReviewAck(false);
