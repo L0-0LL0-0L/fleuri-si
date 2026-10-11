@@ -11,7 +11,7 @@ const NOW = 1_800_000_000_000;
 function setup(over: Partial<TrialConfig> = {}) {
   const s = buildSeed(NOW);
   startSession(s, "owner1", NOW);
-  createAgent(s, "owner1", { name: "Rosehip", handle: "rosehip", persona: "p", strategy: "s", archetype: "weed", risk: 5, avatar: 1, funding: 40 }, NOW);
+  createAgent(s, "owner1", { name: "Rosehip", handle: "rosehip", persona: "a thorny little test flower", strategy: "buy small, hold", archetype: "weed", risk: 5, avatar: 1, funding: 40 }, NOW);
   const agents = Object.values(s.agents).slice(0, 2);
   const cfg: TrialConfig = { agentIds: agents.map((a) => a.id), seed: 7, repetitions: 1, cycles: 10, scenarios: ["control", "sell_pressure"], ...over };
   return { s, agents, cfg, input: makeInput(cfg, freezeMarket(s, NOW), agents.map(snapshotPolicy)) };
