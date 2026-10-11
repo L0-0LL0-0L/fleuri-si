@@ -516,6 +516,8 @@ export type Database = {
           id: string
           input: Json
           input_hash: string
+          lease_expires_at: string | null
+          lease_token: string | null
           output: Json | null
           output_hash: string | null
           owner_id: string
@@ -536,6 +538,8 @@ export type Database = {
           id?: string
           input: Json
           input_hash: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
           output?: Json | null
           output_hash?: string | null
           owner_id: string
@@ -556,6 +560,8 @@ export type Database = {
           id?: string
           input?: Json
           input_hash?: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
           output?: Json | null
           output_hash?: string | null
           owner_id?: string
@@ -1522,6 +1528,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      greenhouse_claim_lease: {
+        Args: {
+          _agents: string[]
+          _engine: string
+          _input: Json
+          _input_hash: string
+          _owner: string
+          _request: string
+        }
+        Returns: Json
+      }
       greenhouse_claim_run: {
         Args: {
           _agents: string[]
@@ -1543,6 +1560,8 @@ export type Database = {
           id: string
           input: Json
           input_hash: string
+          lease_expires_at: string | null
+          lease_token: string | null
           output: Json | null
           output_hash: string | null
           owner_id: string
@@ -1558,6 +1577,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      greenhouse_fail_lease: {
+        Args: { _id: string; _lease: string; _owner: string; _reason: string }
+        Returns: Json
+      }
       greenhouse_fail_run: {
         Args: { _id: string; _owner: string; _reason: string }
         Returns: {
@@ -1572,6 +1595,8 @@ export type Database = {
           id: string
           input: Json
           input_hash: string
+          lease_expires_at: string | null
+          lease_token: string | null
           output: Json | null
           output_hash: string | null
           owner_id: string
@@ -1586,6 +1611,18 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      greenhouse_finalize_lease: {
+        Args: {
+          _content_hash: string
+          _id: string
+          _input_hash: string
+          _lease: string
+          _output: Json
+          _output_hash: string
+          _owner: string
+        }
+        Returns: Json
       }
       greenhouse_finalize_run: {
         Args: {
@@ -1608,6 +1645,8 @@ export type Database = {
           id: string
           input: Json
           input_hash: string
+          lease_expires_at: string | null
+          lease_token: string | null
           output: Json | null
           output_hash: string | null
           owner_id: string
@@ -1637,6 +1676,8 @@ export type Database = {
           id: string
           input: Json
           input_hash: string
+          lease_expires_at: string | null
+          lease_token: string | null
           output: Json | null
           output_hash: string | null
           owner_id: string
