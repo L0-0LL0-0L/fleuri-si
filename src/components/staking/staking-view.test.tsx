@@ -75,7 +75,7 @@ describe("StakingView live state", () => {
   });
 
   it("drops out-of-order results and clears owned state on disconnect", async () => {
-    const resolvers: ((v: any) => void)[] = [];
+    const resolvers: (() => void)[] = [];
     const state = vi.fn((w: string | null) => new Promise<any>((r) => resolvers.push(() => r({ ok: true, data: snap({ wallet: w, claimable: w === W1 ? "111" : "0" }) }))));
     const a = api(state); (a.connect as any).mockResolvedValueOnce(W1);
     render(<StakingView api={a} userId="u" wallets={{ phantom: true, solflare: false }} onOpenWorkspace={async () => {}} pollMs={60_000} />);

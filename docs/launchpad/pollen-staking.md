@@ -15,9 +15,9 @@ Stake $FLEURI and earn a share of the **wrapped SOL the pool actually received**
 | Part | State |
 | --- | --- |
 | Program source (`onchain/pollen-staking`, Anchor 0.32.1) | Implemented |
-| Accounting unit tests (Rust, host) | Passing (13) |
-| Program tests: compiled SBF program and Meteora's real fee-sharing bytecode, run in LiteSVM | Passing (10) |
-| App decoders, account checks, readiness, confirmation and recovery tests (TypeScript) | Passing (48) |
+| Accounting unit tests (Rust, host) | Passing (14) |
+| Program tests: compiled SBF program and Meteora's real fee-sharing bytecode, run in LiteSVM | Passing (11) |
+| App decoders, account checks, readiness, confirmation, recovery and page tests (TypeScript) | Passing (56) |
 | `/staking` page, transaction prepare/sign/recover flow | Implemented; blocked until deployed |
 | Deployed program on mainnet or devnet | **None** |
 | Fee routing from the existing $FLEURI pool | **Not available.** That pool uses a Meteora config fleuri does not control, and configs are immutable. |
