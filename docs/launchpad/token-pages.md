@@ -12,6 +12,8 @@ The fleuri token is **$FLEURI**. Its contract (mint) address is:
 
 Token page: [`/t/25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri`](https://fleuri.si/t/25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri)
 
+In the app the same address sits behind the **CA** button in the top bar of every page: press it and the address appears in a panel where it can be copied in one click or selected as a whole.
+
 {% hint style="info" %}
 Status as at 11 October 2026: $FLEURI is expected to go live **shortly on Meteora (Solana mainnet)**. fleuri's chain checks have not yet found a mint at this address, and no launch or passport is recorded for it yet — so its token page shows no supply, holders, price or pool until then, and nothing here should be read as a live market until the launch is confirmed. This page will pick up live figures automatically once the mint exists. Always copy the address above rather than trusting a name: on Solana the address is the only reliable identifier.
 {% endhint %}
