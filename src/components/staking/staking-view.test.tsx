@@ -8,6 +8,7 @@ vi.mock("@/components/pq/ui", () => ({
   PendingTransactions: ({ rows }: any) => (rows.length ? <div>Pending: {rows.map((r: any) => r.kind).join(",")}</div> : null),
   WalletButtons: ({ onPick }: any) => <button onClick={() => onPick("phantom")}>Connect Phantom</button>,
   explorerAddr: (a: string) => a,
+  RealBadge: ({ cluster }: any) => <span aria-label="network badge">{cluster ?? "network"}</span>,
 }));
 
 import { StakingView, type StakingApi } from "./StakingView";
@@ -32,6 +33,14 @@ const claimBtn = () => screen.getByRole("button", { name: "Claim wSOL" });
 
 describe("StakingView live state", () => {
   afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+  it("badge shows the read cluster and falls back to network before a read", async () => {
+    const state = vi.fn(async (w: string | null) => ({ ok: true as const, data: snap({ wallet: w }) }));
+    render(<StakingView api={api(state)} userId="u" wallets={{ phantom: true, solflare: false }} onOpenWorkspace={async () => {}} pollMs={60_000} />);
+    expect(screen.getByLabelText("network badge").textContent).toBe("network");
+    await waitFor(() => expect(screen.getByLabelText("network badge").textContent).toBe("mainnet-beta"));
+  });
+
 
   it("Claim enables when polled claimable goes from zero to positive", async () => {
     let claimable = "0";
