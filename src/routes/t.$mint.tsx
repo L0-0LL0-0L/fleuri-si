@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CopyLink, PageHeader } from "@/components/bits";
-import { Panel, RealBadge, explorerAddr, lifecycleLabel } from "@/components/pq/ui";
+import { Panel, RealBadge, explorerAddr } from "@/components/pq/ui";
 import { pqTokenPage } from "@/lib/pq.functions";
+import { FLEURI_MINT } from "@/lib/token";
 import { PollenOnToken } from "@/components/pq/PollenOnToken";
 
 export const Route = createFileRoute("/t/$mint")({
