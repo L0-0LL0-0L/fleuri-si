@@ -22,6 +22,11 @@ jobs:
       - name: Program tests (LiteSVM)
         working-directory: onchain/pollen-staking/tests-integration
         run: PS_SO=../target/deploy/pollen_staking.so cargo test
+      - name: Expected ELF hash (same normalization as the server)
+        working-directory: .
+        run: |
+          f=onchain/pollen-staking/target/deploy/pollen_staking.so
+          python3 -c "import hashlib,sys;b=open(sys.argv[1],'rb').read().rstrip(b'\\x00');print(hashlib.sha256(b).hexdigest())" $f
       - name: IDL is current
         run: |
           cargo test -p pollen-staking --features idl-build __anchor_private_print_idl -- --show-output --quiet > /tmp/idl.out
