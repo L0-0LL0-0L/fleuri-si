@@ -79,9 +79,3 @@ describe("associated token account program id", () => {
   });
 });
 
-describe("harvest gate follows the selected index", () => {
-  it("disables harvest when only a duplicate slot has funds", async () => {
-    const { actions } = await import("./staking-view").catch(() => ({ actions: null as any }));
-    if (!actions) return;
-  });
-});
