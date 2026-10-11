@@ -31,7 +31,7 @@ function amountOf(a: Acc) { if (!a || a.owner !== TOKEN_PROGRAM || a.data.length
  * pool, so if the pool's fee vault differs from the first guess it re-reads. Incoherent results retry.
  */
 export async function readSnapshot(conn: Pick<Connection, "getMultipleAccountsInfoAndContext">, programId: string, d: ReturnType<typeof derive>, wallet: string | null, tries = 3) {
-  let feeGuess: string | null = stakingEnv().feeVault; let lastErr: Error | null = null;
+  let feeGuess: string | null = stakingEnv().feeVault || null; let lastErr: Error | null = null;
   for (let i = 0; i < tries; i++) {
     const keys = [d.pool, wallet ? d.position(wallet) : d.pool, d.principal, d.reward, wallet ? ata(wallet, STAKE_MINT) : d.pool, wallet ? ata(wallet, WSOL) : d.pool, new PublicKey(CLOCK_SYSVAR), new PublicKey(feeGuess ?? d.pool)];
     const r = await conn.getMultipleAccountsInfoAndContext(keys, { commitment: "confirmed" });
