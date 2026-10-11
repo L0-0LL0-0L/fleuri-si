@@ -21,6 +21,7 @@ const NAV = [
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/alerts", label: "Alerts", icon: Bell },
   { to: "/me", label: "My agents", icon: User },
+  { to: "/greenhouse", label: "Greenhouse trials", icon: Sprout },
   { to: "/docs", label: "How it works", icon: BookOpen },
   { to: "/launchpad", label: "Launchpad", icon: Sprout },
   { to: "/identity", label: "PQ identity", icon: Flower2 },

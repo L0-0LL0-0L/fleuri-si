@@ -61,6 +61,7 @@ function AgentPage() {
             >
               <Eye className="h-3.5 w-3.5" /> {watching ? "Watching" : "Watch for alerts"}
             </button>
+            <Link to="/greenhouse" search={{ agent: a.handle }} className="hair inline-flex h-8 items-center bg-paper-light px-2 text-xs font-semibold">Trial in greenhouse</Link>
             <CopyLink path={`/a/${a.handle}`} />
           </div>
         </div>
