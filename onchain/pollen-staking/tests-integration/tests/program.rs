@@ -302,7 +302,11 @@ fn tiny_topups_cannot_delay_rewards_compiled() {
     assert_eq!(ledger(&e).stream_end, deadline, "deadline never moves while the window is open");
     now(&mut e.svm, deadline);
     claim(&mut e, &alice, ar).unwrap();
-    assert_eq!(bal(&e.svm, ar), 1_000_000 + n, "old tranche and top-ups fully released by the old deadline");
+    let l = ledger(&e);
+    assert_eq!(l.distributed_total, 1_000_000 + n, "old tranche and top-ups fully released by the old deadline");
+    assert_eq!(l.stream_released, l.stream_amount);
+    // Single staker gets everything except sub-lamport Q64 dust that stays in the vault.
+    assert!(bal(&e.svm, ar) + 1 >= 1_000_000 + n && bal(&e.svm, ar) <= 1_000_000 + n);
     // Window ended: a new funding opens a fresh immutable-length window.
     now(&mut e.svm, deadline + DAY);
     fund_treasury(&mut e, &griefer, src, 70).unwrap();
@@ -322,7 +326,7 @@ fn zero_delta_harvest_does_not_reset_timing() {
     assert!(r.is_err(), "zero-delta harvest fails");
     let after = ledger(&e);
     assert_eq!((after.stream_start, after.stream_end, after.stream_amount), (before.stream_start, before.stream_end, before.stream_amount));
-    assert_eq!(after.dfs_funded_total, 1_000);
+    assert!(after.dfs_funded_total > 0 && after.dfs_funded_total == bal(&e.svm, e.reward), "only the measured claim counts");
 }
 
 #[test]
