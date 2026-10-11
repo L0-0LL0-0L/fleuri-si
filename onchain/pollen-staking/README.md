@@ -53,11 +53,14 @@ The tests cover:
 * cooldown, cancelling an unstake, the single pending lot and a wrong-signer withdrawal
 * a wrong DFS program and a removed DFS program: exits still work
 * resending identical signed bytes
+* the fee vault is created with the real `initialize_fee_vault_pda` (SDK 1.1.0) ABI; a keypair vault and tampered type/flag/bump/base bytes are rejected
+* repeated 1-lamport treasury top-ups and `release_unallocated` calls cannot move the release deadline; a zero-delta harvest changes nothing
+* reward/principal vault custody: delegate, close authority, frozen state and swapped vaults are rejected (harvest checks before and after the DFS call)
 
 ## Deploy (manual only, never automatic)
 
 1. `solana-keygen new -o target/deploy/pollen_staking-keypair.json`, then `anchor keys sync`. This replaces the placeholder ID. Rebuild.
-2. Run a verifiable build (`solana-verify build`) and record the ELF SHA-256.
+2. Run a verifiable build (`solana-verify build`) and record the ELF SHA-256 with `bun scripts/staking-elf-hash.ts <so>` (SHA-256 after trimming all trailing zero bytes — the same normalization the server applies to ProgramData).
 3. Deploy to devnet first: `solana program deploy target/deploy/pollen_staking.so --program-id target/deploy/pollen_staking-keypair.json`.
 4. Create a DFS wSOL vault that has the **pool PDA** (derived from the new program ID and the mint) as a recipient.
 5. Call `initialize_pool(604800, 604800, recipient_index)` signed by the upgrade authority.
