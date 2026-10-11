@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Panel, downloadBlob } from "@/components/pq/ui";
 import { CopyLink } from "@/components/bits";
-import { SCENARIO_INFO, BASELINE_COINS, START_CAPITAL, makeBundle, verifyBundle, type ReplayStatus, type RunResult, type Scenario, type Scorecard, type TrialInput, type TrialOutput } from "@/domain/greenhouse";
+import { SCENARIO_INFO, BASELINE_COINS, START_CAPITAL, bundleFromStored, verifyBundle, SUPPORTED_ENGINES, type ReplayStatus, type RunResult, type Scenario, type Scorecard, type TrialInput, type TrialOutput } from "@/domain/greenhouse";
 import { cn } from "@/lib/utils";
 
 export interface TrialRow {
@@ -49,11 +49,14 @@ export function TrialReport({ row, handles, onPublish }: { row: TrialRow; handle
   const trace: RunResult | undefined = useMemo(() => out ? (sel.agent === "baseline" ? out.baselines : out.runs).find((r) => r.agentId === sel.agent && r.scenario === sel.scenario && r.rep === sel.rep) : undefined, [out, sel]);
   if (!out) return <Panel title="Trial result"><p className="text-sm">{row.status === "failed" ? `This trial failed: ${row.error ?? "unknown error"}. No result was saved.` : "This trial has not finished. Nothing is shown until a result is durably saved."}</p></Panel>;
   const maxAbs = Math.max(5, ...out.scorecards.flatMap((s) => [Math.abs(s.returnPct.min), Math.abs(s.returnPct.max)]), ...out.baselines.map((b) => Math.abs(b.returnPct)));
-  const bundle = () => makeBundle(input, out, row.id, row.created_at);
+  // The stored row's ORIGINAL checksum claims travel with the bundle; replay verifies all of them.
+  const bundle = () => bundleFromStored(row);
+  const supported = SUPPORTED_ENGINES.includes(input.engineVersion as any);
   async function doReplay() {
     setBusy("Replaying frozen inputs…");
-    await new Promise((r) => setTimeout(r, 30));
-    try { const r = verifyBundle(bundle()); setReplay(r); if (r.status === "verified" && r.recomputed?.outputHash !== row.output_hash) setReplay({ status: "mismatch", detail: "Replay matches the bundle, but not the stored output hash." }); } finally { setBusy(null); }
+    try { await new Promise((r) => setTimeout(r, 30)); setReplay(verifyBundle(bundle())); }
+    catch (e) { setReplay({ status: "invalid", detail: (e as Error).message }); }
+    finally { setBusy(null); }
   }
   return (
     <div className="space-y-4">
@@ -69,12 +72,13 @@ export function TrialReport({ row, handles, onPublish }: { row: TrialRow; handle
         <ul className="space-y-1 text-xs">{input.policies.map((p) => <li key={p.agentId} className="break-words"><strong>@{p.handle}</strong> · {p.archetype}, risk {p.risk} · policy <span className="font-mono">{short(p.policyHash)}</span></li>)}</ul>
         <p className="text-xs text-ink-soft">SHA-256 checksums detect edits; they are not signatures, and nothing here is anchored on chain.</p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn btn-ink" disabled={!!busy} onClick={() => void doReplay()}>{busy ?? "Replay & verify"}</button>
+          <button type="button" className="btn btn-ink" disabled={!!busy || !supported} onClick={() => void doReplay()}>{busy ?? (supported ? "Replay & verify" : "Replay unavailable")}</button>
           <button type="button" className="btn btn-paper" onClick={() => downloadBlob(new Blob([JSON.stringify(bundle(), null, 1)], { type: "application/json" }), `greenhouse-${row.id.slice(0, 8)}.json`)}>Download evidence bundle</button>
           {row.mine && onPublish && <button type="button" className={cn("btn", row.published ? "btn-paper" : "btn-red")} disabled={!!busy} onClick={() => { setBusy(row.published ? "Unpublishing…" : "Publishing…"); onPublish(!row.published).then(() => toast.success(row.published ? "Report is private again" : "Report published"), (e) => toast.error((e as Error).message)).finally(() => setBusy(null)); }}>{row.published ? "Make private" : "Publish report"}</button>}
           {row.published && <CopyLink path={`/greenhouse/r/${row.id}`} label="Copy public link" />}
         </div>
         <p className="text-xs">{row.published ? "Published: anyone with the link can read this sanitized report." : row.mine ? "Private: only your workspace can see this report until you publish it." : ""}</p>
+        {!supported && <p className="hair bg-paper-deep p-2 text-xs">Recorded with engine {input.engineVersion}, which this build does not support. The original records can still be downloaded unchanged, but they cannot be replayed or relabelled here.</p>}
         {replay && <p role="status" className={cn("hair p-2 text-sm", replay.status === "verified" ? "bg-sprout text-paper-light" : "bg-poppy-deep text-paper-light")}><strong className="uppercase">{replay.status}</strong> — {replay.detail}</p>}
       </Panel>
 
@@ -107,6 +111,7 @@ export function TrialReport({ row, handles, onPublish }: { row: TrialRow; handle
           <ol className="hair max-h-80 divide-y divide-ink/10 overflow-y-auto bg-paper text-xs">
             {trace.trace.map((t, i) => {
               const shocks = out.tapes[`${sel.scenario}:${sel.rep}`]?.filter((s) => s.cycle === t[0] && s.kind !== "fault") ?? [];
+              const lastOfCycle = trace.trace[i + 1]?.[0] !== t[0];
               return (
                 <li key={i} className="grid grid-cols-[2.5rem_minmax(0,1fr)_5rem] gap-2 p-1.5">
                   <span className="font-mono text-ink-soft">#{t[0] + 1}</span>
@@ -116,12 +121,12 @@ export function TrialReport({ row, handles, onPublish }: { row: TrialRow; handle
                     {t[5] && <span className="block text-ink-soft">{t[5]}</span>}
                     {shocks.map((s, j) => <span key={j} className="block text-poppy-deep">tape: {s.kind === "liquidity" ? `${(s.magnitude * 100).toFixed(0)}% of $${s.symbol} reserves withdrawn` : `outside seller removed ${(s.magnitude * 100).toFixed(1)}% of $${s.symbol} vSOL`}</span>)}
                   </span>
-                  <span className="num text-right">{trace.nlv[i]?.toFixed(4)}</span>
+                  <span className="num text-right">{lastOfCycle ? trace.nlv[t[0]]?.toFixed(4) : <span className="text-ink-soft">same cycle ↓</span>}</span>
                 </li>
               );
             })}
           </ol>
-          <p className="text-xs text-ink-soft">Right column: net liquidation value (vSOL) after the cycle.</p>
+          <p className="text-xs text-ink-soft">Right column: net liquidation value (vSOL) after that cycle — shown once on the cycle's last row when several actions share a cycle (e.g. the baseline's three entry buys).</p>
         </>}
       </Panel>
     </div>
@@ -163,7 +168,7 @@ export function MetricDefinitions() {
       <summary className="cursor-pointer font-semibold">Exact metric definitions</summary>
       <ul className="mt-2 list-disc space-y-1 pl-4">
         <li><strong>Start capital:</strong> every participant and the baseline start with exactly {START_CAPITAL} vSOL cash and no holdings, regardless of their live balances.</li>
-        <li><strong>Net liquidation value (NLV):</strong> cash + for each holding, the vSOL received by selling the whole position into that coin's current curve (constant product, 1% fee, full price impact). It is lower than the mid-price value; positions are valued independently.</li>
+        <li><strong>Net liquidation value (NLV):</strong> cash + for each holding, the vSOL received by selling the whole position into that coin's current curve (constant product, 1% fee, full price impact) — exactly what the engine's full sell pays, including the creator half of that fee when the participant created the coin (frozen market coins have no participant creator). It is lower than the mid-price value; positions are valued independently.</li>
         <li><strong>Return:</strong> (final NLV − {START_CAPITAL}) ÷ {START_CAPITAL}. <strong>Max drawdown:</strong> largest fall from a running NLV peak (starting at {START_CAPITAL}), as a % of that peak, sampled after each cycle.</li>
         <li><strong>Attempts:</strong> cycles where the engine chose buy, sell or launch. Posts, replies, follows and rests are not attempts. <strong>Success rate</strong> = successes ÷ attempts; shown as unavailable when there were no attempts.</li>
         <li><strong>Rejected</strong> = the engine refused the action (e.g. not enough vSOL). <strong>Fault</strong> = an injected execution failure; all economic effects are rolled back.</li>
