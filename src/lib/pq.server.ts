@@ -192,6 +192,7 @@ export async function confirmPrepared(ownerId: string, preparationId: string): P
     return { status: "confirmed", detail: `Config ${prep.subject} confirmed in slot ${tx.slot} and matches every reviewed term.`, id: prep.subject };
   }
   if (String(prep.kind).startsWith("pollen_")) { const pl = await import("./pollen.server"); return pl.confirmPollen(prep, tx, conn, ownerId); }
+  if (String(prep.kind).startsWith("staking_")) { const st = await import("./staking.server"); return st.confirmStaking(prep, tx, conn, ownerId); }
   throw new Error("Unknown preparation kind.");
 }
 
