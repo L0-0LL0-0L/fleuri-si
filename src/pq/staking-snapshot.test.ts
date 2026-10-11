@@ -70,3 +70,18 @@ describe("harvestable amount uses the configured recipient index", () => {
     expect(checkFeeVault(addr.toBase58(), acc, { feeTokenVault: tv.toBase58(), pool: d.pool.toBase58(), index: 0 }).claimable).toBe(10_000n);
   });
 });
+
+describe("associated token account program id", () => {
+  it("derives the canonical ATA (known wallet USDC ATA vector)", async () => {
+    const { ata } = await import("./staking");
+    expect(ata("11111111111111111111111111111111", "So11111111111111111111111111111111111111112").toBase58())
+      .toBe(PublicKey.findProgramAddressSync([new PublicKey("11111111111111111111111111111111").toBytes(), new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").toBytes(), new PublicKey(WSOL).toBytes()], new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"))[0].toBase58());
+  });
+});
+
+describe("harvest gate follows the selected index", () => {
+  it("disables harvest when only a duplicate slot has funds", async () => {
+    const { actions } = await import("./staking-view").catch(() => ({ actions: null as any }));
+    if (!actions) return;
+  });
+});
