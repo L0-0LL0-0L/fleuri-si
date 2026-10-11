@@ -1,0 +1,28 @@
+name: pollen-staking program
+# Compiles the SBF program and executes it in LiteSVM with Meteora DFS mainnet bytecode.
+# Never deploys anything.
+on:
+  push: { paths: ["onchain/pollen-staking/**", ".github/workflows/pollen-staking.yml"] }
+  pull_request: { paths: ["onchain/pollen-staking/**"] }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: onchain/pollen-staking } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Solana CLI 2.3.13
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v2.3.13/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+      - run: cargo test -p pollen-staking --lib
+      - run: cargo build-sbf --manifest-path programs/pollen-staking/Cargo.toml
+      - name: Dump Meteora DFS program
+        run: solana program dump -u mainnet-beta dfsdo2UqvwfN8DuUVrMRNfQe11VaiNoKcMqLHVvDPzh tests-integration/fixtures/dfs.so
+      - name: Program tests (LiteSVM)
+        working-directory: onchain/pollen-staking/tests-integration
+        run: PS_SO=../target/deploy/pollen_staking.so cargo test
+      - name: IDL is current
+        run: |
+          cargo test -p pollen-staking --features idl-build __anchor_private_print_idl -- --show-output --quiet > /tmp/idl.out
+          grep -q '"name": "harvest_fees"' /tmp/idl.out
