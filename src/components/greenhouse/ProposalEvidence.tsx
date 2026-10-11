@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { evidenceStatus, policyHash } from "@/domain/greenhouse";
+import { evidenceStatus, policyHash, type EvidenceLabel } from "@/domain/greenhouse";
 import type { Agent } from "@/domain/types";
 import { ghAttach } from "@/lib/greenhouse.functions";
 import { cn } from "@/lib/utils";
@@ -52,6 +52,41 @@ export function AttachEvidence({ proposalId, originId, runs, onDone }: { proposa
       </select>
       <button type="button" className="btn btn-paper" disabled={!run || busy} onClick={() => { setBusy(true); setMsg(""); ghAttach({ data: { proposalId, runId: run } }).then(async (r) => { if (!r.ok) throw new Error(r.error); setMsg("Attached to your review."); await onDone(); }).catch((e) => setMsg((e as Error).message)).finally(() => setBusy(false)); }}>{busy ? "Attaching…" : "Attach evidence"}</button>
       {msg && <span role="status">{msg}</span>}
+    </div>
+  );
+}
+
+/** Immutable snapshot of what the reviewer saw when they clicked "Use this draft". */
+export interface FrozenReview {
+  proposalId: string; name: string; symbol: string; agentHandle: string;
+  originPolicyHash: string | null; originMode: string | null; frozenAt: string;
+  items: { row: EvidenceRow; status: EvidenceLabel }[];
+}
+export function freezeReview(p: { id: string; name: string; symbol: string; agent_handle: string; origin_policy_hash?: string | null; origin_mode?: string | null }, rows: EvidenceRow[], agents: Record<string, Agent>, now: Date): FrozenReview {
+  const items = rows.filter((e) => e.proposal_id === p.id).map((e) => {
+    const cur = agents[e.origin_agent_id];
+    return { row: structuredClone(e), status: evidenceStatus({ runPolicyHash: e.run_policy_hash, proposalPolicyHash: e.proposal_policy_hash, engineVersion: e.engine_version }, cur ? policyHash(cur) : null) };
+  });
+  return Object.freeze({ proposalId: p.id, name: p.name, symbol: p.symbol, agentHandle: p.agent_handle, originPolicyHash: p.origin_policy_hash ?? null, originMode: p.origin_mode ?? null, frozenAt: now.toISOString(), items });
+}
+
+/** Renders only the frozen snapshot — never recomputes status from live agents. */
+export function FrozenEvidence({ review }: { review: FrozenReview }) {
+  const tone = (ok: boolean) => cn("hair px-1 font-mono text-[0.6rem] uppercase", ok ? "bg-sprout text-paper-light" : "bg-paper-deep");
+  return (
+    <div className="space-y-1 text-xs" data-testid="frozen-evidence">
+      <p className="font-mono text-[0.65rem] uppercase tracking-widest">Frozen review · {review.name} ${review.symbol} by @{review.agentHandle} · drafted with policy {review.originPolicyHash ? `${short(review.originPolicyHash)} (${review.originMode ?? "unknown"} mode)` : "unknown (legacy draft)"} · frozen {review.frozenAt.replace("T", " ").slice(0, 19)} UTC</p>
+      {!review.items.length ? <p>No greenhouse evidence was attached when this review was frozen.</p> :
+        <ul className="space-y-1">{review.items.map(({ row: e, status: st }) => (
+          <li key={e.id} className="hair space-y-1 bg-paper p-2">
+            <p className="flex flex-wrap items-center gap-1">
+              <span className={tone(st.policy === "match")}>{st.policy === "match" ? "policy matches draft" : st.policy === "mismatch" ? "policy differs from draft" : "draft policy unknown (legacy)"}</span>
+              <span className={tone(st.currency === "current")}>{st.currency === "current" ? "agent unchanged at freeze" : st.currency === "stale" ? "stale at freeze · agent edited" : "agent unavailable at freeze"}</span>
+              <span className={tone(st.engine === "supported")}>{st.engine === "supported" ? e.engine_version : `unsupported engine ${e.engine_version}`}</span>
+            </p>
+            <p className="break-words">policy <span className="font-mono">{short(e.run_policy_hash)}</span> · rules mode · {e.repetitions} repetition(s) × {e.scenarios.length} scenario(s) · content <span className="font-mono">{short(e.content_hash)}</span> · attached {new Date(e.attached_at).toLocaleDateString()}</p>
+          </li>))}</ul>}
+      <p className="text-[0.7rem] text-ink-soft">Frozen when you loaded this draft; later attachments or agent edits do not change it. Advisory vSOL sandbox evidence only — not part of the signed passport, not an approval, safety rating or forecast.</p>
     </div>
   );
 }
