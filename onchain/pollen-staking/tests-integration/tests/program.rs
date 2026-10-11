@@ -146,9 +146,9 @@ fn only_upgrade_authority_initializes_once() {
     let ix = init_ix(&e, imposter.pubkey(), e.stake_mint, 0);
     assert!(send(&mut e.svm, ix, &[&imposter]).unwrap_err().contains("NotUpgradeAuthority"));
     let a = e.admin.insecure_clone();
-    send(&mut e.svm, init_ix(&e, a.pubkey(), e.stake_mint, 0), &[&a]).unwrap();
+    { let ix = init_ix(&e, a.pubkey(), e.stake_mint, 0); send(&mut e.svm, ix, &[&a]) }.unwrap();
     e.svm.expire_blockhash();
-    assert!(send(&mut e.svm, init_ix(&e, a.pubkey(), e.stake_mint, 0), &[&a]).is_err(), "re-init rejected");
+    assert!({ let ix = init_ix(&e, a.pubkey(), e.stake_mint, 0); send(&mut e.svm, ix, &[&a]) }.is_err(), "re-init rejected");
 }
 
 #[test]
@@ -156,11 +156,11 @@ fn rejects_freeze_authority_and_wrong_recipient() {
     let mut e = setup();
     let a = e.admin.insecure_clone();
     let frozen = Pubkey::new_unique(); put_mint(&mut e.svm, frozen, None, Some(a.pubkey()), 6);
-    assert!(send(&mut e.svm, init_ix(&e, a.pubkey(), frozen, 0), &[&a]).unwrap_err().contains("FreezeAuthorityPresent"));
+    assert!({ let ix = init_ix(&e, a.pubkey(), frozen, 0); send(&mut e.svm, ix, &[&a]) }.unwrap_err().contains("FreezeAuthorityPresent"));
     let minty = Pubkey::new_unique(); put_mint(&mut e.svm, minty, Some(a.pubkey()), None, 6);
-    assert!(send(&mut e.svm, init_ix(&e, a.pubkey(), minty, 0), &[&a]).unwrap_err().contains("MintAuthorityPresent"));
+    assert!({ let ix = init_ix(&e, a.pubkey(), minty, 0); send(&mut e.svm, ix, &[&a]) }.unwrap_err().contains("MintAuthorityPresent"));
     // index 1 is someone else, not the pool PDA
-    assert!(send(&mut e.svm, init_ix(&e, a.pubkey(), e.stake_mint, 1), &[&a]).unwrap_err().contains("BadRecipient"));
+    assert!({ let ix = init_ix(&e, a.pubkey(), e.stake_mint, 1); send(&mut e.svm, ix, &[&a]) }.unwrap_err().contains("BadRecipient"));
 }
 
 #[test]
@@ -178,7 +178,7 @@ fn harvest_rewards_late_joiner_and_double_claim() {
     let tix = spl_token::instruction::transfer(&spl_token::id(), &don, &e.reward, &donor.pubkey(), &[], 777).unwrap();
     send(&mut e.svm, tix, &[&donor]).unwrap();
     let caller = Keypair::new(); e.svm.airdrop(&caller.pubkey(), 1_000_000_000).unwrap();
-    send(&mut e.svm, harvest_ix(&e, caller.pubkey(), ps::DFS_PROGRAM_ID), &[&caller]).unwrap();
+    { let ix = harvest_ix(&e, caller.pubkey(), ps::DFS_PROGRAM_ID); send(&mut e.svm, ix, &[&caller]) }.unwrap();
     assert_eq!(bal(&e.svm, e.reward), 1_000_000 + 777, "pool PDA got its 50% share");
     let start = t0(&e);
     now(&mut e.svm, start + 7 * DAY / 2);
@@ -191,7 +191,7 @@ fn harvest_rewards_late_joiner_and_double_claim() {
     assert!(claim(&mut e, &alice, ar).unwrap_err().contains("NothingToClaim"), "double claim");
     assert_eq!(bal(&e.svm, e.reward), 777, "donation untouched and unallocated");
     // Nothing new in DFS: harvest fails instead of counting the donation.
-    assert!(send(&mut e.svm, harvest_ix(&e, caller.pubkey(), ps::DFS_PROGRAM_ID), &[&caller]).is_err());
+    assert!({ let ix = harvest_ix(&e, caller.pubkey(), ps::DFS_PROGRAM_ID); send(&mut e.svm, ix, &[&caller]) }.is_err());
     // principal and reward vaults are separate
     assert_eq!(bal(&e.svm, e.principal), 200);
 }
@@ -226,10 +226,10 @@ fn harvest_rejects_wrong_program_and_exits_do_not_need_dfs() {
     stake(&mut e, &alice, at, 10).unwrap();
     let c = e.admin.insecure_clone();
     let fake = Pubkey::new_unique();
-    assert!(send(&mut e.svm, harvest_ix(&e, c.pubkey(), fake), &[&c]).is_err());
+    assert!({ let ix = harvest_ix(&e, c.pubkey(), fake); send(&mut e.svm, ix, &[&c]) }.is_err());
     // Break DFS entirely: exits still work.
     e.svm.set_account(ps::DFS_PROGRAM_ID, Account { lamports: 1, data: vec![], owner: system_program::id(), executable: false, rent_epoch: 0 }).unwrap();
-    assert!(send(&mut e.svm, harvest_ix(&e, c.pubkey(), ps::DFS_PROGRAM_ID), &[&c]).is_err());
+    assert!({ let ix = harvest_ix(&e, c.pubkey(), ps::DFS_PROGRAM_ID); send(&mut e.svm, ix, &[&c]) }.is_err());
     owner_ix(&mut e, &alice, ps::instruction::RequestUnstake { amount: 10 }.data()).unwrap();
     let s = t0(&e); now(&mut e.svm, s + 7 * DAY);
     withdraw(&mut e, &alice, alice.pubkey(), at).unwrap();
