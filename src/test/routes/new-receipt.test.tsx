@@ -87,4 +87,26 @@ describe("signing page owner fencing", () => {
     await waitFor(() => expect(rrSign).toHaveBeenCalledWith({ data: { id: RC, publicKey: "OLDPK", signature: "OLDSIG" } }));
     expect(signReceipt).not.toHaveBeenCalled();
   });
+  it("legacy signature survives a second reload before resend (durably migrated per draft)", async () => {
+    writeReceiptPending("owner-a", { requestId: REQ, runId: RUN, identityId: ID, receiptId: RC, manifestHash: HASH, publicKey: "OLDPK", signature: "OLDSIG" }, localStorage);
+    vi.mocked(rrSign).mockResolvedValue({ ok: true, data: { recovered: true } } as any);
+    const first = render(<NewReceipt />);
+    expect(await screen.findByText("Resend my saved signature")).toBeInTheDocument();
+    first.unmount();
+    expect(readReceiptSig("owner-a", RC, HASH, localStorage)).toMatchObject({ publicKey: "OLDPK", signature: "OLDSIG" });
+    render(<NewReceipt />);
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(await screen.findByText("Resend my saved signature"));
+    await waitFor(() => expect(rrSign).toHaveBeenCalledWith({ data: { id: RC, publicKey: "OLDPK", signature: "OLDSIG" } }));
+    expect(signReceipt).not.toHaveBeenCalled();
+  });
+  it("keeps the old run record intact when the per-draft signature cannot be stored", async () => {
+    writeReceiptPending("owner-a", { requestId: REQ, runId: RUN, identityId: ID, receiptId: RC, manifestHash: HASH, publicKey: "OLDPK", signature: "OLDSIG" }, localStorage);
+    const orig = Storage.prototype.setItem;
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, k: string, v: string) { if (k.startsWith("fleuri.receipt.sig")) throw new Error("quota"); return orig.call(this, k, v); });
+    render(<NewReceipt />);
+    expect(await screen.findByText("Resend my saved signature")).toBeInTheDocument();
+    spy.mockRestore();
+    expect(localStorage.getItem(receiptPendingKey("owner-a", RUN))).toContain("OLDSIG");
+  });
 });
