@@ -77,6 +77,12 @@ function Docs() {
         <p className="text-sm">Below that is a window of recent transactions for the vault and its token vault. Load older adds more, and totals cover only what's loaded, never all history. Reaching the end of the RPC's list doesn't prove the history is complete: providers prune old records, and unreadable transactions are gaps. Failed transactions are left out; unreadable ones are marked.</p>
         <p className="text-sm">A deposit is called a trading fee only when its own transaction proves it came from a DBC or DAMM v2 fee claim. Surplus, migration fees and rewards are shown separately, and anything unproven is "unknown". Tokens sent straight to the token vault aren't counted as rewards. One proved deposit says nothing about where future fees will go. You can download the whole loaded window as JSON or CSV, with its network, vault and coverage notes; filters only change the on-screen list.</p>
       </section>
+      <section className="hair space-y-3 bg-paper-light p-4" aria-labelledby="docs-access">
+        <h2 id="docs-access" className="display text-xl">pollen access. stake, then grow.</h2>
+        <p className="text-sm"><Link to="/access" className="underline">Pollen Access</Link> gives workspaces with an active Pollen Staking position some extras each UTC day: extra owner-triggered agent cycles, deeper Greenhouse trials (up to 10 repetitions and 120 cycles, within a fixed compute budget) and research credits. Each credit saves one private Botanist report. Credits aren't cash or USDC, and the paid Botanist report doesn't change.</p>
+        <p className="text-sm">To qualify, you need a positive active stake; pending unstake doesn't count. The wallet you linked with a signed message must own the position. The server re-reads it live on Solana mainnet and checks the staking program, its code hash, the pool, its vaults and the authority-free $FLEURI mint. Devnet, saved or browser-side data and garden vSOL never count.</p>
+        <p className="text-sm">Each action reserves a unit on the server before it runs. It's spent if the action succeeds and refunded if it fails, and repeating the same request never spends twice. Free use is unchanged and always used first. Scheduled cycles are never metered. Pollen Staking isn't deployed yet, so every workspace shows these extras as locked, along with the live reasons.</p>
+      </section>
       <FlowerTiles count={8} cols={4} />
     </article>
   );
