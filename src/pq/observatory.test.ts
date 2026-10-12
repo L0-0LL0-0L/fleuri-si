@@ -178,3 +178,82 @@ describe("history merging and export", () => {
     expect(lines[2]).toContain("unavailable");
   });
 });
+
+describe("independent Observatory review regressions", () => {
+  it("does not call a transaction successful when the RPC omits the success field", () => {
+    const raw = tx([claimFrom(DBC_PROGRAM, disc("claim_trading_fee"), 11n)]);
+    delete (raw.meta as any).err;
+    expect(decodeTx("missing-success", raw, ctx).status).toBe("unavailable");
+  });
+
+  it("keeps both correct-vault funding events visible when mixed nesting is ambiguous", () => {
+    const p = payloadOf(disc("claim_trading_fee"));
+    const wrapper: I = { p: OTHER, a: [OTHER], d: Uint8Array.from([1]), s: 1 };
+    const inner = [
+      { ...fundByClaim(VAULT, DBC_PROGRAM, p), s: null },
+      { ...sourceCpi(DBC_PROGRAM, p), s: null },
+      { ...event(fundEv(DBC_PROGRAM, VAULT, 10n, p)), s: null },
+      { ...fundByClaim(VAULT, DBC_PROGRAM, p), s: null },
+      { ...sourceCpi(DBC_PROGRAM, p), s: null },
+      { ...event(fundEv(DBC_PROGRAM, VAULT, 20n, p)), s: null },
+    ];
+    const result = decodeTx("mixed-no-heights", tx([{ ix: wrapper, inner }]), ctx);
+    expect(result.entries.filter(e => e.kind === "fund")).toHaveLength(2);
+    expect(windowTotals([result]).funded).toBe("30");
+    expect(windowTotals([result]).tradingFee).toBe("0");
+  });
+
+  it("shows a direct transfer beside a DFS invocation for another vault", () => {
+    const p = payloadOf(disc("claim_trading_fee"));
+    const wrapper: I = { p: OTHER, a: [OTHER], d: Uint8Array.from([1]), s: 1 };
+    const result = decodeTx("unrelated-dfs", tx([{ ix: wrapper, inner: [
+      fundByClaim(OTHER_VAULT, DBC_PROGRAM, p, 2),
+      sourceCpi(DBC_PROGRAM, p, 3),
+      event(fundEv(DBC_PROGRAM, OTHER_VAULT, 7n, p), 3),
+      tokenXfer(TOKEN_VAULT, 42n, 2),
+    ] }]), ctx);
+    expect(windowTotals([result]).directUncounted).toBe("42");
+    expect(windowTotals([result]).funded).toBe("0");
+  });
+
+  it("does not include a mismatched recipient claim in verified claimed totals", () => {
+    const ix: I = { p: DFS_PROGRAM_ID, a: [VAULT, OTHER, TOKEN_VAULT, OTHER, OTHER, R1, TOKEN_PROGRAM, DFS_EVENT_AUTHORITY, DFS_PROGRAM_ID], d: cat(IX.claimFee, [1]), s: 1 };
+    const result = decodeTx("wrong-recipient-slot", tx([{ ix, inner: [event(claimEv(VAULT, R1, 0, 5n))] }]), ctx);
+    expect(result.entries[0]).toMatchObject({ kind: "claim", recipientMatch: false });
+    expect(windowTotals([result]).claimed).toBe("0");
+  });
+
+  it("does not verify a fee source against a different token vault", () => {
+    const p = payloadOf(disc("claim_trading_fee"));
+    const wrong = fundByClaim(VAULT, DBC_PROGRAM, p);
+    wrong.a[1] = OTHER;
+    const result = decodeTx("wrong-token-vault", tx([{ ix: wrong, inner: [sourceCpi(DBC_PROGRAM, p), event(fundEv(DBC_PROGRAM, VAULT, 9n, p))] }]), ctx);
+    expect(windowTotals([result]).tradingFee).toBe("0");
+  });
+
+  it("does not label a contradictory fund event as a verified manual deposit", () => {
+    const ix: I = { p: DFS_PROGRAM_ID, a: [VAULT, TOKEN_VAULT, OTHER, OTHER, SIGNER, TOKEN_PROGRAM, DFS_EVENT_AUTHORITY, DFS_PROGRAM_ID], d: cat(IX.fundFee, le(1000n, 8)), s: 1 };
+    const p = payloadOf(disc("claim_trading_fee"));
+    const result = decodeTx("manual-source-mismatch", tx([{ ix, inner: [event(fundEv(DBC_PROGRAM, VAULT, 10n, p))] }]), ctx);
+    expect(windowTotals([result]).manual).toBe("0");
+  });
+});
+
+describe("decoder follow-ups", () => {
+  it("keeps an orphan correct-vault claim visible but outside verified totals", () => {
+    const r = decodeTx("orphan", tx([{ ix: event(claimEv(VAULT, R0, 0, 3n), 1) }]), ctx);
+    expect(r.entries).toMatchObject([{ kind: "claim", evidence: "ambiguous", recipientMatch: false }]);
+    const w = windowTotals([r]); expect(w.claimed).toBe("0"); expect(w.claimedUnverified).toBe("3");
+  });
+  it("labels a token-vault transfer as unclassified when the vault's own DFS nesting can't be proved", () => {
+    const p = payloadOf(disc("claim_trading_fee"));
+    const r = decodeTx("uncl", tx([{ ix: fundByClaim(VAULT, DBC_PROGRAM, p), inner: [{ ...tokenXfer(TOKEN_VAULT, 5n), s: null }, { ...event(fundEv(DBC_PROGRAM, VAULT, 5n, p)), s: null }] }]), ctx);
+    expect(r.entries.find((e) => e.kind === "direct_transfer")).toMatchObject({ scope: "unclassified" });
+    const w = windowTotals([r]); expect(w.directUncounted).toBe("0"); expect(w.directUnclassified).toBe("5");
+  });
+  it("writes public metadata above the CSV table", () => {
+    const csv = historyCsv([], 9, { cluster: "mainnet-beta", vault: VAULT, coverage_note: "window only" });
+    expect(csv.split("\r\n").slice(0, 4)).toEqual(["metadata_key,metadata_value", "cluster,mainnet-beta", `vault,${VAULT}`, "coverage_note,window only"]);
+    expect(csv).toContain("amount_base_units");
+  });
+});
