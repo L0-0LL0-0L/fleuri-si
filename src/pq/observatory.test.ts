@@ -15,7 +15,7 @@ const VAULT = k(), TOKEN_VAULT = k(), OTHER_VAULT = k(), SIGNER = k(), R0 = k(),
 const ctx = { vault: VAULT, tokenVault: TOKEN_VAULT, recipients: [R0, R1] };
 const disc = (n: string) => [...createHash("sha256").update(`global:${n}`).digest().subarray(0, 8)];
 const le = (v: bigint, n: number) => { const b = new Uint8Array(n); for (let i = 0; i < n; i++) b[i] = Number((v >> BigInt(8 * i)) & 0xffn); return b; };
-const cat = (...p: (number[] | Uint8Array)[]) => Uint8Array.from(p.flatMap((x) => [...x]));
+const cat = (...p: (readonly number[] | Uint8Array)[]) => Uint8Array.from(p.flatMap((x) => [...x]));
 const pkb = (s: string) => new PublicKey(s).toBytes();
 const TAG = [228, 69, 165, 46, 81, 203, 154, 29];
 const fundEv = (source: string, vault: string, amount: bigint, payload: Uint8Array) => cat(TAG, [15, 14, 233, 140, 19, 195, 163, 7], pkb(source), pkb(vault), le(amount, 8), le(123n, 16), le(BigInt(payload.length), 4), payload);
