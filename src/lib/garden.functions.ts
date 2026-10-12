@@ -169,10 +169,21 @@ export const gardenCommand = createServerFn({ method: "POST" })
           const peek = await peekGarden(userId);
           const ag = E.assertOwner(peek, userId, data.agentId);
           if (ag.status !== "active") throw new DomainError(`@${ag.handle} is ${ag.status} — resume it to run a cycle.`);
+          const rc = data;
+          // Pollen Access metering: every owner-triggered cycle reserves one unit BEFORE any AI spend.
+          const bucket = `owner:${Math.floor(now / 5000)}`;
+          const Acc = await import("./access.server");
+          try {
+            return await Acc.metered(await Acc.defaultDeps(), userId, "owner_cycle", await Acc.cycleKey(data.agentId, bucket), async () => ({ ok: true, value: await ownerCycle() }));
+          } catch (e) {
+            if (e instanceof Acc.AccessError) return { ok: false as const, message: e.message };
+            throw e;
+          }
+          async function ownerCycle() {
           let plan: import("@/domain/engine").CyclePlan | undefined;
           let mode: "ai" | "rules" = "rules";
           let note = "rules-based simulation";
-          if (data.useAi) {
+          if (rc.useAi) {
             const { decideWithAI } = await import("./ai.server");
             const out = await decideWithAI(peek, ag);
             if (out.ok) {
@@ -181,16 +192,15 @@ export const gardenCommand = createServerFn({ method: "POST" })
               note = out.plan.reason;
             } else note = `${out.reason}; fell back to rules-based simulation`;
           }
-          const bucket = `owner:${Math.floor(now / 5000)}`;
           const res = await mutateGarden(userId, (d) => {
-            E.assertOwner(d, userId, data.agentId);
-            const r = E.runCycle(d, data.agentId, now, plan);
-            const coin = r.decision === "launch" && !r.error ? Object.values(d.coins).find((k) => k.creatorId === data.agentId && k.createdAt === now) : undefined;
-            const origin = d.agents[data.agentId];
+            E.assertOwner(d, userId, rc.agentId);
+            const r = E.runCycle(d, rc.agentId, now, plan);
+            const coin = r.decision === "launch" && !r.error ? Object.values(d.coins).find((k) => k.creatorId === rc.agentId && k.createdAt === now) : undefined;
+            const origin = d.agents[rc.agentId];
             return {
               result: { ...r, proposal: coin ? { agentHandle: ag.handle, name: coin.name, symbol: coin.symbol, tagline: coin.tagline, reason: note, originAgentId: origin.id, originPolicyHash: G.policyHash(origin), originMode: mode } : null },
               thoughtMode: mode,
-              cycles: [{ agent_id: data.agentId, bucket, t: now, decision: r.decision, mode, trigger: "owner" as const, reason: (r.error ? `rejected: ${r.error}. ` : "") + note }],
+              cycles: [{ agent_id: rc.agentId, bucket, t: now, decision: r.decision, mode, trigger: "owner" as const, reason: (r.error ? `rejected: ${r.error}. ` : "") + note }],
             };
           });
           if (res.proposal) {
@@ -198,6 +208,7 @@ export const gardenCommand = createServerFn({ method: "POST" })
             await recordLaunchProposal(res.proposal);
           }
           return { ok: true as const, message: `Cycle (${mode === "ai" ? "Lovable AI" : "rules-based"}): ${res.decision}${res.error ? ` — rejected: ${res.error}` : ""}`, mode, note };
+          }
         }
         case "wallet": {
           const { verifyEd25519 } = await import("@/services/wallet");

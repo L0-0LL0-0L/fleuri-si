@@ -6,7 +6,7 @@ import { EmptyState, ListSkeleton, PageHeader, SandboxBadge } from "@/components
 import { FlowerTiles } from "@/components/PixelFlower";
 import { Panel } from "@/components/pq/ui";
 import { ExecutionModeNote, MetricDefinitions, TrialReport, type TrialRow } from "@/components/greenhouse/TrialReport";
-import { LIMITS, SCENARIOS, SCENARIO_INFO, verifyBundle, type ReplayStatus, type Scenario } from "@/domain/greenhouse";
+import { DEEP_LIMITS, LIMITS, SCENARIOS, isDeep, trialWork, SCENARIO_INFO, verifyBundle, type ReplayStatus, type Scenario } from "@/domain/greenhouse";
 import { ghMyRuns, ghPublish, ghRun, ghStart } from "@/lib/greenhouse.functions";
 import { cn } from "@/lib/utils";
 import { useGarden } from "@/store/garden";
@@ -134,9 +134,10 @@ function Greenhouse() {
             </fieldset>
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="text-sm font-semibold">Seed<input type="number" min={0} max={4294967295} className="field mt-1 w-full" value={seed} onChange={(e) => setSeed(Math.floor(Number(e.target.value)))} /></label>
-              <label className="text-sm font-semibold">Repetitions (1–{LIMITS.reps})<input type="number" min={1} max={LIMITS.reps} className="field mt-1 w-full" value={reps} onChange={(e) => setReps(Math.min(LIMITS.reps, Math.max(1, Math.floor(Number(e.target.value) || 1))))} /></label>
-              <label className="text-sm font-semibold">Cycles ({LIMITS.cyclesMin}–{LIMITS.cyclesMax})<input type="number" min={LIMITS.cyclesMin} max={LIMITS.cyclesMax} className="field mt-1 w-full" value={cycles} onChange={(e) => setCycles(Math.min(LIMITS.cyclesMax, Math.max(LIMITS.cyclesMin, Math.floor(Number(e.target.value) || LIMITS.cyclesMin))))} /></label>
+              <label className="text-sm font-semibold">Repetitions (1–{DEEP_LIMITS.reps})<input type="number" min={1} max={DEEP_LIMITS.reps} className="field mt-1 w-full" value={reps} onChange={(e) => setReps(Math.min(DEEP_LIMITS.reps, Math.max(1, Math.floor(Number(e.target.value) || 1))))} /></label>
+              <label className="text-sm font-semibold">Cycles ({LIMITS.cyclesMin}–{DEEP_LIMITS.cyclesMax})<input type="number" min={LIMITS.cyclesMin} max={DEEP_LIMITS.cyclesMax} className="field mt-1 w-full" value={cycles} onChange={(e) => setCycles(Math.min(DEEP_LIMITS.cyclesMax, Math.max(LIMITS.cyclesMin, Math.floor(Number(e.target.value) || LIMITS.cyclesMin))))} /></label>
             </div>
+            <p className="text-xs">Free trials: up to {LIMITS.reps} repetitions and {LIMITS.cyclesMax} cycles. Going beyond that is a <strong>deep trial</strong>. It uses one <Link to="/access" className="underline">Pollen Access</Link> credit and is capped at {DEEP_LIMITS.work} agent-cycles.{isDeep({ repetitions: reps, cycles }) ? ` This trial is deep: ${trialWork({ agentIds: picked, repetitions: reps, cycles, scenarios: scen })} agent-cycles.` : ""}</p>
             <button type="button" className="btn btn-red" disabled={!!busy || !picked.length || !scen.length} onClick={submit}>{busy ?? "Run trial"}</button>
           </>}
         </Panel>

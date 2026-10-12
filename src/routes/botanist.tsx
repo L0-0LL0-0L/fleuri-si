@@ -89,7 +89,7 @@ function Botanist() {
   const usd = (u: string) => (Number(u) / 10 ** USDC_DECIMALS).toFixed(2);
   return <div className="space-y-4">
     <PageHeader title="the botanist." kicker="paid field report · x402" />
-    <p className="text-sm">One point-in-time inspection of any Solana token mint, for {info ? usd(info.price) : "0.50"} USDC. Passport verification stays <Link to="/verify" className="underline">free</Link>. This is not an audit or safety rating.</p>
+    <p className="text-sm">One point-in-time inspection of any Solana token mint, for {info ? usd(info.price) : "0.50"} USDC. Passport verification stays <Link to="/verify" className="underline">free</Link>. This is not an audit or safety rating. Stakers can save reports with <Link to="/access" className="underline">Pollen Access</Link> research credits instead.</p>
     <Panel title="Checkout readiness">{info ? <CheckList checks={info.checks} label="Botanist readiness" /> : <p className="text-sm">Checking…</p>}</Panel>
     <Panel title="1 · Mint to inspect">
       <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void getQuote(); }}>

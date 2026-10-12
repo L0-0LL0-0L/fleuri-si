@@ -165,7 +165,7 @@ describe("greenhouse trials", () => {
     const { s, agents, cfg } = setup(1);
     const m = freezeMarket(s, NOW), p = agents.map(snapshotPolicy);
     expect(() => makeInput({ ...cfg, cycles: 1000 }, m, p)).toThrow();
-    expect(() => makeInput({ ...cfg, repetitions: 9 }, m, p)).toThrow();
+    expect(() => makeInput({ ...cfg, repetitions: 11 }, m, p)).toThrow();
     expect(() => makeInput({ ...cfg, agentIds: ["a", "b", "c", "d", "e"] }, m, p)).toThrow();
     expect(() => makeInput(cfg, { ...m, coins: [{ ...m.coins[0], vSol: -1 }] }, p)).toThrow();
     expect(() => makeInput(cfg, { ...m, coins: [{ ...m.coins[0], vTok: Infinity }] }, p)).toThrow();

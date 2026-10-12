@@ -14,6 +14,116 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_eligibility: {
+        Row: {
+          active_stake: string | null
+          blockers: Json
+          checked_at: string
+          cluster: string | null
+          eligible: boolean
+          owner_id: string
+          slot: number | null
+          wallet: string | null
+        }
+        Insert: {
+          active_stake?: string | null
+          blockers?: Json
+          checked_at?: string
+          cluster?: string | null
+          eligible?: boolean
+          owner_id: string
+          slot?: number | null
+          wallet?: string | null
+        }
+        Update: {
+          active_stake?: string | null
+          blockers?: Json
+          checked_at?: string
+          cluster?: string | null
+          eligible?: boolean
+          owner_id?: string
+          slot?: number | null
+          wallet?: string | null
+        }
+        Relationships: []
+      }
+      access_reports: {
+        Row: {
+          created_at: string
+          digest: string
+          id: string
+          mint: string
+          owner_id: string
+          report: Json
+          reservation_id: string
+        }
+        Insert: {
+          created_at?: string
+          digest: string
+          id?: string
+          mint: string
+          owner_id: string
+          report: Json
+          reservation_id: string
+        }
+        Update: {
+          created_at?: string
+          digest?: string
+          id?: string
+          mint?: string
+          owner_id?: string
+          report?: Json
+          reservation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_reports_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: true
+            referencedRelation: "access_reservations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      access_reservations: {
+        Row: {
+          action: string
+          created_at: string
+          day: string
+          evidence: Json | null
+          finished_at: string | null
+          id: string
+          owner_id: string
+          request_key: string
+          status: string
+          tier: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          day: string
+          evidence?: Json | null
+          finished_at?: string | null
+          id?: string
+          owner_id: string
+          request_key: string
+          status?: string
+          tier: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          day?: string
+          evidence?: Json | null
+          finished_at?: string | null
+          id?: string
+          owner_id?: string
+          request_key?: string
+          status?: string
+          tier?: string
+        }
+        Relationships: []
+      }
       agents: {
         Row: {
           archetype: string
@@ -1264,6 +1374,45 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      access_finish: {
+        Args: { _id: string; _ok: boolean; _owner: string }
+        Returns: Json
+      }
+      access_reserve: {
+        Args: {
+          _action: string
+          _base: number
+          _eligible: boolean
+          _evidence: Json
+          _extra: number
+          _key: string
+          _max_inflight?: number
+          _owner: string
+        }
+        Returns: Json
+      }
+      access_save_report: {
+        Args: {
+          _digest: string
+          _mint: string
+          _owner: string
+          _report: Json
+          _reservation: string
+        }
+        Returns: Json
+      }
+      access_set_eligibility: {
+        Args: {
+          _active: string
+          _blockers: Json
+          _cluster: string
+          _eligible: boolean
+          _owner: string
+          _slot: number
+          _wallet: string
+        }
+        Returns: undefined
+      }
       botanist_claim_payment: {
         Args: {
           _cap: string

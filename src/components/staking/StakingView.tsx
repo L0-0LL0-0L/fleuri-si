@@ -93,7 +93,7 @@ export function StakingView({ api, userId, onOpenWorkspace, wallets, pollMs = PO
 
   return <div className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
     <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-      <p className="max-w-prose text-sm">Stake $FLEURI to share <strong>wrapped SOL actually received</strong> from one fixed <Link to="/pollen" className="underline">Pollen</Link> fee-sharing vault. There are no new FLEURI emissions and no fixed APY: if nothing arrives, nothing is paid. Received funds are released over {days(DEFAULT_TERM_SECONDS)} (proposed default); top-ups during an open window finish by that same deadline, so nobody can delay rewards. Rewards held while nobody was staked resume automatically for the first staker. Unstaking has a {days(DEFAULT_TERM_SECONDS)} cooldown. This layer extends Pollen's 2–5 recipient cap to any number of stakers.</p>
+      <p className="max-w-prose text-sm">Stake $FLEURI to share <strong>wrapped SOL actually received</strong> from one fixed <Link to="/pollen" className="underline">Pollen</Link> fee-sharing vault. There are no new FLEURI emissions and no fixed APY: if nothing arrives, nothing is paid. Received funds are released over {days(DEFAULT_TERM_SECONDS)} (proposed default); top-ups during an open window finish by that same deadline, so nobody can delay rewards. Rewards held while nobody was staked resume automatically for the first staker. Unstaking has a {days(DEFAULT_TERM_SECONDS)} cooldown. This layer extends Pollen's 2–5 recipient cap to any number of stakers. An active stake also unlocks <Link to="/access" className="underline">Pollen Access</Link> extras for your workspace.</p>
       <FlowerTiles count={4} cols={4} className="w-40" />
     </div>
 
