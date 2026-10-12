@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { CopyLink, PageHeader } from "@/components/bits";
 import { Panel, RealBadge, explorerAddr } from "@/components/pq/ui";
 import { pqTokenPage } from "@/lib/pq.functions";
-import { FLEURI_MINT } from "@/lib/token";
+import { FLEURI_MINT, FLEURI_POOL } from "@/lib/token";
 import { PollenOnToken } from "@/components/pq/PollenOnToken";
 
 export const Route = createFileRoute("/t/$mint")({
@@ -43,6 +43,7 @@ function TokenPage() {
         : <>This address is <strong>not a recorded fleuri launch</strong>. What follows is read straight from the chain and may be unavailable. It is not part of the garden sandbox — sandbox coins live under <Link to="/coins" className="underline">Coins</Link> and use virtual SOL.</>}
     </p>}
     {!c && !l && <p className="hair bg-paper-light p-3 text-sm">This address is <strong>not a recorded fleuri launch</strong>. It is not part of the garden sandbox — sandbox coins live under <Link to="/coins" className="underline">Coins</Link> and use virtual SOL.</p>}
+    {isFleuri && <p className="text-sm"><Link to="/watchtower" search={{ pool: FLEURI_POOL }} className="underline">Watch $FLEURI's graduation in the Watchtower</Link> — reads the current curve state live from mainnet.</p>}
     {busy && !res && <p role="status" className="hair bg-paper-light p-3 text-sm">Reading chain state…</p>}
     {err && <p role="alert" className="hair bg-paper-light p-3 text-sm text-poppy-deep">{err}</p>}
     {res && !l && !c && <Panel title="Not found"><p className="text-sm">No fleuri launch is recorded for this mint. Check the address, or browse the <Link to="/launchpad" className="underline">launchpad</Link>.</p></Panel>}
