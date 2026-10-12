@@ -12,7 +12,7 @@ export const wtWatch = createServerFn({ method: "POST" })
     try { return { ok: true as const, data: await (await import("./watchtower.server")).watch(data.pool, data.vault) }; }
     catch (e) {
       const { publicMessage } = await import("./observatory.server");
-      const msg = /Dynamic Bonding Curve|virtual pool/.test((e as Error)?.message ?? "") ? (e as Error).message : publicMessage(e);
+      const msg = publicMessage(e);
       console.error("[watchtower]", msg);
       return { ok: false as const, error: msg };
     }
