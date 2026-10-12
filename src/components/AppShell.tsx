@@ -29,6 +29,7 @@ const NAV = [
   { to: "/verify", label: "Verify passport", icon: BookOpen },
   { to: "/pollen", label: "Pollen vaults", icon: Flower2 },
   { to: "/observatory", label: "Pollen observatory", icon: Flower2 },
+  { to: "/watchtower", label: "Graduation watchtower", icon: Sprout },
   { to: "/staking", label: "Pollen staking", icon: Sprout },
   { to: "/botanist", label: "Botanist report", icon: Sprout },
 ] as const;

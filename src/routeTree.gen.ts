@@ -25,6 +25,7 @@ import { Route as PollenRouteImport } from './routes/pollen'
 import { Route as StakingRouteImport } from './routes/staking'
 import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as VerifyRouteImport } from './routes/verify'
+import { Route as WatchtowerRouteImport } from './routes/watchtower'
 import { Route as AHandleRouteImport } from './routes/a.$handle'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
 import { Route as GreenhouseIndexRouteImport } from './routes/greenhouse.index'
@@ -117,6 +118,11 @@ const VerifyRoute = VerifyRouteImport.update({
   path: '/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WatchtowerRoute = WatchtowerRouteImport.update({
+  id: '/watchtower',
+  path: '/watchtower',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AHandleRoute = AHandleRouteImport.update({
   id: '/a/$handle',
   path: '/a/$handle',
@@ -190,6 +196,7 @@ export interface FileRoutesByFullPath {
   '/staking': typeof StakingRoute
   '/terminal': typeof TerminalRoute
   '/verify': typeof VerifyRoute
+  '/watchtower': typeof WatchtowerRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
@@ -219,6 +226,7 @@ export interface FileRoutesByTo {
   '/staking': typeof StakingRoute
   '/terminal': typeof TerminalRoute
   '/verify': typeof VerifyRoute
+  '/watchtower': typeof WatchtowerRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   '/staking': typeof StakingRoute
   '/terminal': typeof TerminalRoute
   '/verify': typeof VerifyRoute
+  '/watchtower': typeof WatchtowerRoute
   '/a/$handle': typeof AHandleRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
@@ -280,6 +289,7 @@ export interface FileRouteTypes {
     | '/staking'
     | '/terminal'
     | '/verify'
+    | '/watchtower'
     | '/a/$handle'
     | '/c/$symbol'
     | '/passport/$hash'
@@ -309,6 +319,7 @@ export interface FileRouteTypes {
     | '/staking'
     | '/terminal'
     | '/verify'
+    | '/watchtower'
     | '/a/$handle'
     | '/c/$symbol'
     | '/passport/$hash'
@@ -338,6 +349,7 @@ export interface FileRouteTypes {
     | '/staking'
     | '/terminal'
     | '/verify'
+    | '/watchtower'
     | '/a/$handle'
     | '/c/$symbol'
     | '/passport/$hash'
@@ -368,6 +380,7 @@ export interface RootRouteChildren {
   StakingRoute: typeof StakingRoute
   TerminalRoute: typeof TerminalRoute
   VerifyRoute: typeof VerifyRoute
+  WatchtowerRoute: typeof WatchtowerRoute
   AHandleRoute: typeof AHandleRoute
   CSymbolRoute: typeof CSymbolRoute
   PassportHashRoute: typeof PassportHashRoute
@@ -495,6 +508,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/watchtower': {
+      id: '/watchtower'
+      path: '/watchtower'
+      fullPath: '/watchtower'
+      preLoaderRoute: typeof WatchtowerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/a/$handle': {
       id: '/a/$handle'
       path: '/a/$handle'
@@ -592,6 +612,7 @@ const rootRouteChildren: RootRouteChildren = {
   StakingRoute: StakingRoute,
   TerminalRoute: TerminalRoute,
   VerifyRoute: VerifyRoute,
+  WatchtowerRoute: WatchtowerRoute,
   AHandleRoute: AHandleRoute,
   CSymbolRoute: CSymbolRoute,
   PassportHashRoute: PassportHashRoute,
