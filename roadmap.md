@@ -21,6 +21,7 @@
 - [x] Agent Research Receipts: signed human attestations of saved Greenhouse runs, offline/CLI verify, private-by-default publish, optional Memo anchor, frozen proposal review
 - [x] Research Receipts corrective pass: strict JSON, independent checksum integrity, v2 schema without request id, exact draft recovery, scope-guarded wallet flows, browser-safe memo reader, recorded-vs-verified anchors, verified proposal evidence
 - [x] Pollen Observatory: public read-only /observatory (vault lookup, bounded two-stream history, proved source attribution, filters, JSON/CSV export), nav + /pollen links, /docs guide, tests, browser QA
-- [ ] Future: Graduation Watchtower, Pollen Access
+- [x] Graduation Watchtower: public read-only /watchtower (DBC lifecycle, verified DAMM v2 pool, configured vs observed liquidity, per-source routing readiness, JSON export)
+- [ ] Future: Pollen Access
 - [ ] Pollen Staking deployment: deploy keypair, verified build hash, DFS vault naming the pool PDA, routed fee source — waits on owner
 - [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)
