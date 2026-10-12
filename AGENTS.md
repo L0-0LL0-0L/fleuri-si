@@ -26,3 +26,4 @@
 
 - Botanist (x402) payment rules live in `src/lib/AGENTS.md`.
 - Research Receipts (`src/pq/receipt.ts`): ML-DSA-65 under a dedicated context over a server-frozen manifest of the owner's stored Greenhouse run, written via service-role `research_*` RPCs. Verification is offline: strict duplicate-key JSON, checksums recomputed regardless of replay support, browser-safe `memo-reader.ts` for anchors. Wallet flows pass a scope guard to `signSubmitConfirm` — receipts stay verifiable without trusting the server and late signatures are never sent.
+- Pollen Observatory (`src/pq/observatory.ts`, pure and browser-safe) labels a DFS deposit's source only from a DFS-emitted event nested directly under the matching invocation, with source CPI/payload agreement; history is a bounded two-stream window via public read-only `observatory.functions.ts` — keeps attribution provable and RPC load capped.
