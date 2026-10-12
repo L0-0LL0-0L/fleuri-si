@@ -56,7 +56,7 @@ export interface Discovery { method: "migration_tx"; status: "found" | "not_foun
 
 export interface WatchInput {
   cluster: string; genesisHash: string; fetchedAt: string;
-  slots: { pool: number | null; related: number | null; positions: number | null; now: number | null };
+  slots: { pool: number | null; config: number | null; damm: number | null; positions: number | null };
   nowUnix: number | null;
   pool: PoolFacts; config: ConfigFacts | null; baseMint: MintFacts | null; quoteMint: MintFacts | null;
   damm: { derived: string | null; derivationNote: string; account: "missing" | "wrong_owner" | "undecodable" | "ok" | "not_read"; facts: DammPoolFacts | null };
