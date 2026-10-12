@@ -44,7 +44,7 @@ const sourceCpi = (source: string, payload: Uint8Array, s = 2): I => ({ p: sourc
 const tokenXfer = (to: string, amount: bigint, s = 2): I => ({ p: TOKEN_PROGRAM, a: [OTHER, to, SIGNER], d: cat([3], le(amount, 8)), s });
 function claimFrom(source: string, d: number[], amount = 500n, vault = VAULT) {
   const p = payloadOf(d);
-  return { ix: fundByClaim(vault, source, p), inner: [sourceCpi(source, p), tokenXfer(TOKEN_VAULT, amount, 3), event(fundEv(source, vault, amount, p))] };
+  return { ix: fundByClaim(vault, source, p), inner: [sourceCpi(source, p), tokenXfer(vault === VAULT ? TOKEN_VAULT : OTHER, amount, 3), event(fundEv(source, vault, amount, p))] };
 }
 
 describe("discriminators", () => {
@@ -133,7 +133,7 @@ describe("claims, transfers and transaction status", () => {
   });
   it("shows direct token-vault transfers but never counts them as funding", () => {
     const r = decodeTx("d1", tx([{ ix: tokenXfer(TOKEN_VAULT, 42n, 1) }]), ctx);
-    expect(r.entries).toEqual([{ kind: "direct_transfer", amount: "42", tokenProgram: TOKEN_PROGRAM }]);
+    expect(r.entries).toEqual([{ kind: "direct_transfer", amount: "42", tokenProgram: TOKEN_PROGRAM, scope: "outside_dfs" }]);
     const w = windowTotals([r]); expect(w.funded).toBe("0"); expect(w.directUncounted).toBe("42");
   });
   it("resolves v0 loaded addresses", () => {
