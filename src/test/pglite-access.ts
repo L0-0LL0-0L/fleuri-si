@@ -9,6 +9,13 @@ export async function accessDb() {
   await pg.exec("create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;");
   await pg.exec("create table public.owners(id uuid primary key, wallet_address text, wallet_verified boolean not null default false);");
   await pg.exec(`create table public.greenhouse_runs(id uuid primary key default gen_random_uuid(), owner_id uuid not null, request_id uuid not null, status text not null);
+    create table public.agents(id text primary key, owner_id text not null);
+    create function public.greenhouse_claim_lease(_owner uuid,_request uuid,_engine text,_agents text[],_input jsonb,_input_hash text) returns jsonb language plpgsql as $$
+      declare g public.greenhouse_runs; begin
+      select * into g from public.greenhouse_runs where owner_id=_owner and request_id=_request;
+      if g.id is null then insert into public.greenhouse_runs(owner_id,request_id,status) values(_owner,_request,'running') returning * into g;
+        return jsonb_build_object('id',g.id,'status',g.status,'acquired',true,'lease',gen_random_uuid(),'attempts',1); end if;
+      return jsonb_build_object('id',g.id,'status',g.status,'acquired',false,'lease',null,'attempts',2); end $$;
     create table public.garden_effects(bucket text primary key, p jsonb not null);
     create function public.garden_commit(p jsonb) returns bigint language plpgsql as $$ begin
       insert into public.garden_effects values (p->'cycles'->0->>'bucket', p);
@@ -16,6 +23,7 @@ export async function accessDb() {
       return 1; end $$;`);
   await pg.exec(await readFile(new URL("../pq/sql/0016_pollen_access.sql", import.meta.url), "utf8"));
   await pg.exec(await readFile(new URL("../pq/sql/0017_pollen_access_fenced.sql", import.meta.url), "utf8"));
+  await pg.exec(await readFile(new URL("../pq/sql/0018_pollen_access_deep_binding.sql", import.meta.url), "utf8"));
   const lit = (v: unknown) => (v === null || v === undefined ? null : typeof v === "object" ? JSON.stringify(v) : v);
   const str = (v: unknown) => (v === null || v === undefined ? null : String(v));
   const client = {

@@ -146,3 +146,6 @@ grant execute on function public.access_claim_deep_trial(uuid,uuid,uuid,uuid,tex
 grant execute on function public.access_acquire(uuid,text,text,text,text,boolean,int,jsonb,int,int) to service_role;
 grant execute on function public.access_settle_trial(uuid,uuid,uuid) to service_role;
 grant execute on function public.access_commit_cycle(uuid,uuid,uuid,jsonb,jsonb) to service_role;
+
+-- Backfill: bind deep credits from 0017 whose frozen run already exists, so usage counts them immediately.
+select public.access_bind_deep_runs(w.wallet) from (select distinct wallet from public.access_reservations where action='deep_trial' and status='reserved' and wallet is not null) w;
