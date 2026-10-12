@@ -1407,6 +1407,20 @@ export type Database = {
         }
         Returns: Json
       }
+      access_bind_deep_runs: { Args: { _wallet: string }; Returns: number }
+      access_claim_deep_trial: {
+        Args: {
+          _agents: string[]
+          _engine: string
+          _id: string
+          _input: Json
+          _input_hash: string
+          _lease: string
+          _owner: string
+          _request: string
+        }
+        Returns: Json
+      }
       access_commit_cycle: {
         Args: {
           _id: string
