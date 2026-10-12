@@ -170,15 +170,8 @@ export const gardenCommand = createServerFn({ method: "POST" })
           const ag = E.assertOwner(peek, userId, data.agentId);
           if (ag.status !== "active") throw new DomainError(`@${ag.handle} is ${ag.status} — resume it to run a cycle.`);
           const rc = data;
-          // Pollen Access metering: every owner-triggered cycle reserves one unit BEFORE any AI spend.
-          const bucket = `owner:${Math.floor(now / 5000)}`;
-          const Acc = await import("./access.server");
-          try {
-            return await Acc.metered(await Acc.defaultDeps(), userId, "owner_cycle", await Acc.cycleKey(data.agentId, bucket), async () => ({ ok: true, value: await ownerCycle() }));
-          } catch (e) {
-            if (e instanceof Acc.AccessError) return { ok: false as const, message: e.message };
-            throw e;
-          }
+                    const bucket = `owner:${Math.floor(now / 5000)}`;
+          return await ownerCycle(); // free owner cycles are never metered (only the cooldown bucket applies)
           async function ownerCycle() {
           let plan: import("@/domain/engine").CyclePlan | undefined;
           let mode: "ai" | "rules" = "rules";
