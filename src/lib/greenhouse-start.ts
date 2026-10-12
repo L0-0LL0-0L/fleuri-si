@@ -2,7 +2,7 @@
 type GMod = typeof import("@/domain/greenhouse");
 type StartResult = { ok: true; data: { id: string; status: string; recovered: boolean } } | { ok: false; error: string };
 /** Pure orchestration (testable with a fake db): lookup → claim lease → compute → fenced finalize. */
-export async function startTrial(G: GMod, db: any, owner: string, data: { requestId: string; config: any }, live: () => Promise<any>): Promise<StartResult> {
+export async function startTrial(G: GMod, db: any, owner: string, data: { requestId: string; config: any }, live: () => Promise<any>, claimVia?: { fn: string; extra: Record<string, unknown> }): Promise<StartResult> {
   const config = G.normalizeConfig(data.config);
   const found = await db.from("greenhouse_runs").select("id,status,input,input_hash").eq("owner_id", owner).eq("request_id", data.requestId).maybeSingle();
   if (found.error) throw new Error(found.error.message);
@@ -17,7 +17,7 @@ export async function startTrial(G: GMod, db: any, owner: string, data: { reques
     const fresh = G.makeInput(config, G.freezeMarket(g, Date.now()), policies);
     input = fresh; ih = G.inputHash(fresh);
   }
-  const claim = await db.rpc("greenhouse_claim_lease", { _owner: owner, _request: data.requestId, _engine: (input as any).engineVersion, _agents: (input as any).config.agentIds, _input: input, _input_hash: ih });
+  const claim = await db.rpc(claimVia?.fn ?? "greenhouse_claim_lease", { ...(claimVia?.extra ?? {}), _owner: owner, _request: data.requestId, _engine: (input as any).engineVersion, _agents: (input as any).config.agentIds, _input: input, _input_hash: ih });
   if (claim.error) throw new Error(claim.error.message);
   const row = claim.data as { id: string; status: string; acquired: boolean; lease: string | null; attempts: number; input: unknown; input_hash: string };
   if (!row.acquired) return { ok: true, data: { id: row.id, status: row.status, recovered: !!found.data || row.attempts > 1 } };

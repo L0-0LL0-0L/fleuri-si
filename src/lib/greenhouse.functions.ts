@@ -31,11 +31,11 @@ export const ghStart = createServerFn({ method: "POST" })
     try {
       const G = await import("@/domain/greenhouse");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const go = () => startTrial(G, supabaseAdmin as any, context.userId, data, async () => (await import("./garden.server")).peekGarden(null));
+      const go = (claimVia?: { fn: string; extra: Record<string, unknown> }) => startTrial(G, supabaseAdmin as any, context.userId, data, async () => (await import("./garden.server")).peekGarden(null), claimVia);
       if (!G.isDeep(data.config)) return await go(); // free (legacy-profile) trials stay unmetered
       const A = await import("./access.server");
       try {
-        return await A.deepTrial(await A.defaultDeps(), context.userId, data.requestId, G.stableJson(G.normalizeConfig(data.config)), go);
+        return await A.deepTrial(await A.defaultDeps(), context.userId, data.requestId, G.stableJson(G.normalizeConfig(data.config)), (c) => go(c));
       } catch (e) {
         if (e instanceof A.AccessError) return { ok: false as const, error: e.message, kind: e.kind, blockers: e.blockers };
         throw e;
