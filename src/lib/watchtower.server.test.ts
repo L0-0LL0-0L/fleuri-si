@@ -23,7 +23,7 @@ vi.mock("@meteora-ag/dynamic-bonding-curve-sdk", async (orig) => {
 });
 
 import { DAMM_V2_PROGRAM, DBC_PROGRAM, DFS_PROGRAM, SOL_MINT, TOKEN_PROGRAM, TOKEN_2022_PROGRAM } from "@/pq/watchtower";
-import { DAMM_V2_MIGRATION_FEE_ADDRESS, deriveDammV2PoolAddress, deriveDbcPoolAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import { deriveDbcTokenVaultAddress, DAMM_V2_MIGRATION_FEE_ADDRESS, deriveDammV2PoolAddress, deriveDbcPoolAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { DISCOVERY_MAX_REQUESTS, SIG_PAGE, bounded, discoverPositions, mintFacts, tokenAccount, tryVault, watch } from "./watchtower.server";
 import { PublicError, publicMessage } from "./observatory.server";
 
@@ -44,7 +44,7 @@ beforeEach(() => {
   config = cfg();
   dammPool = { tokenAMint: BASE, tokenBMint: SOL_MINT, liquidity: "10", permanentLockLiquidity: "0", collectFeeMode: 1, poolStatus: 0, activationType: 1, creator: CREATOR, poolFees: {}, metrics: { totalPosition: "500" } };
   m.decode.mockImplementation((name: string, d: any) => {
-    if (name === "virtualPool" && d.tag === "pool") return { config: CONFIG, creator: CREATOR, baseMint: BASE, baseVault: k(), quoteVault: k(), quoteReserve: "100", baseReserve: "0", isMigrated: 1, migrationProgress: 3 };
+    if (name === "virtualPool" && d.tag === "pool") return { config: CONFIG, creator: CREATOR, baseMint: BASE, baseVault: deriveDbcTokenVaultAddress(new PublicKey(POOL), new PublicKey(BASE)).toBase58(), quoteVault: deriveDbcTokenVaultAddress(new PublicKey(POOL), new PublicKey(SOL_MINT)).toBase58(), quoteReserve: "100", baseReserve: "0", isMigrated: 1, migrationProgress: 3 };
     if (name === "poolConfig" && d.tag === "config") return config;
     if (name === "pool" && d.tag === "damm") return dammPool;
     throw new Error("bad discriminator");
