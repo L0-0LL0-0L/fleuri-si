@@ -107,7 +107,6 @@ begin
   if r.id is null then raise exception 'access: reservation not found'; end if;
   select * into x from public.access_reports where reservation_id=_reservation;
   if x.id is not null then return jsonb_build_object('id',x.id,'created',false); end if;
-  if r.status = 'refunded' and r.finished_at is not null and r.created_at < now() - interval '10 minutes' then null; end if;
   insert into public.access_reports(owner_id,reservation_id,mint,report,digest) values(_owner,_reservation,_mint,_report,_digest) returning * into x;
   update public.access_reservations set status='consumed', finished_at=now() where id=_reservation;
   return jsonb_build_object('id',x.id,'created',true);
