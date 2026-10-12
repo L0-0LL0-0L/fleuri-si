@@ -130,9 +130,9 @@ describe("vault and token layouts", () => {
     expect(await tryVault({ getAccountInfo: async (p: PublicKey) => m.accounts.get(p.toBase58()) } as any, V)).toMatchObject({ issues: [], slot: 9 });
     m.accounts.set(TV, acct(TOKEN_PROGRAM, "tv", tokAcc(k(), k(), 0n, 2)));
     const bad = await tryVault({ getAccountInfo: async (p: PublicKey) => m.accounts.get(p.toBase58()) } as any, V);
-    expect(bad!.issues.join(" ")).toMatch(/different mint/); expect(bad!.issues.join(" ")).toMatch(/initialized, unfrozen/);
+    expect(bad!.issues!.join(" ")).toMatch(/different mint/); expect(bad!.issues!.join(" ")).toMatch(/initialized, unfrozen/);
     m.readVault.mockResolvedValue({ address: V, mint: k(), tokenVault: TV, supported: false, feeVaultType: 1, recipients: [], pdaIssues: [], accountSlot: 9 });
-    expect((await tryVault({ getAccountInfo: async () => null } as any, V))!.issues.join(" ")).toMatch(/not a supported/);
+    expect((await tryVault({ getAccountInfo: async () => null } as any, V))!.issues!.join(" ")).toMatch(/not a supported/);
     m.readVault.mockRejectedValue(new Error("not DFS"));
     expect(await tryVault({} as any, V)).toBeNull();
     void DFS_PROGRAM;
