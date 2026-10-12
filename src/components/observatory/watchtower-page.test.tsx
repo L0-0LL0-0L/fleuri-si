@@ -44,6 +44,18 @@ describe("watchtower page", () => {
     expect((await screen.findByRole("alert")).textContent).toMatch(/did not match/);
     expect(screen.queryByText("reason-A")).toBeNull(); expect(screen.queryByRole("button", { name: "Download JSON" })).toBeNull();
   });
+  it("offers Watch $FLEURI only on mainnet and reads the token.ts pool live", async () => {
+    const { FLEURI_POOL } = await import("@/lib/token");
+    m.known.mockResolvedValueOnce({ ok: true, data: { cluster: "devnet", launches: [] } });
+    render(<Watchtower />);
+    await waitFor(() => expect(m.known).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Watch $FLEURI" })).toBeNull();
+    cleanup();
+    render(<Watchtower />);
+    (await screen.findByRole("button", { name: "Watch $FLEURI" })).click();
+    await waitFor(() => expect(m.navigate).toHaveBeenCalledWith(expect.objectContaining({ search: { pool: FLEURI_POOL } })));
+    expect(screen.getByText(/not through fleuri's launchpad/)).toBeTruthy();
+  });
   it("shows a safe error on failure and on a network rejection", async () => {
     m.watch.mockResolvedValueOnce({ ok: false, error: "This account is not owned by Meteora Dynamic Bonding Curve." });
     m.search = { pool: A }; const v = render(<Watchtower />);
