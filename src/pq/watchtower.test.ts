@@ -72,7 +72,7 @@ describe("watchtower positions and routing", () => {
     const i = base(); dammOk(i);
     const p = assessPosition(i, pos());
     expect(routing(i, [p]).every((r) => r.status !== "verified")).toBe(true); // no verified vault
-    i.vaults = [{ address: "VAULT", mint: SOL_MINT, tokenVault: "T", recipients: [], pdaIssues: [] }];
+    i.vaults = [{ address: "VAULT", mint: SOL_MINT, tokenVault: "T", recipients: ["R1", "R2"], pdaIssues: [] }];
     const r = routing(i, [assessPosition(i, pos())]);
     expect(r.find((x) => x.source.startsWith("DAMM"))!.status).toBe("verified");
     expect(r.find((x) => x.source === "DBC partner trading fee")!.status).toBe("pending");
