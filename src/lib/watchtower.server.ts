@@ -6,10 +6,11 @@ import {
   DynamicBondingCurveClient, createDammV2Program, deriveDbcPoolAddress, deriveDbcTokenVaultAddress, deriveDammV2PoolAddress,
   derivePositionAddress, derivePositionNftAccount, DAMM_V2_MIGRATION_FEE_ADDRESS,
 } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import { deriveFeeVaultAuthorityAddress, deriveTokenVaultAddress } from "@meteora-ag/dynamic-fee-sharing-sdk";
 import { accountKeys, type RawTx } from "@/pq/observatory";
 import { b58decode } from "@/pq/memo-reader";
 import {
-  DAMM_V2_PROGRAM, DBC_PROGRAM, DFS_PROGRAM, MIGRATION_DAMM_V2_IX, summarize,
+  DAMM_V2_PROGRAM, DBC_PROGRAM, DFS_PROGRAM, MIGRATION_DAMM_V2_IX, TOKEN_PROGRAM, summarize,
   type ConfigFacts, type DammPoolFacts, type Discovery, type MintFacts, type PoolFacts, type PositionFacts, type VaultFacts, type WatchInput,
 } from "@/pq/watchtower";
 import * as sol from "./solana.server";
@@ -29,20 +30,28 @@ const n = (v: any) => Number(v?.toString?.() ?? v ?? 0);
 const u64 = (d: Uint8Array, o: number) => new DataView(d.buffer, d.byteOffset, d.length).getBigUint64(o, true);
 const b58 = (d: Uint8Array) => new PublicKey(d).toBase58();
 
+export const READ_TIMEOUT_MS = 8000;
+/** Every SDK/connection read is bounded; a timeout becomes a safe public error and stops the lookup. */
+export async function bounded<T>(p: Promise<T>, ms = READ_TIMEOUT_MS): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  try { return await Promise.race([p, new Promise<never>((_, rej) => { t = setTimeout(() => rej(new PublicError("The chain read timed out. Try again later.")), ms); })]); }
+  finally { if (t) clearTimeout(t); }
+}
+
 async function ready() {
   const e = sol.solEnv();
   if (!e.cluster || !e.rpcUrl) throw new PublicError("The Solana network is not configured.");
   const conn = sol.connection();
   let genesisHash: string;
-  try { genesisHash = await sol.assertGenesis(conn, e.cluster); } catch { throw new PublicError("The configured network could not be verified right now."); }
+  try { genesisHash = await bounded(sol.assertGenesis(conn, e.cluster)); } catch { throw new PublicError("The configured network could not be verified right now."); }
   return { conn, cluster: e.cluster, genesisHash, rpcUrl: e.rpcUrl };
 }
 
 async function multi(conn: Connection, keys: string[]) {
   try {
-    const r = await conn.getMultipleAccountsInfoAndContext(keys.map((k) => new PublicKey(k)), "confirmed");
+    const r = await bounded(conn.getMultipleAccountsInfoAndContext(keys.map((k) => new PublicKey(k)), "confirmed"));
     return { slot: r.context.slot, infos: r.value as (AccountInfo<Buffer> | null)[] };
-  } catch { throw new PublicError("The chain read failed. Try again later."); }
+  } catch (e) { throw e instanceof PublicError ? e : new PublicError("The chain read failed. Try again later."); }
 }
 
 /** SPL mint base layout (82 bytes; Token-2022 shares it): COption authority, supply, decimals, isInitialized, COption freeze. */
@@ -55,7 +64,7 @@ export const mintFacts = (address: string, i: AccountInfo<Buffer> | null): MintF
 };
 /** SPL token-account base layout (165 bytes): mint, owner, amount, …, state at byte 108. */
 export const tokenAccount = (i: AccountInfo<Buffer> | null) =>
-  i && i.data.length >= 165 ? { mint: b58(i.data.subarray(0, 32)), holder: b58(i.data.subarray(32, 64)), amount: u64(i.data, 64).toString(), state: i.data[108] as number } : null;
+  i && i.data.length >= 165 ? { program: i.owner.toBase58(), mint: b58(i.data.subarray(0, 32)), holder: b58(i.data.subarray(32, 64)), amount: u64(i.data, 64).toString(), state: i.data[108] as number } : null;
 
 function decodeConfig(address: string, owner: string, c: any): ConfigFacts {
   const lv = (x: any) => ({ isInitialized: n(x?.isInitialized), vestingPercentage: n(x?.vestingPercentage), bpsPerPeriod: n(x?.bpsPerPeriod), numberOfPeriods: n(x?.numberOfPeriods), frequency: n(x?.frequency), cliffDurationFromMigrationTime: n(x?.cliffDurationFromMigrationTime) });
@@ -148,16 +157,25 @@ export async function discoverPositions(rpcUrl: string, pool: string, damm: stri
 /** A DFS vault, with layout/type/mint/token-vault checks. Null when the account is not a decodable DFS vault. */
 export async function tryVault(conn: Connection, address: string): Promise<VaultFacts | null> {
   let v: Awaited<ReturnType<typeof readVault>>;
-  try { v = await readVault(conn, address); } catch { return null; }
+  try { v = await bounded(readVault(conn, address)); } catch (e) { if (e instanceof PublicError) throw e; return null; }
   if (!v) return null;
   const issues: string[] = [];
   if (!v.supported) issues.push("The vault's token is not a supported SPL Token mint (USDC or wrapped SOL).");
   if (v.feeVaultType !== 0 && v.feeVaultType !== 1) issues.push(`Unknown fee vault type ${v.feeVaultType}.`);
+  if (v.tokenVault !== deriveTokenVaultAddress(new PublicKey(address)).toBase58()) issues.push("The vault's token account is not the program-derived token vault.");
   try {
-    const t = tokenAccount((await conn.getAccountInfo(new PublicKey(v.tokenVault), "confirmed")) as AccountInfo<Buffer> | null);
+    const [ti, mi] = await bounded(Promise.all([conn.getAccountInfo(new PublicKey(v.tokenVault), "confirmed"), conn.getAccountInfo(new PublicKey(v.mint), "confirmed")]));
+    const t = tokenAccount(ti as AccountInfo<Buffer> | null);
+    const mf = mintFacts(v.mint, (mi as AccountInfo<Buffer> | null) ?? null);
     if (!t) issues.push("The vault's token account could not be read.");
-    else { if (t.mint !== v.mint) issues.push("The vault's token account holds a different mint."); if (t.state !== 1) issues.push("The vault's token account is not in an initialized, unfrozen state."); }
-  } catch { issues.push("The vault's token account could not be read."); }
+    else {
+      if (t.program !== TOKEN_PROGRAM) issues.push("The vault's token account is not an SPL Token account.");
+      if (t.mint !== v.mint) issues.push("The vault's token account holds a different mint.");
+      if (t.holder !== deriveFeeVaultAuthorityAddress().toBase58()) issues.push("The vault's token account is not controlled by the fee-sharing program's vault authority.");
+      if (t.state !== 1) issues.push("The vault's token account is not in an initialized, unfrozen state.");
+    }
+    if (mf.owner !== TOKEN_PROGRAM || mf.initialized !== true) issues.push("The vault's mint is not an initialized SPL Token mint.");
+  } catch (e) { if (e instanceof PublicError && /timed out/.test(e.message)) throw e; issues.push("The vault's token account could not be read."); }
   return { address: v.address, mint: v.mint, tokenVault: v.tokenVault, recipients: v.recipients.map((r) => r.address), pdaIssues: v.pdaIssues, issues, feeVaultType: v.feeVaultType, slot: v.accountSlot ?? null };
 }
 
@@ -234,7 +252,7 @@ export async function watch(poolAddress: string, extraVault?: string) {
       const nftAccts = nftMints.map((m) => derivePositionNftAccount(new PublicKey(m)).toBase58());
       const r4 = await multi(conn, [...d.positions, ...nftMints, ...nftAccts]);
       posSlot = r4.slot;
-      try { nowUnix = await conn.getBlockTime(r4.slot); } catch { nowUnix = null; }
+      try { nowUnix = await bounded(conn.getBlockTime(r4.slot), 4000); } catch { nowUnix = null; }
       d.positions.forEach((addr, k) => {
         const info = r4.infos[k];
         if (!info) { positionErrors.push({ address: addr, reason: "No position account exists here (never created, or closed)." }); return; }

@@ -105,7 +105,12 @@ export function dammVerified(i: WatchInput): { ok: boolean; reason: string } {
   if (d.account === "wrong_owner") return { ok: false, reason: "The account at the derived address is not owned by DAMM v2." };
   if (d.account === "undecodable" || !d.facts) return { ok: false, reason: "The account at the derived address does not decode as a DAMM v2 pool." };
   if (d.facts.owner !== DAMM_V2_PROGRAM) return { ok: false, reason: "The account at the derived address is not owned by DAMM v2." };
+  if (d.facts.address !== d.derived) return { ok: false, reason: "The decoded DAMM v2 account is not the one at the derived address." };
   if (!i.config) return { ok: false, reason: "The DBC config could not be read, so the mints can't be checked." };
+  const c = i.config, p = i.pool;
+  if (c.address !== p.config || c.owner !== DBC_PROGRAM) return { ok: false, reason: "The read config is not this pool's DBC-owned config." };
+  if (p.derivedAddress == null || p.derivedAddress !== p.address) return { ok: false, reason: "The DBC pool is not the canonical address for its config and mints." };
+  if (p.derivedBaseVault == null || p.derivedBaseVault !== p.baseVault || p.derivedQuoteVault !== p.quoteVault) return { ok: false, reason: "The DBC pool's token vaults don't match their derived addresses." };
   if (d.facts.tokenAMint !== i.pool.baseMint || d.facts.tokenBMint !== i.config.quoteMint) return { ok: false, reason: "The DAMM v2 pool's mints differ from this launch's base/quote mints." };
   return { ok: true, reason: "Derived address holds a DAMM v2 pool with this launch's base and quote mints." };
 }
@@ -197,7 +202,8 @@ export function assessPosition(i: WatchInput, p: PositionFacts): PositionView {
   const problems: string[] = [];
   const damm = i.damm.facts;
   if (p.owner !== DAMM_V2_PROGRAM) problems.push("Position account is not owned by DAMM v2.");
-  if (!damm || p.pool !== damm.address) problems.push("Position belongs to a different pool than the verified DAMM v2 pool.");
+  if (!dammVerified(i).ok) problems.push("The DAMM v2 pool is not verified, so its positions can't be.");
+  else if (!damm || p.pool !== damm.address) problems.push("Position belongs to a different pool than the verified DAMM v2 pool.");
   if (p.derivedAddress !== p.address) problems.push("Position address is not derived from its NFT mint.");
   const n = p.nft;
   if (!n) problems.push("The position NFT account could not be read.");
@@ -253,7 +259,11 @@ export function routing(i: WatchInput, positions: PositionView[]): Routing[] {
   // DBC creator trading fee: claimable by pool.creator.
   const cv = vaultBy(i.pool.creator); const cd: string[] = [];
   if (!cv) cd.push("The pool creator is not a verified fee-sharing vault.");
-  else { if (cv.mint !== c.quoteMint) cd.push("The vault's token differs from the pool's quote token."); cd.push(...bad(cv)); }
+  else {
+    if (cv.mint !== c.quoteMint) cd.push("The vault's token differs from the pool's quote token.");
+    if (c.collectFeeMode !== 0) cd.push("The pool collects trading fees in both tokens; claiming the creator fee into a quote-only vault also needs a base-token vault, so only part of it could be routed.");
+    cd.push(...bad(cv));
+  }
   if (c.creatorTradingFeePercentage === 0) cd.push("The config gives the creator no share of trading fees.");
   out.push({ source: "DBC creator trading fee", status: cd.length ? "pending" : "verified", detail: cd.length ? cd : ["Pool creator is this vault with matching quote mint."] });
   // DAMM v2 position fees: only from positions whose NFT a verified vault holds.
