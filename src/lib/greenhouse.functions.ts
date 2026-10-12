@@ -32,15 +32,14 @@ export const ghStart = createServerFn({ method: "POST" })
       const G = await import("@/domain/greenhouse");
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const go = () => startTrial(G, supabaseAdmin as any, context.userId, data, async () => (await import("./garden.server")).peekGarden(null));
-      if (!G.isDeep(data.config)) return await go(); // free trials stay unmetered
+      if (!G.isDeep(data.config)) return await go(); // free (legacy-profile) trials stay unmetered
       const A = await import("./access.server");
-      return await A.metered(await A.defaultDeps(), context.userId, "deep_trial", `trial:${data.requestId}`, async () => {
-        const r = await go();
-        if (r.ok) return { ok: true, value: r };
-        // A stored run (even a failed one) used compute; only a trial that never started is refunded.
-        const row = await (supabaseAdmin as any).from("greenhouse_runs").select("id").eq("owner_id", context.userId).eq("request_id", data.requestId).maybeSingle();
-        return { ok: !!row.data, value: r };
-      }, go);
+      try {
+        return await A.deepTrial(await A.defaultDeps(), context.userId, data.requestId, G.stableJson(G.normalizeConfig(data.config)), go);
+      } catch (e) {
+        if (e instanceof A.AccessError) return { ok: false as const, error: e.message, kind: e.kind, blockers: e.blockers };
+        throw e;
+      }
     } catch (e) { return fail(e); }
   });
 

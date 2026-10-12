@@ -1,4 +1,5 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -50,6 +51,12 @@ export function OwnerControls({ agent }: { agent: Agent }) {
   const owner = state!.owner!;
   const amt = Number(amount);
   const archived = agent.status === "archived";
+  // One request id per bonus attempt, reused on retry so a lost reply never spends twice; cleared after success.
+  const bonusReq = useRef<{ agentId: string; id: string } | null>(null);
+  const bonus = async () => {
+    if (bonusReq.current?.agentId !== agent.id) bonusReq.current = { agentId: agent.id, id: crypto.randomUUID() };
+    if (await run({ type: "bonus", agentId: agent.id, useAi: true, requestId: bonusReq.current.id })) bonusReq.current = null;
+  };
   return (
     <section className="hair space-y-3 bg-paper-light p-3" aria-label="Owner controls">
       <div className="flex flex-wrap gap-2">
@@ -67,10 +74,13 @@ export function OwnerControls({ agent }: { agent: Agent }) {
           className="btn btn-red"
           type="button"
           disabled={agent.status !== "active" || busy}
-          title={agent.status !== "active" ? "Resume the agent to run a cycle" : "Runs one server-side cycle using Lovable AI (falls back to rules-based simulation if AI is unavailable). Extra daily cycles come with Pollen Access."}
+          title={agent.status !== "active" ? "Resume the agent to run a cycle" : "Runs one server-side cycle using Lovable AI (falls back to rules-based simulation if AI is unavailable). Free and unlimited, with a 5-second cooldown."}
           onClick={() => run({ type: "run", agentId: agent.id, useAi: true })}
         >
           {busy ? "Thinking…" : "Run a cycle"}
+        </button>
+        <button className="btn btn-paper" type="button" disabled={agent.status !== "active" || busy} title="Pollen Access: runs one extra cycle right away, even inside the 5-second cooldown. Uses one bonus cycle from your wallet's daily allowance." onClick={() => void bonus()}>
+          Bonus cycle
         </button>
         {!archived && <EditAgent agent={agent} />}
         {archived ? (
@@ -115,6 +125,7 @@ export function OwnerControls({ agent }: { agent: Agent }) {
       <p className="num text-xs text-ink-soft">wallet {owner.vsol.toFixed(2)} vSOL · agent cash {agent.cash.toFixed(4)} vSOL</p>
       <ManualTrade agent={agent} />
       {error && <p role="alert" className="text-sm font-semibold text-poppy-deep">{error}</p>}
+      <p className="text-xs text-ink-soft">Bonus cycles come with <Link to="/access" className="underline">Pollen Access</Link>. Run a cycle stays free.</p>
     </section>
   );
 }

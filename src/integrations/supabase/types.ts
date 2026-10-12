@@ -92,11 +92,17 @@ export type Database = {
           day: string
           evidence: Json | null
           finished_at: string | null
+          generation: number
           id: string
+          input_hash: string | null
+          lease_expires_at: string | null
+          lease_token: string | null
           owner_id: string
           request_key: string
+          result: Json | null
           status: string
           tier: string
+          wallet: string | null
         }
         Insert: {
           action: string
@@ -104,11 +110,17 @@ export type Database = {
           day: string
           evidence?: Json | null
           finished_at?: string | null
+          generation?: number
           id?: string
+          input_hash?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
           owner_id: string
           request_key: string
+          result?: Json | null
           status?: string
           tier: string
+          wallet?: string | null
         }
         Update: {
           action?: string
@@ -116,11 +128,17 @@ export type Database = {
           day?: string
           evidence?: Json | null
           finished_at?: string | null
+          generation?: number
           id?: string
+          input_hash?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
           owner_id?: string
           request_key?: string
+          result?: Json | null
           status?: string
           tier?: string
+          wallet?: string | null
         }
         Relationships: []
       }
@@ -1374,8 +1392,37 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      access_acquire: {
+        Args: {
+          _action: string
+          _eligible: boolean
+          _evidence: Json
+          _input_hash: string
+          _key: string
+          _lease_secs?: number
+          _limit: number
+          _max_inflight?: number
+          _owner: string
+          _wallet: string
+        }
+        Returns: Json
+      }
+      access_commit_cycle: {
+        Args: {
+          _id: string
+          _lease: string
+          _owner: string
+          _result: Json
+          p: Json
+        }
+        Returns: number
+      }
       access_finish: {
         Args: { _id: string; _ok: boolean; _owner: string }
+        Returns: Json
+      }
+      access_release: {
+        Args: { _id: string; _lease: string; _owner: string }
         Returns: Json
       }
       access_reserve: {
@@ -1412,6 +1459,21 @@ export type Database = {
           _wallet: string
         }
         Returns: undefined
+      }
+      access_settle_trial: {
+        Args: { _id: string; _lease: string; _owner: string }
+        Returns: Json
+      }
+      access_store_report: {
+        Args: {
+          _digest: string
+          _id: string
+          _lease: string
+          _mint: string
+          _owner: string
+          _report: Json
+        }
+        Returns: Json
       }
       botanist_claim_payment: {
         Args: {

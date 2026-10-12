@@ -1,100 +1,146 @@
 // @vitest-environment node
-// Pollen Access SQL (0016) in PGlite: atomic reserve/consume/refund, idempotency, quotas, concurrency,
-// stale-reservation rollback, RLS owner reads and service-role-only functions.
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PGlite } from "@electric-sql/pglite";
-import { readFile } from "node:fs/promises";
+// Adversarial tests of the REAL Pollen Access SQL (0016 + 0017) on PGlite: shared wallet budgets, in-flight and
+// changed-input requests, stale lease fencing, cross-midnight expiry, atomic effect+debit, ack loss, RLS and grants.
+import { beforeEach, describe, expect, it } from "vitest";
+import { accessDb } from "@/test/pglite-access";
 
-let db: PGlite;
-const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222";
-const q = async (sql: string, p: any[] = []) => (await db.query<any>(sql, p)).rows;
-const as = async (role: string, sub?: string) => { await db.exec("reset role"); await db.query("select set_config('request.jwt.claim.sub',$1,false)", [sub ?? ""]); await db.exec(`set role ${role}`); };
-const reserve = (owner: string, action: string, key: string, base: number, extra: number, eligible: boolean, inflight = 2) =>
-  q("select access_reserve($1,$2,$3,$4,$5,$6,'{}'::jsonb,$7) j", [owner, action, key, base, extra, eligible, inflight]).then((r) => r[0].j);
-const finish = (owner: string, id: string, ok: boolean) => q("select access_finish($1,$2,$3) j", [owner, id, ok]).then((r) => r[0].j);
-const k = (i: number) => `key-${String(i).padStart(6, "0")}`;
+const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222", C = "33333333-3333-4333-8333-333333333333";
+const W1 = "WalletOne1111111111111111111111111111111111", W2 = "WalletTwo2222222222222222222222222222222222";
+const H1 = "a".repeat(64), H2 = "b".repeat(64);
+let db: Awaited<ReturnType<typeof accessDb>>;
+const q = async (sql: string, p: unknown[] = []) => (await db.pg.query<any>(sql, p)).rows;
+const acq = (owner: string, action: string, key: string, o: { hash?: string; wallet?: string | null; eligible?: boolean; limit?: number; inflight?: number } = {}) =>
+  q("select public.access_acquire($1,$2,$3,$4,$5,$6,$7,'{}'::jsonb,120,$8) j", [owner, action, key, o.hash ?? H1, o.wallet === undefined ? W1 : o.wallet, o.eligible ?? true, o.limit ?? 2, o.inflight ?? 2]).then((r) => r[0].j);
+const commit = (owner: string, id: string, lease: string, bucket?: string, fail = false) =>
+  q("select public.access_commit_cycle($1,$2,$3,$4::jsonb,'{\"message\":\"ran\"}'::jsonb) v", [owner, id, lease, JSON.stringify({ cycles: [{ bucket: bucket ?? `access:${id}` }], ...(fail ? { fail: "1" } : {}) })]);
+const release = (owner: string, id: string, lease: string) => q("select public.access_release($1,$2,$3) j", [owner, id, lease]).then((r) => r[0].j);
+const expire = (id: string) => q("update access_reservations set lease_expires_at = now() - interval '1 second' where id=$1", [id]);
+const status = async (id: string) => (await q("select status from access_reservations where id=$1", [id]))[0].status;
+const effects = async () => (await q("select count(*)::int n from garden_effects"))[0].n;
+const K = (n: number) => `bonus:req-${String(n).padStart(4, "0")}`;
 
-beforeAll(async () => {
-  db = new PGlite();
-  await db.exec("create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; grant usage on schema auth to anon,authenticated,service_role; grant usage on schema public to anon,authenticated,service_role;");
-  await db.exec("alter default privileges in schema public grant all on tables to anon, authenticated;"); // Supabase-like broad defaults must be revoked
-  await db.exec(await readFile(new URL("./sql/0016_pollen_access.sql", import.meta.url), "utf8"));
-}, 30_000);
-afterAll(async () => { await db?.close(); });
+beforeEach(async () => { db = await accessDb(); }, 30_000);
 
-describe("access reservations (0016)", () => {
-  it("uses free base units first, then requires eligibility, then exhausts", async () => {
-    await db.exec("reset role");
-    const a = await reserve(A, "owner_cycle", k(1), 1, 1, false);
-    expect(a).toMatchObject({ tier: "base", status: "reserved", replay: false });
-    await finish(A, a.id, true);
-    await expect(reserve(A, "owner_cycle", k(2), 1, 1, false)).rejects.toThrow("access_locked");
-    const b = await reserve(A, "owner_cycle", k(2), 1, 1, true);
-    expect(b.tier).toBe("extra"); await finish(A, b.id, true);
-    await expect(reserve(A, "owner_cycle", k(3), 1, 1, true)).rejects.toThrow("access_exhausted");
-    // Another owner's quota is independent.
-    expect((await reserve(B, "owner_cycle", k(3), 1, 1, false)).tier).toBe("base");
+describe("shared wallet + UTC-day budget", () => {
+  it("two workspaces on one wallet share the allowance; another wallet is separate", async () => {
+    const a = await acq(A, "owner_cycle", K(1)); await commit(A, a.id, a.lease);
+    const b = await acq(B, "owner_cycle", K(2)); await commit(B, b.id, b.lease);
+    await expect(acq(B, "owner_cycle", K(3))).rejects.toThrow("access_exhausted");
+    await expect(acq(A, "owner_cycle", K(4))).rejects.toThrow("access_exhausted");
+    expect((await acq(C, "owner_cycle", K(5), { wallet: W2 })).state).toBe("acquired");
   });
-  it("is idempotent per request key: a replay never spends twice", async () => {
-    const before = (await q("select count(*)::int n from access_reservations where owner_id=$1", [A]))[0].n;
-    const r = await reserve(A, "owner_cycle", k(1), 1, 1, true);
-    expect(r).toMatchObject({ replay: true, status: "consumed" });
-    expect((await q("select count(*)::int n from access_reservations where owner_id=$1", [A]))[0].n).toBe(before);
-    expect((await finish(A, r.id, true)).applied).toBe(false);
-    expect((await finish(A, r.id, false)).status).toBe("consumed"); // consumed is final, never refunded
+  it("live leases count toward the wallet's in-flight cap across workspaces", async () => {
+    await acq(A, "owner_cycle", K(1), { limit: 10 }); await acq(B, "deep_trial", "aaaaaaaa-0000-4000-8000-000000000001", { limit: 10 });
+    await expect(acq(A, "research_report", "report:x-000001", { limit: 10 })).rejects.toThrow("access_busy");
   });
-  it("refunds failures and lets the same key retry within quota", async () => {
-    const r = await reserve(A, "deep_trial", k(10), 0, 1, true);
-    expect((await finish(A, r.id, false)).status).toBe("refunded");
-    const again = await reserve(A, "deep_trial", k(10), 0, 1, true);
-    expect(again).toMatchObject({ id: r.id, replay: false, status: "reserved", tier: "extra" });
-    await finish(A, again.id, true);
-    await expect(reserve(A, "deep_trial", k(11), 0, 1, true)).rejects.toThrow("access_exhausted");
+  it("yesterday's use doesn't count today; an expired lease from yesterday re-counts under today's day", async () => {
+    await q(`insert into access_reservations(owner_id,action,request_key,day,tier,status,wallet,input_hash) values($1,'owner_cycle','bonus:old-00001',(now() at time zone 'utc')::date - 1,'extra','consumed',$2,$3)`, [A, W1, H1]);
+    const a = await acq(A, "owner_cycle", K(1), { limit: 1 });
+    expect(a.state).toBe("acquired");
+    await q("update access_reservations set day = day - 1 where id=$1", [a.id]); await expire(a.id);
+    const again = await acq(A, "owner_cycle", K(1), { limit: 1 });
+    expect(again.id).toBe(a.id); expect(again.generation).toBe(2);
+    expect((await q("select day = (now() at time zone 'utc')::date ok from access_reservations where id=$1", [a.id]))[0].ok).toBe(true);
   });
-  it("limits in-flight reservations per owner and expires stale ones (rollback safety)", async () => {
-    await reserve(A, "research_report", k(20), 0, 5, true, 2);
-    await reserve(A, "research_report", k(21), 0, 5, true, 2);
-    await expect(reserve(A, "research_report", k(22), 0, 5, true, 2)).rejects.toThrow("access_busy");
-    await db.exec("update access_reservations set created_at=now()-interval '11 minutes' where request_key in ('key-000020','key-000021')");
-    const r = await reserve(A, "research_report", k(22), 0, 5, true, 2);
-    expect(r.status).toBe("reserved");
-    expect((await q("select status from access_reservations where request_key='key-000020'"))[0].status).toBe("refunded");
-  });
-  it("serializes concurrent reservations on the owner lock: no over-spend", async () => {
-    const results = await Promise.allSettled(Array.from({ length: 6 }, (_, i) => reserve(B, "deep_trial", k(100 + i), 0, 2, true, 10)));
-    expect(results.filter((x) => x.status === "fulfilled").length).toBe(2);
-    expect((await q("select count(*)::int n from access_reservations where owner_id=$1 and action='deep_trial'", [B]))[0].n).toBe(2);
-  });
-  it("saves a report and consumes atomically, idempotent per reservation", async () => {
-    const r = await reserve(B, "research_report", k(200), 0, 3, true);
-    const args = [B, r.id, "M".repeat(43), '{"x":1}', "a".repeat(64)];
-    const s1 = (await q("select access_save_report($1,$2,$3,$4::jsonb,$5) j", args))[0].j;
-    const s2 = (await q("select access_save_report($1,$2,$3,$4::jsonb,$5) j", args))[0].j;
-    expect(s1.created).toBe(true); expect(s2).toEqual({ id: s1.id, created: false });
-    expect((await q("select status from access_reservations where id=$1", [r.id]))[0].status).toBe("consumed");
-    await expect(q("select access_save_report($1,$2,$3,$4::jsonb,$5)", [A, r.id, "M".repeat(43), "{}", "a".repeat(64)])).rejects.toThrow("not found");
-  });
-  it("rejects invalid limits and unknown actions", async () => {
-    await expect(reserve(A, "owner_cycle", k(300), -1, 0, true)).rejects.toThrow("invalid limits");
-    await expect(reserve(A, "free_money", k(301), 1, 0, true)).rejects.toThrow();
+  it("is locked without verified eligibility, but a finished request still replays", async () => {
+    await expect(acq(A, "owner_cycle", K(1), { eligible: false, wallet: null })).rejects.toThrow("access_locked");
+    const a = await acq(A, "owner_cycle", K(2)); await commit(A, a.id, a.lease);
+    expect((await acq(A, "owner_cycle", K(2), { eligible: false, wallet: null })).state).toBe("done");
   });
 });
 
-describe("access permissions", () => {
-  it("owners read only their own rows; anon reads nothing; nobody but service_role can write or call", async () => {
-    await as("authenticated", A);
-    const mine = await q("select owner_id from access_reservations");
-    expect(mine.length).toBeGreaterThan(0); expect(mine.every((x) => x.owner_id === A)).toBe(true);
-    expect((await q("select * from access_reports")).length).toBe(0); // B's report is invisible to A
-    await expect(q("insert into access_reservations(owner_id,action,request_key,day,tier) values($1,'owner_cycle','key-999999',current_date,'base')", [A])).rejects.toThrow();
-    await expect(q("update access_reservations set status='refunded'")).rejects.toThrow();
-    await expect(reserve(A, "owner_cycle", k(400), 100, 100, true)).rejects.toThrow(/permission/);
-    await expect(q("select access_set_eligibility($1,'w',true,'1',1,'mainnet-beta','[]'::jsonb)", [A])).rejects.toThrow(/permission/);
-    await as("anon");
-    await expect(q("select * from access_reservations")).rejects.toThrow(/permission/);
-    await expect(q("select access_finish($1,$1,true)", [A])).rejects.toThrow(/permission/);
-    await as("service_role");
-    expect((await reserve(A, "owner_cycle", k(401), 100, 0, false)).tier).toBe("base");
-    await db.exec("reset role");
+describe("idempotency and fencing", () => {
+  it("an identical in-flight request is refused, never run twice (also under concurrency)", async () => {
+    const both = await Promise.allSettled([acq(A, "owner_cycle", K(1)), acq(A, "owner_cycle", K(1))]);
+    expect(both.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    expect(String((both.find((x) => x.status === "rejected") as PromiseRejectedResult).reason)).toMatch("access_inflight");
+  });
+  it("changed input under the same request id is a conflict, before and after completion", async () => {
+    const a = await acq(A, "owner_cycle", K(1));
+    await expect(acq(A, "owner_cycle", K(1), { hash: H2 })).rejects.toThrow("access_conflict");
+    await commit(A, a.id, a.lease);
+    await expect(acq(A, "owner_cycle", K(1), { hash: H2 })).rejects.toThrow("access_conflict");
+  });
+  it("a stale lease can neither commit nor refund the new holder's reservation", async () => {
+    const a = await acq(A, "owner_cycle", K(1)); await expire(a.id);
+    const b = await acq(A, "owner_cycle", K(1));
+    expect(b.lease).not.toBe(a.lease);
+    await expect(commit(A, a.id, a.lease)).rejects.toThrow("access_stale");
+    expect((await release(A, a.id, a.lease)).applied).toBe(false);
+    expect(await status(a.id)).toBe("reserved"); expect(await effects()).toBe(0);
+    await commit(A, b.id, b.lease);
+    expect(await status(a.id)).toBe("consumed"); expect(await effects()).toBe(1);
+  });
+  it("an expired lease stops counting and can no longer commit, so a stale worker can't oversubscribe", async () => {
+    const a = await acq(A, "owner_cycle", K(1), { limit: 1 }); await expire(a.id);
+    const b = await acq(B, "owner_cycle", K(2), { limit: 1 }); await commit(B, b.id, b.lease);
+    await expect(commit(A, a.id, a.lease)).rejects.toThrow("access_stale");
+    expect(await effects()).toBe(1);
+  });
+});
+
+describe("effect + debit atomicity", () => {
+  it("a failed garden effect rolls back with no debit, then refunds", async () => {
+    const a = await acq(A, "owner_cycle", K(1), { limit: 1 });
+    await expect(commit(A, a.id, a.lease, undefined, true)).rejects.toThrow();
+    expect(await effects()).toBe(0); expect(await status(a.id)).toBe("reserved");
+    expect((await release(A, a.id, a.lease)).status).toBe("refunded");
+    expect((await acq(A, "owner_cycle", K(2), { limit: 1 })).state).toBe("acquired");
+  });
+  it("a committed effect whose reply was lost replays its result and can never be refunded", async () => {
+    const a = await acq(A, "owner_cycle", K(1)); await commit(A, a.id, a.lease);
+    expect((await release(A, a.id, a.lease)).applied).toBe(false);
+    const again = await acq(A, "owner_cycle", K(1));
+    expect(again).toMatchObject({ state: "done", result: { message: "ran" } });
+    expect(await effects()).toBe(1); expect(await status(a.id)).toBe("consumed");
+  });
+  it("the cycle must carry this reservation's unique bucket", async () => {
+    const a = await acq(A, "owner_cycle", K(1));
+    await expect(commit(A, a.id, a.lease, "owner:123")).rejects.toThrow("not bound");
+    expect(await effects()).toBe(0);
+  });
+  it("research report + debit save together, bound to the reserved mint", async () => {
+    const mint = "25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri";
+    const hash = (await q("select encode(sha256(convert_to('report|' || $1, 'UTF8')),'hex') h", [mint]))[0].h;
+    const a = await acq(A, "research_report", "report:abc-0001", { hash });
+    const store = (m: string, lease = a.lease) => q("select public.access_store_report($1,$2,$3,$4,'{}'::jsonb,$5) j", [A, a.id, lease, m, "c".repeat(64)]);
+    await expect(store("So11111111111111111111111111111111111111112")).rejects.toThrow("does not match");
+    await store(mint);
+    expect(await status(a.id)).toBe("consumed");
+    await expect(store(mint)).rejects.toThrow("access_stale");
+    expect((await acq(A, "research_report", "report:abc-0001", { hash })).state).toBe("done");
+    expect((await q("select count(*)::int n from access_reports"))[0].n).toBe(1);
+  });
+});
+
+describe("deep trial recovery", () => {
+  const R = "aaaaaaaa-0000-4000-8000-000000000001";
+  it("a crashed worker's credit is bound to its frozen run: recovered as done, never re-spent or refunded", async () => {
+    const a = await acq(A, "deep_trial", R, { limit: 1 });
+    await q("insert into greenhouse_runs(owner_id,request_id,status) values($1,$2,'running')", [A, R]);
+    expect((await release(A, a.id, a.lease)).status).toBe("consumed");
+    expect((await acq(A, "deep_trial", R, { limit: 1 })).state).toBe("done");
+  });
+  it("expired lease with a stored run recovers as done; without a run it is re-acquired; settle refunds when no run", async () => {
+    const a = await acq(A, "deep_trial", R); await expire(a.id);
+    await q("insert into greenhouse_runs(owner_id,request_id,status) values($1,$2,'done')", [A, R]);
+    expect((await acq(A, "deep_trial", R)).state).toBe("done");
+    const R2 = "aaaaaaaa-0000-4000-8000-000000000002";
+    const b = await acq(A, "deep_trial", R2);
+    expect((await q("select public.access_settle_trial($1,$2,$3) j", [A, b.id, b.lease]))[0].j.status).toBe("refunded");
+  });
+});
+
+describe("permissions", () => {
+  it("owners read only their own rows and cannot call any access function; v1 entry points are retired", async () => {
+    await acq(A, "owner_cycle", K(1)); await acq(B, "owner_cycle", K(2), { wallet: W2 });
+    await db.pg.exec("grant usage on schema public to authenticated, anon; grant usage on schema auth to authenticated, anon");
+    await db.pg.query("select set_config('request.jwt.claim.sub',$1,false)", [A]);
+    await db.pg.exec("set role authenticated");
+    expect((await q("select owner_id from access_reservations")).map((r) => r.owner_id)).toEqual([A]);
+    await expect(q("select public.access_acquire($1,'owner_cycle','bonus:zzzz0001',$2,$3,true,99,'{}'::jsonb,120,2)", [A, H1, W1])).rejects.toThrow(/permission denied/);
+    await expect(q("insert into access_reservations(owner_id,action,request_key,day,tier) values($1,'owner_cycle','bonus:zzzz0002',current_date,'extra')", [A])).rejects.toThrow(/permission denied/);
+    await db.pg.exec("reset role");
+    await expect(q("select public.access_reserve($1,'owner_cycle','bonus:zzzz0003',0,1,true,'{}'::jsonb,2)", [A])).rejects.toThrow("Obsolete");
   });
 });
