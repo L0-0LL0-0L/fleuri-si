@@ -16,6 +16,8 @@ import * as sol from "./solana.server";
 import { readVault } from "./pollen.server";
 import { PublicError, RpcError, rpc } from "./observatory.server";
 
+export const MAX_POSITIONS = 20; // bounded position discovery per pool
+const POSITION_DISC = [170, 188, 143, 228, 122, 64, 247, 208]; // DAMM v2 Position (installed IDL; checked by tests)
 export const SIG_PAGE = 1000;
 export const MAX_SIG_PAGES = 3; // bounded discovery: at most 3,000 signatures of the DAMM v2 pool
 
@@ -68,6 +70,23 @@ function decodeDamm(address: string, owner: string, p: any): DammPoolFacts {
     dynamicFeeInitialized: n(p.poolFees?.dynamicFee?.initialized), protocolFeePercent: n(p.poolFees?.protocolFeePercent), referralFeePercent: n(p.poolFees?.referralFeePercent),
     compoundingFeeBps: n(p.poolFees?.compoundingFeeBps), baseFeeBytesHex: raw ? Array.from(raw, (x) => x.toString(16).padStart(2, "0")).join("") : "", totalPositions: s(p.metrics?.totalPosition),
   };
+}
+
+/** Lists current DAMM v2 positions of one pool: Position discriminator + pool at offset 8. */
+export async function listPoolPositions(rpcUrl: string, damm: string, totalPositions: string): Promise<Discovery & { nftMints: string[] }> {
+  const base = { method: "program_accounts" as const, signature: null, pagesRead: 1 };
+  if (BigInt(totalPositions || "0") > BigInt(MAX_POSITIONS)) return { ...base, status: "truncated", pagesRead: 0, detail: `The pool has had ${totalPositions} positions; more than ${MAX_POSITIONS} are not scanned, so ownership is unknown.`, positions: [], nftMints: [] };
+  try {
+    const { b58encode } = await import("@/pq/observatory");
+    const res = await rpc<{ pubkey: string; account: { data: [string, string]; owner: string } }[]>(rpcUrl, "getProgramAccounts", [DAMM_V2_PROGRAM, { encoding: "base64", commitment: "confirmed", dataSlice: { offset: 40, length: 32 }, filters: [{ memcmp: { offset: 0, bytes: b58encode(Uint8Array.from(POSITION_DISC)) } }, { memcmp: { offset: 8, bytes: damm } }] }]);
+    if (!Array.isArray(res)) throw new RpcError("unavailable");
+    if (res.length > MAX_POSITIONS) return { ...base, status: "truncated", detail: `More than ${MAX_POSITIONS} positions; ownership is unknown.`, positions: [], nftMints: [] };
+    const rows = res.map((r) => ({ pos: r.pubkey, nft: b58(Uint8Array.from(atob(r.account.data[0]), (c) => c.charCodeAt(0))) })).sort((a, b) => a.pos.localeCompare(b.pos));
+    return { ...base, status: rows.length ? "found" : "not_found", detail: rows.length ? `All ${rows.length} current position(s) of this pool, listed by the RPC (pool lifetime count ${totalPositions}; closed positions are gone).` : "The RPC listed no positions for this pool.", positions: rows.map((r) => r.pos), nftMints: rows.map((r) => r.nft) };
+  } catch (e) {
+    const rl = e instanceof RpcError && e.kind === "rate_limited";
+    return { ...base, status: "unavailable", detail: rl ? "The RPC rate-limited the position listing; ownership is unknown." : "The RPC could not list positions; ownership is unknown.", positions: [], nftMints: [] };
+  }
 }
 
 /** Bounded walk back to the DAMM v2 pool's first transaction and decode DBC migration_damm_v2 from it. */
@@ -173,7 +192,8 @@ export async function watch(poolAddress: string, extraVault?: string) {
   let posSlot: number | null = null; let nowUnix: number | null = null;
   const dammOk = damm.account === "ok" && !!damm.facts && !!config && damm.facts.tokenAMint === pool.baseMint && damm.facts.tokenBMint === config.quoteMint;
   if (dammOk) {
-    const d = await discoverPositions(rpcUrl, poolAddress, damm.derived!);
+    let d = await listPoolPositions(rpcUrl, damm.derived!, damm.facts!.totalPositions);
+    if (d.status === "unavailable") d = await discoverPositions(rpcUrl, poolAddress, damm.derived!);
     const { nftMints, ...rest } = d; discovery = rest;
     if (d.status === "found") {
       const nftAccts = nftMints.map((m) => derivePositionNftAccount(new PublicKey(m)).toBase58());

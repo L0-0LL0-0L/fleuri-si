@@ -52,7 +52,7 @@ export interface PositionFacts {
   nft: { account: string; derivedAccount: string | null; tokenProgram: string | null; mint: string | null; holder: string | null; amount: string | null; mintOwner: string | null; mintSupply: string | null; mintDecimals: number | null } | null;
 }
 export interface VaultFacts { address: string; mint: string; tokenVault: string; recipients: string[]; pdaIssues: string[] }
-export interface Discovery { method: "migration_tx"; status: "found" | "not_found" | "truncated" | "unavailable"; signature: string | null; pagesRead: number; detail: string; positions: string[] }
+export interface Discovery { method: "program_accounts" | "migration_tx"; status: "found" | "not_found" | "truncated" | "unavailable"; signature: string | null; pagesRead: number; detail: string; positions: string[] }
 
 export interface WatchInput {
   cluster: string; genesisHash: string; fetchedAt: string;
@@ -130,8 +130,9 @@ export function poolChecks(i: WatchInput): Check[] {
   else {
     add("config", "DBC config", c.address === p.config && c.owner === DBC_PROGRAM ? "verified" : "failed", c.address === p.config ? "The pool's own config, owned by DBC and decoded as PoolConfig." : "Config address differs from the pool's.");
     add("target", "Migration target", c.migrationOption === 1 ? "verified" : "unsupported", c.migrationOption === 1 ? "DAMM v2." : `Option ${c.migrationOption} (DAMM v1) is not tracked.`);
-    add("feeOption", "Migration fee option", c.migrationFeeOption <= 5 ? "verified" : c.migrationFeeOption === 6 ? "pending" : "unsupported",
-      c.migrationFeeOption <= 5 ? `Fixed preset ${c.migrationFeeOption}: ${FIXED_FEE_BPS[c.migrationFeeOption]} bps.` : c.migrationFeeOption === 6 ? `Customizable: configured ${c.migratedPoolFeeBps} bps; the live pool fee is only shown once the DAMM v2 pool is verified.` : `Unknown option ${c.migrationFeeOption}.`);
+    const live = dammVerified(i).ok;
+    add("feeOption", "Migration fee option", c.migrationFeeOption <= 5 ? "verified" : c.migrationFeeOption === 6 ? (live ? "verified" : "pending") : "unsupported",
+      c.migrationFeeOption <= 5 ? `Fixed preset ${c.migrationFeeOption}: ${FIXED_FEE_BPS[c.migrationFeeOption]} bps.` : c.migrationFeeOption === 6 ? `Customizable: configured ${c.migratedPoolFeeBps} bps (config intent). ${live ? "The live DAMM v2 fee fields are shown from the verified pool." : "No live pool fee until the DAMM v2 pool verifies."}` : `Unknown option ${c.migrationFeeOption}.`);
     const quoteOk = c.quoteMint === SOL_MINT;
     add("quote", "Quote mint", quoteOk ? "verified" : "unsupported", quoteOk ? "Wrapped SOL." : `Quote mint ${c.quoteMint} is not SOL; amounts are shown in raw base units.`);
   }
