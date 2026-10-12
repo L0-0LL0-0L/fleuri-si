@@ -37,7 +37,7 @@ const cfg = (over: any = {}) => ({ quoteMint: SOL_MINT, feeClaimer: CLAIMER, lef
 let config: any; let dammPool: any;
 
 beforeEach(() => {
-  m.accounts.clear(); m.multiFail = false; m.genesisFail = false; m.rpc.mockReset(); m.readVault.mockReset();
+  m.accounts.clear(); m.multiFail = false; m.genesisFail = false; m.rpc.mockReset(); m.readVault.mockReset().mockRejectedValue(new Error("not DFS"));
   CONFIG = k(); BASE = k(); CREATOR = k(); CLAIMER = k();
   POOL = deriveDbcPoolAddress(new PublicKey(SOL_MINT), new PublicKey(BASE), new PublicKey(CONFIG)).toBase58();
   DAMM = deriveDammV2PoolAddress(DAMM_V2_MIGRATION_FEE_ADDRESS[2], new PublicKey(BASE), new PublicKey(SOL_MINT)).toBase58();

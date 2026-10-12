@@ -149,6 +149,7 @@ export async function discoverPositions(rpcUrl: string, pool: string, damm: stri
 export async function tryVault(conn: Connection, address: string): Promise<VaultFacts | null> {
   let v: Awaited<ReturnType<typeof readVault>>;
   try { v = await readVault(conn, address); } catch { return null; }
+  if (!v) return null;
   const issues: string[] = [];
   if (!v.supported) issues.push("The vault's token is not a supported SPL Token mint (USDC or wrapped SOL).");
   if (v.feeVaultType !== 0 && v.feeVaultType !== 1) issues.push(`Unknown fee vault type ${v.feeVaultType}.`);
