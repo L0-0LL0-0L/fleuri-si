@@ -6,7 +6,7 @@ import { FlowerTiles } from "@/components/PixelFlower";
 import { Panel, RealBadge, downloadBlob, explorerAddr } from "@/components/pq/ui";
 import { wtKnown, wtWatch } from "@/lib/watchtower.functions";
 import { formatUnits } from "@/pq/pollen";
-import { STAGE_TEXT, SOL_MINT, type Status, type WatchInput, type summarize } from "@/pq/watchtower";
+import { STAGE_TEXT, SOL_MINT, vaultProblems as vaultProblemsOf, type Status, type WatchInput, type summarize } from "@/pq/watchtower";
 
 const ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 /** A real public mainnet DBC pool that graduated to DAMM v2; used only as a reading example, unrelated to Fleuri. */
@@ -148,6 +148,7 @@ export function Watchtower() {
           <div>Permanently locked (pool total) <span className="num">{i.damm.facts.permanentLockLiquidity}</span></div>
           <div>Fee collection mode {i.damm.facts.collectFeeMode === 1 ? "1 · quote token only" : i.damm.facts.collectFeeMode === 0 ? "0 · both tokens" : i.damm.facts.collectFeeMode}</div>
           <div>Dynamic fee {i.damm.facts.dynamicFeeInitialized ? "initialized on this pool" : "not initialized on this pool"}</div>
+          <div>Cumulative positions counter <span className="num">{i.damm.facts.totalPositions}</span> (includes closed positions; not an open count)</div>
           <div>Protocol fee {i.damm.facts.protocolFeePercent}% · referral {i.damm.facts.referralFeePercent}% · compounding {i.damm.facts.compoundingFeeBps} bps</div>
           <div>Base fee schedule bytes <span className="font-mono break-all">{i.damm.facts.baseFeeBytesHex.slice(0, 32)}…</span> (not decoded here)</div>
         </dl>}
@@ -157,11 +158,11 @@ export function Watchtower() {
         {s.configured ? <div className="overflow-x-auto"><table className="w-full min-w-[30rem] text-xs"><caption className="text-left font-semibold">Configured split (config intent, not ownership)</caption><thead><tr className="text-left"><th>Bucket</th><th>Owner</th><th>Unlocked</th><th>Permanent lock</th><th>Vesting</th></tr></thead>
           <tbody>{s.configured.map((b) => <tr key={b.side} className="border-t border-ink/20"><td>{b.side}</td><td className="font-mono">{short(b.owner)}</td><td>{b.unlockedPct}%</td><td>{b.permanentPct}%</td><td>{b.vestingPct}%</td></tr>)}</tbody></table></div>
           : <p className="text-sm">Config unavailable, so the configured split is unknown.</p>}
-        {i.discovery && <p className="text-xs"><Chip s={i.discovery.status === "found" ? "verified" : i.discovery.status === "unavailable" ? "unavailable" : "unknown"} /> {i.discovery.detail}</p>}
+        {i.discovery && <p className="text-xs"><Chip s={i.discovery.status === "found" ? "verified" : i.discovery.status === "unavailable" ? "unavailable" : "unknown"} /> {i.discovery.detail}{i.discovery.budget ? ` Used ${i.discovery.budget.requests} of ${i.discovery.budget.maxRequests} requests.` : ""}{i.discovery.status !== "found" ? " Positions not found here are unknown, not absent." : ""}</p>}
         {!i.discovery && <p className="text-xs">Positions are only looked for once the DAMM v2 pool verifies.</p>}
         {i.positionErrors.map((e) => <p key={e.address} className="text-xs text-poppy-deep">{short(e.address)}: {e.reason}</p>)}
         {s.positions.length > 0 && <ul className="space-y-2">{s.positions.map((p) => <li key={p.address} className="hair bg-paper p-2 text-xs">
-          <div className="flex flex-wrap items-center gap-2"><Chip s={p.status} /><Addr a={p.address} cluster={i.cluster} label="position" />{p.lockBadge && p.status === "verified" && <span className="chip bg-paper-light">{p.lockBadge}</span>}</div>
+          <div className="flex flex-wrap items-center gap-2"><Chip s={p.status} /><Addr a={p.address} cluster={i.cluster} label="position" />{p.status === "verified" && p.lockBadge && <span className="chip bg-paper-light">{p.allPermanent ? "all permanently locked" : p.lockBadge === "mixed" ? "mixed: part locked, part not" : p.lockBadge}</span>}<span className="num text-ink-soft">read at slot {p.slot ?? "—"}</span></div>
           {p.problems.map((x) => <p key={x} className="text-poppy-deep">{x}</p>)}
           {p.holder && <p>NFT held by <Addr a={p.holder} cluster={i.cluster} label="holder" /> ({p.holderRole === "dfs_vault" ? "a verified fee-sharing vault" : p.holderRole === "other" ? "not the partner or creator" : p.holderRole})</p>}
           <p className="num">unlocked {p.unlocked} · vesting {p.vested} · permanently locked {p.permanent} (liquidity units)</p>
@@ -170,7 +171,7 @@ export function Watchtower() {
       </Panel>
 
       <Panel title="Fee routing readiness">
-        {i.vaults.length > 0 ? <p className="text-xs">Verified fee-sharing vault(s): {i.vaults.map((v) => <span key={v.address} className="mr-2"><Link to="/observatory" search={{ vault: v.address }} className="font-mono underline">{short(v.address)}</Link></span>)}</p>
+        {i.vaults.length > 0 ? <p className="text-xs">Verified fee-sharing vault(s): {i.vaults.map((v) => <span key={v.address} className="mr-2"><Link to="/observatory" search={{ vault: v.address }} className="font-mono underline">{short(v.address)}</Link>{vaultProblemsOf(v).length ? <span className="text-poppy-deep"> (not a valid routing target: {vaultProblemsOf(v).join(" ")})</span> : null}</span>)}</p>
           : <p className="text-xs">No fee-sharing vault was verified among the fee claimer, creator, position holders{vaultParam ? " or the vault you entered" : ""}.</p>}
         <ul className="space-y-1 text-sm">{s.routing.map((r) => <li key={r.source}><div className="flex flex-wrap items-baseline gap-2"><Chip s={r.status} /><strong>{r.source}</strong></div><ul className="list-disc pl-5 text-xs">{r.detail.map((d) => <li key={d}>{d}</li>)}</ul></li>)}</ul>
         <p className="text-xs text-ink-soft">Readiness means the accounts are set up so fees could reach the vault. It isn't a record of fees routed, and it doesn't mean dynamic fees or staking are live.</p>
