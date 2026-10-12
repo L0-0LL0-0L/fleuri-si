@@ -49,7 +49,7 @@ describe("eligibility fails closed", () => {
 });
 
 describe("bonus cycles", () => {
-  const commitVia = async (c: any) => { const r = await db.rpc(c.fn, c.args({ cycles: [{ bucket: c.bucket, agent_id: c.bucket && (c.agent ?? null) }] }, { message: "Bonus cycle: hold" })); if (r.error) throw new Error(r.error.message); return { message: "Bonus cycle: hold" }; };
+  const commitVia = async (c: any) => { const a = c.args({ cycles: [{ bucket: c.bucket }] }, { message: "Bonus cycle: hold" }); a.p.cycles[0].agent_id = a._owner === A ? "a_1" : "a_2"; const r = await db.rpc(c.fn, a); if (r.error) throw new Error(r.error.message); return { message: "Bonus cycle: hold" }; };
   it("debits with the effect; a retry after a lost reply replays without a second effect", async () => {
     const req = { requestId: "aaaaaaaa-0000-4000-8000-000000000001", agentId: "a_1", useAi: false };
     expect((await bonusCycle(ready, A, req, commitVia)).replay).toBe(false);

@@ -31,6 +31,7 @@ const count = async (action: string) => (await db.pg.query<any>("select count(*)
 beforeEach(async () => {
   db = await accessDb(); staked = false;
   await db.pg.query("insert into owners values($1,'WalletA111111111111111111111111111111111111',true)", [OWNER]);
+  await db.pg.query("insert into agents values('a_1',$1)", [OWNER]);
   m.deps = { db, derivePosition: () => "pos", readStaking: vi.fn(async (w: string) => staked
     ? { cluster: "mainnet-beta", programId: "P", checks: readyChecks(), slot: 1, pool: { address: "POOL" }, position: { address: "pos", owner: w, pool: "POOL", active: "1", pendingAmount: "0" } }
     : { cluster: "mainnet-beta", programId: null, checks: readyChecks({ configured: false }), pool: null, position: null }) };
