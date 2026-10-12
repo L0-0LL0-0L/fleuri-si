@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { DynamicBondingCurveIdl } from "@meteora-ag/dynamic-bonding-curve-sdk";
 import { CpAmmIdl } from "@meteora-ag/cp-amm-sdk";
-import { DAMM_V2_PROGRAM, DBC_PROGRAM, MIGRATION_DAMM_V2_IX, SOL_MINT, TOKEN_2022_PROGRAM, assessPosition, innerVestingReleasable, progressBps, routing, stage, summarize, type WatchInput } from "./watchtower";
+import { vaultProblems, DAMM_V2_PROGRAM, DBC_PROGRAM, MIGRATION_DAMM_V2_IX, SOL_MINT, TOKEN_2022_PROGRAM, assessPosition, innerVestingReleasable, progressBps, poolChecks, routing, stage, summarize, type WatchInput } from "./watchtower";
 
 const lv = { isInitialized: 0, vestingPercentage: 0, bpsPerPeriod: 0, numberOfPeriods: 0, frequency: 0, cliffDurationFromMigrationTime: 0 };
 const iv = { cliffPoint: "0", periodFrequency: "0", cliffUnlockLiquidity: "0", liquidityPerPeriod: "0", totalReleasedLiquidity: "0", numberOfPeriod: 0 };
@@ -19,7 +19,7 @@ function base(): WatchInput {
 }
 const dammOk = (i: WatchInput, over: any = {}) => { i.pool.isMigrated = 1; i.pool.migrationProgress = 3; i.damm = { derived: "D", derivationNote: "", account: "ok", facts: { address: "D", owner: DAMM_V2_PROGRAM, tokenAMint: "B", tokenBMint: SOL_MINT, liquidity: "10", permanentLockLiquidity: "0", collectFeeMode: 1, poolStatus: 0, activationType: 1, creator: "x", dynamicFeeInitialized: 0, protocolFeePercent: 20, referralFeePercent: 20, compoundingFeeBps: 0, baseFeeBytesHex: "", totalPositions: "1", ...over } }; };
 const pos = (over: any = {}) => ({ address: "POS", owner: DAMM_V2_PROGRAM, pool: "D", nftMint: "N", derivedAddress: "POS", unlockedLiquidity: "0", vestedLiquidity: "0", permanentLockedLiquidity: "10", feeAPending: "0", feeBPending: "0", innerVesting: iv,
-  nft: { account: "NA", derivedAccount: "NA", tokenProgram: TOKEN_2022_PROGRAM, mint: "N", holder: "VAULT", amount: "1", mintOwner: TOKEN_2022_PROGRAM, mintSupply: "1", mintDecimals: 0 }, ...over });
+  nft: { account: "NA", derivedAccount: "NA", tokenProgram: TOKEN_2022_PROGRAM, mint: "N", holder: "VAULT", amount: "1", mintOwner: TOKEN_2022_PROGRAM, mintSupply: "1", mintDecimals: 0, state: 1, mintInitialized: true }, slot: 3, ...over });
 
 describe("watchtower lifecycle", () => {
   it("matches installed IDL selectors", () => {
@@ -72,12 +72,48 @@ describe("watchtower positions and routing", () => {
     const i = base(); dammOk(i);
     const p = assessPosition(i, pos());
     expect(routing(i, [p]).every((r) => r.status !== "verified")).toBe(true); // no verified vault
-    i.vaults = [{ address: "VAULT", mint: SOL_MINT, tokenVault: "T", recipients: [], pdaIssues: [] }];
+    i.vaults = [{ address: "VAULT", mint: SOL_MINT, tokenVault: "T", recipients: ["R1", "R2"], pdaIssues: [] }];
     const r = routing(i, [assessPosition(i, pos())]);
     expect(r.find((x) => x.source.startsWith("DAMM"))!.status).toBe("verified");
     expect(r.find((x) => x.source === "DBC partner trading fee")!.status).toBe("pending");
     i.damm.facts!.collectFeeMode = 0;
     expect(routing(i, [assessPosition(i, pos())]).find((x) => x.source.startsWith("DAMM"))!.status).toBe("pending");
     expect(routing(i, []).find((x) => x.source.startsWith("DAMM"))!.status).toBe("unknown");
+  });
+});
+
+describe("watchtower strict evidence", () => {
+  it("never verifies an NFT with unknown, frozen or uninitialized token state", () => {
+    const i = base(); dammOk(i);
+    for (const st of [null, undefined, 0, 2]) {
+      const v = assessPosition(i, pos({ nft: { ...pos().nft, state: st } }));
+      expect(v.status).toBe("failed"); expect(v.holder).toBeNull(); expect(v.lockBadge).toBeNull();
+    }
+    expect(assessPosition(i, pos({ nft: { ...pos().nft, mintInitialized: null } })).status).toBe("failed");
+    expect(assessPosition(i, pos()).slot).toBe(3);
+  });
+  it("only says all permanently locked when no unlocked or vesting liquidity exists", () => {
+    const i = base(); dammOk(i);
+    expect(assessPosition(i, pos()).allPermanent).toBe(true);
+    for (const o of [{ unlockedLiquidity: "1" }, { vestedLiquidity: "1" }, { innerVesting: { ...iv, cliffUnlockLiquidity: "4" } }]) {
+      const v = assessPosition(i, pos(o)); expect(v.allPermanent).toBe(false); expect(v.lockBadge).toBe("mixed");
+    }
+  });
+  it("does not route into a vault with layout, mint or recipient problems", () => {
+    const i = base(); dammOk(i);
+    const good = { address: "VAULT", mint: SOL_MINT, tokenVault: "T", recipients: ["R1", "R2"], pdaIssues: [], issues: [] };
+    i.vaults = [good];
+    expect(routing(i, [assessPosition(i, pos())]).find((x) => x.source.startsWith("DAMM"))!.status).toBe("verified");
+    for (const bad of [{ ...good, issues: ["The vault's token account holds a different mint."] }, { ...good, recipients: [] }, { ...good, pdaIssues: ["non-PDA"] }]) {
+      i.vaults = [bad]; expect(vaultProblems(bad).length).toBeGreaterThan(0);
+      const p = assessPosition(i, pos()); expect(p.holderRole).toBe("other");
+      expect(routing(i, [p]).find((x) => x.source.startsWith("DAMM"))!.status).toBe("pending");
+    }
+  });
+  it("fails or withholds the base-mint check on uninitialized or undecodable mints", () => {
+    const i = base(); i.baseMint = { ...i.baseMint!, initialized: false };
+    expect(poolChecks(i).find((c) => c.id === "baseMint")!.status).toBe("failed");
+    i.baseMint = { ...i.baseMint!, initialized: null };
+    expect(poolChecks(i).find((c) => c.id === "baseMint")!.status).toBe("unavailable");
   });
 });

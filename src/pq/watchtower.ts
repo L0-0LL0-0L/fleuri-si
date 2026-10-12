@@ -37,7 +37,11 @@ export interface ConfigFacts {
   lockedVesting: { amountPerPeriod: string; numberOfPeriod: string; cliffUnlockAmount: string };
   creatorTradingFeePercentage: number;
 }
-export interface MintFacts { address: string; owner: string | null; decimals: number | null; supply: string | null }
+export interface MintFacts {
+  address: string; owner: string | null; decimals: number | null; supply: string | null;
+  /** Decoded from the current SPL mint layout; null when the account is missing or too short. */
+  initialized?: boolean | null; mintAuthority?: string | null; freezeAuthority?: string | null;
+}
 export interface DammPoolFacts {
   address: string; owner: string; tokenAMint: string; tokenBMint: string; liquidity: string; permanentLockLiquidity: string;
   collectFeeMode: number; poolStatus: number; activationType: number; creator: string; dynamicFeeInitialized: number;
@@ -49,10 +53,19 @@ export interface PositionFacts {
   unlockedLiquidity: string; vestedLiquidity: string; permanentLockedLiquidity: string; feeAPending: string; feeBPending: string;
   innerVesting: InnerVestingFacts;
   /** The NFT holder: token account at the program's derived NFT-account PDA. */
-  nft: { account: string; derivedAccount: string | null; tokenProgram: string | null; mint: string | null; holder: string | null; amount: string | null; mintOwner: string | null; mintSupply: string | null; mintDecimals: number | null } | null;
+  nft: { account: string; derivedAccount: string | null; tokenProgram: string | null; mint: string | null; holder: string | null; amount: string | null; mintOwner: string | null; mintSupply: string | null; mintDecimals: number | null;
+    /** SPL token-account state byte (1 = initialized, 2 = frozen); null = unreadable. */ state?: number | null; mintInitialized?: boolean | null } | null;
+  /** Confirmed context slot of the batch that read this position and its NFT accounts. */
+  slot?: number | null;
 }
-export interface VaultFacts { address: string; mint: string; tokenVault: string; recipients: string[]; pdaIssues: string[] }
-export interface Discovery { method: "program_accounts" | "migration_tx"; status: "found" | "not_found" | "truncated" | "unavailable"; signature: string | null; pagesRead: number; detail: string; positions: string[] }
+export interface VaultFacts {
+  address: string; mint: string; tokenVault: string; recipients: string[]; pdaIssues: string[];
+  /** Layout/type/mint/token-vault problems found by the server; any entry means the vault is not a verified routing target. */
+  issues?: string[]; feeVaultType?: number; slot?: number | null;
+}
+/** A vault counts for routing only when its layout, type, mint, token vault and recipients all check out. */
+export const vaultProblems = (v: VaultFacts) => [...(v.issues ?? []), ...v.pdaIssues, ...(v.recipients.length ? [] : ["The vault has no recipients."])];
+export interface Discovery { method: "program_accounts" | "migration_tx"; status: "found" | "not_found" | "truncated" | "unavailable"; signature: string | null; pagesRead: number; detail: string; positions: string[]; budget?: { maxRequests: number; maxMs: number; requests: number } }
 
 export interface WatchInput {
   cluster: string; genesisHash: string; fetchedAt: string;
@@ -139,8 +152,10 @@ export function poolChecks(i: WatchInput): Check[] {
   const bm = i.baseMint;
   if (!bm || !bm.owner) add("baseMint", "Base mint", "unavailable", "The base mint account could not be read.");
   else if (bm.address !== p.baseMint) add("baseMint", "Base mint", "failed", "The read mint differs from the pool's base mint.");
+  else if (bm.owner === TOKEN_PROGRAM && bm.initialized === false) add("baseMint", "Base mint", "failed", "The base mint account is not initialized.")
+  else if (bm.owner === TOKEN_PROGRAM && bm.initialized == null) add("baseMint", "Base mint", "unavailable", "The base mint data could not be decoded.")
   else add("baseMint", "Base mint", bm.owner === TOKEN_PROGRAM ? "verified" : bm.owner === TOKEN_2022_PROGRAM ? "unsupported" : "failed",
-    bm.owner === TOKEN_PROGRAM ? `SPL Token, ${bm.decimals} decimals.` : bm.owner === TOKEN_2022_PROGRAM ? "Token-2022 mint: extensions are not inspected here." : "Not owned by a token program.");
+    bm.owner === TOKEN_PROGRAM ? `SPL Token, ${bm.decimals} decimals; mint authority ${bm.mintAuthority ? "set" : "revoked"}, freeze authority ${bm.freezeAuthority ? "set" : "revoked"} (current read).` : bm.owner === TOKEN_2022_PROGRAM ? "Token-2022 mint: extensions are not inspected here." : "Not owned by a token program.");
   return out;
 }
 
@@ -175,6 +190,8 @@ export interface PositionView {
   address: string; status: Status; problems: string[]; holder: string | null; holderRole: "partner" | "creator" | "dfs_vault" | "other" | null;
   unlocked: string; vested: string; permanent: string; vestingReleasableNow: string | null; vestingRemainingInner: string; separateVestingUnknown: boolean;
   lockBadge: "permanent" | "vesting" | "unlocked" | "mixed" | null; feeAPending: string; feeBPending: string;
+  /** True only when every unit of this position's liquidity is permanently locked. */
+  allPermanent: boolean; slot: number | null;
 }
 export function assessPosition(i: WatchInput, p: PositionFacts): PositionView {
   const problems: string[] = [];
@@ -190,14 +207,19 @@ export function assessPosition(i: WatchInput, p: PositionFacts): PositionView {
     if (n.mint !== p.nftMint) problems.push("NFT account holds a different mint.");
     if (n.amount !== "1") problems.push("NFT account does not hold exactly one NFT.");
     if (n.mintOwner !== TOKEN_2022_PROGRAM || n.mintSupply !== "1" || n.mintDecimals !== 0) problems.push("NFT mint is not a single-supply, zero-decimal Token-2022 mint.");
+    if (n.mintInitialized !== true) problems.push("NFT mint is not readable as an initialized mint.");
+    if (n.state == null) problems.push("NFT token account state is unknown.");
+    else if (n.state !== 1) problems.push(n.state === 2 ? "NFT token account is frozen." : "NFT token account is not initialized.");
+    if (!n.holder) problems.push("NFT holder could not be read.");
   }
   const ok = problems.length === 0;
   const holder = ok ? n!.holder : null;
-  const role = !holder ? null : i.vaults.some((v) => v.address === holder) ? "dfs_vault" : i.config && holder === i.config.feeClaimer ? "partner" : holder === i.pool.creator ? "creator" : "other";
+  const role = !holder ? null : i.vaults.some((v) => v.address === holder && !vaultProblems(v).length) ? "dfs_vault" : i.config && holder === i.config.feeClaimer ? "partner" : holder === i.pool.creator ? "creator" : "other";
   const now = damm?.activationType === 0 ? (i.slots.positions != null ? BigInt(i.slots.positions) : null) : i.nowUnix != null ? BigInt(i.nowUnix) : null;
   const iv = innerVestingReleasable(p.innerVesting, now);
   const vested = B(p.vestedLiquidity), perm = B(p.permanentLockedLiquidity), unl = B(p.unlockedLiquidity);
-  const kinds = [perm > 0n && "permanent", vested > 0n && "vesting", unl > 0n && "unlocked"].filter(Boolean) as string[];
+  const innerLeft = B(iv.remaining);
+  const kinds = [perm > 0n && "permanent", (vested > 0n || innerLeft > 0n) && "vesting", unl > 0n && "unlocked"].filter(Boolean) as string[];
   return {
     address: p.address, status: ok ? "verified" : "failed", problems, holder, holderRole: role,
     unlocked: p.unlockedLiquidity, vested: p.vestedLiquidity, permanent: p.permanentLockedLiquidity,
@@ -205,6 +227,7 @@ export function assessPosition(i: WatchInput, p: PositionFacts): PositionView {
     separateVestingUnknown: vested > B(iv.remaining),
     lockBadge: !ok ? null : kinds.length === 1 ? (kinds[0] as PositionView["lockBadge"]) : kinds.length ? "mixed" : null,
     feeAPending: p.feeAPending, feeBPending: p.feeBPending,
+    allPermanent: ok && perm > 0n && unl === 0n && vested === 0n && innerLeft === 0n, slot: p.slot ?? null,
   };
 }
 
@@ -213,6 +236,7 @@ export interface Routing { source: string; status: Status; detail: string[] }
 export function routing(i: WatchInput, positions: PositionView[]): Routing[] {
   const out: Routing[] = []; const c = i.config;
   const vaultBy = (a: string | null | undefined) => (a ? i.vaults.find((v) => v.address === a) : undefined);
+  const bad = (v: VaultFacts | undefined) => (v ? vaultProblems(v) : []);
   if (!c) return [{ source: "DBC trading fees", status: "unavailable", detail: ["The DBC config could not be read."] }];
   // DBC partner trading fee: the config's fee claimer must be a verified DFS vault for the quote mint.
   const pv = vaultBy(c.feeClaimer); const pd: string[] = [];
@@ -220,7 +244,7 @@ export function routing(i: WatchInput, positions: PositionView[]): Routing[] {
   else {
     if (pv.mint !== c.quoteMint) pd.push("The vault's token differs from the pool's quote token.");
     if (c.collectFeeMode !== 0) pd.push("The pool does not collect fees only in the quote token.");
-    pd.push(...pv.pdaIssues);
+    pd.push(...bad(pv));
   }
   const migrated = i.pool.isMigrated === 1;
   if (migrated) pd.push("Curve trading has ended; only already-accrued DBC fees remain claimable.");
@@ -229,7 +253,7 @@ export function routing(i: WatchInput, positions: PositionView[]): Routing[] {
   // DBC creator trading fee: claimable by pool.creator.
   const cv = vaultBy(i.pool.creator); const cd: string[] = [];
   if (!cv) cd.push("The pool creator is not a verified fee-sharing vault.");
-  else if (cv.mint !== c.quoteMint) cd.push("The vault's token differs from the pool's quote token.");
+  else { if (cv.mint !== c.quoteMint) cd.push("The vault's token differs from the pool's quote token."); cd.push(...bad(cv)); }
   if (c.creatorTradingFeePercentage === 0) cd.push("The config gives the creator no share of trading fees.");
   out.push({ source: "DBC creator trading fee", status: cd.length ? "pending" : "verified", detail: cd.length ? cd : ["Pool creator is this vault with matching quote mint."] });
   // DAMM v2 position fees: only from positions whose NFT a verified vault holds.
@@ -243,7 +267,7 @@ export function routing(i: WatchInput, positions: PositionView[]): Routing[] {
     else {
       if (v.mint !== d.tokenBMint && v.mint !== d.tokenAMint) dd.push("The vault's token is neither pool token.");
       else if (d.collectFeeMode !== 1 || v.mint !== d.tokenBMint) dd.push("The pool collects fees in both tokens (or the vault holds the base token); only one side could be funded into this vault.");
-      dd.push(...v.pdaIssues);
+      dd.push(...bad(v));
     }
     out.push({ source: `DAMM v2 position fees · ${p.address.slice(0, 6)}…`, status: dd.length ? "pending" : "verified", detail: dd.length ? dd : ["A verified vault holds this position NFT, fees are collected only in the vault's token."] });
   }
