@@ -30,35 +30,9 @@ export const accessRedeemReport = createServerFn({ method: "POST" })
     try {
       const A = await import("./access.server");
       const deps = await A.defaultDeps();
-      return { ok: true as const, data: await redeemReport(deps, context.userId, data, async (mint) => { const B = await import("./botanist.server"); const R = await import("./botanist-report"); return R.buildReport(B.reportDeps(), mint); }) };
+      return { ok: true as const, data: await A.redeemReport(deps, context.userId, data, async (mint) => { const B = await import("./botanist.server"); const R = await import("./botanist-report"); return R.buildReport(B.reportDeps(), mint); }) };
     } catch (e) { return safe(e); }
   });
-
-/** Testable redeem flow (same code the endpoint runs). */
-export async function redeemReport(deps: import("./access.server").AccessDeps, owner: string, data: { requestId: string; mint: string }, build: (mint: string) => Promise<unknown>) {
-  const A = await import("./access.server");
-  const { canonicalize, sha256Hex, utf8 } = await import("@/pq/canonical");
-  const key = `report:${data.requestId}`;
-  const existing = async () => {
-    const r = await deps.db.from("access_reservations").select("id").eq("owner_id", owner).eq("action", "research_report").eq("request_key", key).maybeSingle();
-    const x = r.data ? await deps.db.from("access_reports").select("id,mint,created_at").eq("reservation_id", r.data.id).maybeSingle() : { data: null };
-    if (!x.data) throw new A.AccessError("busy", "That report is still being prepared.");
-    if (x.data.mint !== data.mint) throw new A.AccessError("other", "This request id was already used for a different mint.");
-    return { id: x.data.id as string, replay: true };
-  };
-  const r = await A.reserve(deps, owner, "research_report", key);
-  if (r.replay) { if (r.status === "consumed") return existing(); throw new A.AccessError("busy", "That report is already being prepared."); }
-  try {
-    const report = JSON.parse(JSON.stringify(await build(data.mint)));
-    const digest = sha256Hex(utf8(canonicalize(report)));
-    const s = await deps.db.rpc("access_save_report", { _owner: owner, _reservation: r.id, _mint: data.mint, _report: report, _digest: digest });
-    if (s.error) throw new Error("The report could not be saved.");
-    return { id: s.data.id as string, replay: false };
-  } catch (e) {
-    await A.finish(deps, owner, r.id, false).catch(() => {});
-    throw new A.AccessError("other", "The report could not be created; your credit was refunded.");
-  }
-}
 
 /** The owner's saved reports (RLS: owner-only). */
 export const accessReports = createServerFn({ method: "GET" })
