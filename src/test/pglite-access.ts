@@ -1,4 +1,5 @@
-// Test helper: a PGlite database with the real 0016 Pollen Access SQL and a tiny Supabase-like client
+// Test helper: a PGlite database with the real 0016 + 0017 Pollen Access SQL (plus minimal greenhouse_runs and a
+// garden_commit stand-in that records effects and can fail on request) and a tiny Supabase-like client
 // (from().select().eq().in().maybeSingle() and rpc()) so server code runs against the actual functions.
 import { PGlite } from "@electric-sql/pglite";
 import { readFile } from "node:fs/promises";
@@ -7,7 +8,14 @@ export async function accessDb() {
   const pg = new PGlite();
   await pg.exec("create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;");
   await pg.exec("create table public.owners(id uuid primary key, wallet_address text, wallet_verified boolean not null default false);");
+  await pg.exec(`create table public.greenhouse_runs(id uuid primary key default gen_random_uuid(), owner_id uuid not null, request_id uuid not null, status text not null);
+    create table public.garden_effects(bucket text primary key, p jsonb not null);
+    create function public.garden_commit(p jsonb) returns bigint language plpgsql as $$ begin
+      insert into public.garden_effects values (p->'cycles'->0->>'bucket', p);
+      if p->>'fail' = '1' then raise exception 'version_conflict' using errcode = '40001'; end if;
+      return 1; end $$;`);
   await pg.exec(await readFile(new URL("../pq/sql/0016_pollen_access.sql", import.meta.url), "utf8"));
+  await pg.exec(await readFile(new URL("../pq/sql/0017_pollen_access_fenced.sql", import.meta.url), "utf8"));
   const lit = (v: unknown) => (v === null || v === undefined ? null : typeof v === "object" ? JSON.stringify(v) : v);
   const str = (v: unknown) => (v === null || v === undefined ? null : String(v));
   const client = {

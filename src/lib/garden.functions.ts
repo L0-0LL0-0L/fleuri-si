@@ -90,6 +90,7 @@ const Command = z.discriminatedUnion("type", [
   z.object({ type: z.literal("buy"), agentId: z.string().max(40), symbol: z.string().max(8), amount }),
   z.object({ type: z.literal("sell"), agentId: z.string().max(40), symbol: z.string().max(8), fraction: z.number().finite().gt(0).max(1) }),
   z.object({ type: z.literal("run"), agentId: z.string().max(40), useAi: z.boolean() }),
+  z.object({ type: z.literal("bonus"), agentId: z.string().max(40), useAi: z.boolean(), requestId: z.string().uuid() }),
   z.object({ type: z.literal("wallet"), provider: z.enum(["phantom", "solflare"]), address: z.string().min(32).max(44), message: z.string().max(600), signature: z.array(z.number().int().min(0).max(255)).length(64) }),
   z.object({ type: z.literal("unwallet") }),
   z.object({ type: z.literal("save"), eventId: z.string().max(40), kind: z.enum(["like", "bookmark"]), on: z.boolean() }),
@@ -164,43 +165,55 @@ export const gardenCommand = createServerFn({ method: "POST" })
             return { result: E.sell(d, data.agentId, data.symbol, data.fraction, now, `owner-directed trim of $${data.symbol}.`) };
           });
           return { ok: true as const, message: `Agent sold $${data.symbol}.` };
-        case "run": {
-          // Ownership + status checked before spending any AI call.
+        case "run":
+        case "bonus": {
+          // Ownership + status checked before spending any AI call (and, for bonus cycles, before any reservation).
           const peek = await peekGarden(userId);
           const ag = E.assertOwner(peek, userId, data.agentId);
           if (ag.status !== "active") throw new DomainError(`@${ag.handle} is ${ag.status} — resume it to run a cycle.`);
           const rc = data;
-                    const bucket = `owner:${Math.floor(now / 5000)}`;
-          return await ownerCycle(); // free owner cycles are never metered (only the cooldown bucket applies)
-          async function ownerCycle() {
-          let plan: import("@/domain/engine").CyclePlan | undefined;
-          let mode: "ai" | "rules" = "rules";
-          let note = "rules-based simulation";
-          if (rc.useAi) {
-            const { decideWithAI } = await import("./ai.server");
-            const out = await decideWithAI(peek, ag);
-            if (out.ok) {
-              plan = out.plan;
-              mode = "ai";
-              note = out.plan.reason;
-            } else note = `${out.reason}; fell back to rules-based simulation`;
-          }
-          const res = await mutateGarden(userId, (d) => {
-            E.assertOwner(d, userId, rc.agentId);
-            const r = E.runCycle(d, rc.agentId, now, plan);
-            const coin = r.decision === "launch" && !r.error ? Object.values(d.coins).find((k) => k.creatorId === rc.agentId && k.createdAt === now) : undefined;
-            const origin = d.agents[rc.agentId];
-            return {
-              result: { ...r, proposal: coin ? { agentHandle: ag.handle, name: coin.name, symbol: coin.symbol, tagline: coin.tagline, reason: note, originAgentId: origin.id, originPolicyHash: G.policyHash(origin), originMode: mode } : null },
-              thoughtMode: mode,
-              cycles: [{ agent_id: rc.agentId, bucket, t: now, decision: r.decision, mode, trigger: "owner" as const, reason: (r.error ? `rejected: ${r.error}. ` : "") + note }],
-            };
-          });
-          if (res.proposal) {
-            const { recordLaunchProposal } = await import("./garden.server");
-            await recordLaunchProposal(res.proposal);
-          }
-          return { ok: true as const, message: `Cycle (${mode === "ai" ? "Lovable AI" : "rules-based"}): ${res.decision}${res.error ? ` — rejected: ${res.error}` : ""}`, mode, note };
+          type Commit = { fn: string; bucket: string; args: (p: unknown, result: unknown) => Record<string, unknown> };
+          const cycle = async (bucket: string, commit?: Commit) => {
+            let plan: import("@/domain/engine").CyclePlan | undefined;
+            let mode: "ai" | "rules" = "rules";
+            let note = "rules-based simulation";
+            if (rc.useAi) {
+              const { decideWithAI } = await import("./ai.server");
+              const out = await decideWithAI(peek, ag);
+              if (out.ok) { plan = out.plan; mode = "ai"; note = out.plan.reason; }
+              else note = `${out.reason}; fell back to rules-based simulation`;
+            }
+            const label = commit ? "Bonus cycle" : "Cycle";
+            const res = await mutateGarden(userId, (d) => {
+              E.assertOwner(d, userId, rc.agentId);
+              const r = E.runCycle(d, rc.agentId, now, plan);
+              const coin = r.decision === "launch" && !r.error ? Object.values(d.coins).find((k) => k.creatorId === rc.agentId && k.createdAt === now) : undefined;
+              const origin = d.agents[rc.agentId];
+              const message = `${label} (${mode === "ai" ? "Lovable AI" : "rules-based"}): ${r.decision}${r.error ? ` — rejected: ${r.error}` : ""}`;
+              return {
+                result: { ...r, message, proposal: coin ? { agentHandle: ag.handle, name: coin.name, symbol: coin.symbol, tagline: coin.tagline, reason: note, originAgentId: origin.id, originPolicyHash: G.policyHash(origin), originMode: mode } : null },
+                thoughtMode: mode,
+                cycles: [{ agent_id: rc.agentId, bucket, t: now, decision: r.decision, mode, trigger: "owner" as const, reason: (r.error ? `rejected: ${r.error}. ` : "") + note }],
+              };
+            }, 5, commit ? { fn: commit.fn, args: (p, result) => commit.args(p, { message: (result as any).message }) } : undefined);
+            if (res.proposal) {
+              const { recordLaunchProposal } = await import("./garden.server");
+              await recordLaunchProposal(res.proposal);
+            }
+            return { ok: true as const, message: res.message, mode, note };
+          };
+          // Free owner cycles are never metered: only the original 5 s cooldown bucket applies.
+          if (rc.type === "run") return await cycle(`owner:${Math.floor(now / 5000)}`);
+          const Acc = await import("./access.server");
+          try {
+            let extra: { mode: "ai" | "rules"; note: string } | null = null;
+            const r = await Acc.bonusCycle(await Acc.defaultDeps(), userId, { requestId: rc.requestId, agentId: rc.agentId, useAi: rc.useAi }, async (commit) => {
+              const c = await cycle(commit.bucket, commit); extra = { mode: c.mode, note: c.note }; return { message: c.message };
+            });
+            return { ok: true as const, message: r.message, replay: r.replay, ...(extra ?? {}) };
+          } catch (e) {
+            if (e instanceof Acc.AccessError) return { ok: false as const, message: e.message, kind: e.kind, blockers: e.blockers };
+            throw e;
           }
         }
         case "wallet": {

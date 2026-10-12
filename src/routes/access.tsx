@@ -30,7 +30,7 @@ export function AccessPage() {
   const [st, setSt] = useState<Status | null>(null); const [reports, setReports] = useState<Report[]>([]);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState(""); const [note, setNote] = useState("");
   const [mint, setMint] = useState(FLEURI_MINT); const [open, setOpen] = useState<string | null>(null);
-  const gen = useRef(0); const owner = useRef<string | null>(null);
+  const gen = useRef(0); const owner = useRef<string | null>(null); const pendingReq = useRef<{ mint: string; id: string } | null>(null);
   owner.current = userId;
 
   async function load(fresh = false) {
@@ -45,14 +45,16 @@ export function AccessPage() {
     } catch { if (g === gen.current) setErr("Pollen Access could not be loaded. Check your connection and try again."); }
     finally { if (g === gen.current) setBusy(false); }
   }
-  useEffect(() => { gen.current++; setSt(null); setReports([]); setErr(""); setNote(""); if (userId) void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userId]);
+  useEffect(() => { gen.current++; pendingReq.current = null; setSt(null); setReports([]); setErr(""); setNote(""); if (userId) void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userId]);
   useEffect(() => () => { gen.current++; }, []);
 
   async function redeem() {
     const m = mint.trim(); if (!B58.test(m)) { setErr("Enter a valid token mint address."); return; }
     const g = ++gen.current; const me = userId; setBusy(true); setErr(""); setNote("");
     try {
-      const r = await accessRedeemReport({ data: { requestId: crypto.randomUUID(), mint: m } });
+      if (pendingReq.current?.mint !== m) pendingReq.current = { mint: m, id: crypto.randomUUID() };
+      const r = await accessRedeemReport({ data: { requestId: pendingReq.current.id, mint: m } });
+      if (r.ok || (r.kind !== "other" && r.kind !== "inflight" && r.kind !== "stale")) pendingReq.current = null;
       if (g !== gen.current || owner.current !== me) return;
       if (!r.ok) { setErr(r.error + (r.blockers?.length ? ` ${r.blockers[0]}` : "")); return; }
       setNote("Research report saved to your workspace.");
@@ -65,7 +67,7 @@ export function AccessPage() {
   return <div className="space-y-4">
     <PageHeader title="pollen access." kicker="stake $FLEURI · grow your workspace" />
     <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-      <p className="max-w-prose text-sm">An active <Link to="/staking" className="underline">Pollen Staking</Link> position unlocks extras for your workspace: more owner-triggered agent cycles, deeper <Link to="/greenhouse" className="underline">Greenhouse</Link> trials and research credits for saved Botanist reports. The server checks your stake live on Solana mainnet each time it matters. Free trials stay free, and every workspace gets 100 free manual cycles a day. Garden balances are virtual vSOL and never count as stake.</p>
+      <p className="max-w-prose text-sm">An active <Link to="/staking" className="underline">Pollen Staking</Link> position unlocks extras for your workspace: bonus agent cycles that skip the cooldown, deeper <Link to="/greenhouse" className="underline">Greenhouse</Link> trials and research credits for saved Botanist reports. The server checks your stake live on Solana mainnet each time it matters. Free use doesn't change: Run a cycle stays unlimited (with its 5-second cooldown), and free trials stay free. Garden balances are virtual vSOL and never count as stake.</p>
       <FlowerTiles count={4} cols={4} className="w-40" />
     </div>
 
@@ -90,12 +92,12 @@ export function AccessPage() {
     </Panel>}
 
     {userId && st && <Panel title={`Today · ${st.day} UTC`}>
-      <p className="text-xs">Allowances reset at {new Date(st.resetsAt).toUTCString()}. Unused units don't carry over.</p>
+      <p className="text-xs">Allowances reset at {new Date(st.resetsAt).toUTCString()} and are shared by every workspace linked to the same wallet. Unused units don't carry over.</p>
       <ul className="grid gap-2 md:grid-cols-3">{ACTIONS.map((a) => {
         const p = ACCESS_POLICY[a]; const u = st.used[a]; const s = actionState(a, u, !!el?.eligible);
         return <li key={a} className="hair space-y-1 bg-paper p-3 text-sm">
           <div className="flex flex-wrap items-center gap-2"><strong>{p.label}</strong><span className={`chip uppercase ${TONE[s.state]}`}>{s.state}</span></div>
-          <p className="num text-xs">free {u.base}/{p.base} · Pollen Access {u.extra}/{p.extra} {p.unit} used</p>
+          <p className="num text-xs">{u}/{p.extra} {p.unit} used today by your linked wallet</p>
           <p className="text-xs">{p.detail}</p>
         </li>;
       })}</ul>
@@ -106,7 +108,7 @@ export function AccessPage() {
         <input aria-label="Token mint" value={mint} onChange={(e) => setMint(e.target.value)} className="hair min-w-0 bg-paper-light px-2 py-2 font-mono text-xs" />
         <button className="btn btn-red" disabled={busy || actionState("research_report", st.used.research_report, !!el?.eligible).state !== "available"}>Use 1 credit</button>
       </form>
-      <p className="text-xs">One credit = one point-in-time report, saved privately here. A failed read refunds the credit. Want a report without staking? The <Link to="/botanist" className="underline">Botanist</Link> sells the same report for USDC, unchanged.</p>
+      <p className="text-xs">One credit = one point-in-time report, saved privately here. A failed read refunds the credit. A retry of the same request never spends twice. Want a report without staking? The <Link to="/botanist" className="underline">Botanist</Link> sells the same report for USDC, unchanged.</p>
       {reports.length ? <ul className="space-y-1 text-xs">{reports.map((r) => <li key={r.id} className="hair bg-paper p-2">
         <button type="button" className="underline" onClick={() => setOpen(open === r.id ? null : r.id)}>{r.mint.slice(0, 6)}…{r.mint.slice(-4)} · {new Date(r.created_at).toUTCString()}</button>
         <span className="ml-2 font-mono text-ink-soft">sha256 {r.digest.slice(0, 12)}…</span>
@@ -118,7 +120,7 @@ export function AccessPage() {
       <ul className="list-disc space-y-1 pl-5 text-sm">
         <li><strong>Who qualifies:</strong> any positive <em>active</em> Pollen Staking position. Pending unstake doesn't count. There are no tiers or multipliers.</li>
         <li><strong>Proof:</strong> the wallet linked to your workspace by a signed message must own the position at its canonical address in the live pool. That pool must pass these staking checks on mainnet: {REQUIRED_CHECKS.join(", ")}. Devnet, old snapshots, browser storage and garden vSOL never count.</li>
-        <li><strong>Metering:</strong> each action reserves one unit on the server before it runs. It's spent on success and refunded on failure. A retry of the same action never spends twice. Free units are always used first.</li>
+        <li><strong>Metering:</strong> each action reserves one unit on the server before it runs. It's spent on success and refunded on failure. A retry of the same action never spends twice. Free use is never counted. Allowances are per linked wallet, so several workspaces on one wallet share them.</li>
         <li><strong>Status words:</strong> available = units left today · locked = needs verified stake · exhausted = today's units are used · unavailable = can't be checked right now.</li>
         <li><strong>Today:</strong> Pollen Staking isn't deployed yet, so extras stay locked for everyone. The blockers above come from the live staking checks.</li>
       </ul>

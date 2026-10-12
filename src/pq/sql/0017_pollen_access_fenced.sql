@@ -11,6 +11,8 @@ alter table public.access_reservations add column if not exists result jsonb;
 create index if not exists access_reservations_wallet_day on public.access_reservations (wallet, action, day, status);
 comment on column public.access_reservations.tier is 'DEPRECATED: v2 has no free tier; every v2 reservation is extra';
 
+-- Quota = consumed + live leases for the wallet/action/UTC day. An expired lease no longer counts and can no
+-- longer commit (cycles/reports), so a stale worker can never push a wallet over its budget.
 -- Acquire (or recover) the lease for one extra action. Returns state done | acquired.
 create or replace function public.access_acquire(_owner uuid, _action text, _key text, _input_hash text, _wallet text, _eligible boolean,
   _limit int, _evidence jsonb, _lease_secs int default 120, _max_inflight int default 2)
@@ -41,7 +43,7 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('access-wallet:' || _wallet, 0));
   select count(*) into n from public.access_reservations where wallet=_wallet and status='reserved' and lease_expires_at > now() and id is distinct from r.id;
   if n >= _max_inflight then raise exception 'access_busy: % Pollen Access actions are already running for this wallet', n; end if;
-  select count(*) into n from public.access_reservations where wallet=_wallet and action=_action and day=d and status in ('reserved','consumed') and id is distinct from r.id;
+  select count(*) into n from public.access_reservations where wallet=_wallet and action=_action and day=d and (status='consumed' or (status='reserved' and lease_expires_at > now())) and id is distinct from r.id;
   if n >= _limit then raise exception 'access_exhausted: today''s Pollen Access allowance for this wallet is used up'; end if;
   tok := gen_random_uuid();
   if r.id is not null then
@@ -82,7 +84,7 @@ declare r public.access_reservations; v bigint;
 begin
   if _owner is null or _id is null or _lease is null or p is null then raise exception 'access: commit fields are required'; end if;
   select * into r from public.access_reservations where id=_id and owner_id=_owner and action='owner_cycle' for update;
-  if r.id is null or r.status <> 'reserved' or r.lease_token is distinct from _lease then raise exception 'access_stale: this reservation lease is no longer current'; end if;
+  if r.id is null or r.status <> 'reserved' or r.lease_token is distinct from _lease or r.lease_expires_at <= now() then raise exception 'access_stale: this reservation lease is no longer current'; end if;
   if jsonb_array_length(coalesce(p->'cycles','[]'::jsonb)) <> 1 or (p->'cycles'->0->>'bucket') is distinct from ('access:' || _id::text) then
     raise exception 'access: the cycle is not bound to this reservation';
   end if;
@@ -117,7 +119,7 @@ declare r public.access_reservations; x public.access_reports;
 begin
   if _owner is null or _id is null or _lease is null or _mint is null or _report is null or _digest is null then raise exception 'access: report fields are required'; end if;
   select * into r from public.access_reservations where id=_id and owner_id=_owner and action='research_report' for update;
-  if r.id is null or r.status <> 'reserved' or r.lease_token is distinct from _lease then raise exception 'access_stale: this reservation lease is no longer current'; end if;
+  if r.id is null or r.status <> 'reserved' or r.lease_token is distinct from _lease or r.lease_expires_at <= now() then raise exception 'access_stale: this reservation lease is no longer current'; end if;
   if r.input_hash is distinct from encode(sha256(convert_to('report|' || _mint, 'UTF8')), 'hex') then raise exception 'access: report mint does not match the reserved request'; end if;
   insert into public.access_reports(owner_id,reservation_id,mint,report,digest) values(_owner,_id,_mint,_report,_digest) returning * into x;
   update public.access_reservations set status='consumed', finished_at=now(), lease_token=null, lease_expires_at=null, result=jsonb_build_object('report_id',x.id) where id=_id;

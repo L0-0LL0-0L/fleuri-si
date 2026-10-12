@@ -52,19 +52,33 @@ const r9 = (n: number) => Math.round(n * 1e9) / 1e9;
 // ---------- schemas (shared strict parser) ----------
 const fin = z.number().finite();
 const sym = z.string().regex(/^[A-Z]{3,6}$/);
-/** Deep trials (Pollen Access): beyond the free LIMITS, within a fixed agent-cycle compute budget. */
+/** Deep trials (Pollen Access) are a separately versioned profile; the legacy free schema below is unchanged. */
+export const DEEP_PROFILE = "deep-1" as const;
 export const DEEP_LIMITS = { reps: 10, cyclesMax: 120, work: 9600 } as const;
 /** Agent-cycles a trial simulates (each run also has a baseline, so actual work is about double). */
 export const trialWork = (c: { agentIds: unknown[]; repetitions: number; cycles: number; scenarios: unknown[] }) => c.agentIds.length * c.repetitions * c.cycles * c.scenarios.length;
-/** True when a config needs a deep-trial credit (anything above the free limits). */
-export const isDeep = (c: { repetitions: number; cycles: number }) => c.repetitions > LIMITS.reps || c.cycles > LIMITS.cyclesMax;
-export const ConfigSchema = z.object({
-  agentIds: z.array(z.string().min(1).max(40)).min(1).max(LIMITS.agents).refine((a) => new Set(a).size === a.length, "duplicate agents"),
-  seed: z.number().int().min(0).max(0xffffffff),
+/** True only for configs that explicitly carry the deep profile. */
+export const isDeep = (c: unknown) => !!c && typeof c === "object" && (c as { profile?: unknown }).profile === DEEP_PROFILE;
+const agentIdsSchema = z.array(z.string().min(1).max(40)).min(1).max(LIMITS.agents).refine((a) => new Set(a).size === a.length, "duplicate agents");
+const scenariosSchema = z.array(z.enum(SCENARIOS)).min(1).max(4).refine((a) => new Set(a).size === a.length, "duplicate scenarios");
+const seedSchema = z.number().int().min(0).max(0xffffffff);
+/** Original free trial settings (free use, receipts and legacy replay). */
+export const LegacyConfigSchema = z.object({
+  agentIds: agentIdsSchema, seed: seedSchema,
+  repetitions: z.number().int().min(1).max(LIMITS.reps),
+  cycles: z.number().int().min(LIMITS.cyclesMin).max(LIMITS.cyclesMax),
+  scenarios: scenariosSchema,
+}).strict();
+/** Deep profile: must exceed a free limit and stay within the fixed compute budget. */
+export const DeepConfigSchema = z.object({
+  profile: z.literal(DEEP_PROFILE), agentIds: agentIdsSchema, seed: seedSchema,
   repetitions: z.number().int().min(1).max(DEEP_LIMITS.reps),
   cycles: z.number().int().min(LIMITS.cyclesMin).max(DEEP_LIMITS.cyclesMax),
-  scenarios: z.array(z.enum(SCENARIOS)).min(1).max(4).refine((a) => new Set(a).size === a.length, "duplicate scenarios"),
-}).strict().refine((c) => !isDeep(c) || trialWork(c) <= DEEP_LIMITS.work, { message: `Deep trials are limited to ${DEEP_LIMITS.work} agent-cycles (agents × repetitions × cycles × scenarios).` });
+  scenarios: scenariosSchema,
+}).strict()
+  .refine((c) => c.repetitions > LIMITS.reps || c.cycles > LIMITS.cyclesMax, { message: "A deep trial must go beyond the free limits; run it as a free trial instead." })
+  .refine((c) => trialWork(c) <= DEEP_LIMITS.work, { message: `Deep trials are limited to ${DEEP_LIMITS.work} agent-cycles (agents × repetitions × cycles × scenarios).` });
+export const ConfigSchema = z.union([LegacyConfigSchema, DeepConfigSchema]);
 export type TrialConfig = z.infer<typeof ConfigSchema>;
 export const MarketCoinSchema = z.object({ symbol: sym, name: z.string().max(40), vSol: fin.positive().max(1e9), vTok: fin.positive().max(1e15), raised: fin.min(0).max(1e9), graduated: z.boolean() }).strict();
 export const MarketSchema = z.object({ coins: z.array(MarketCoinSchema).min(1).max(LIMITS.coins), posts: z.array(z.object({ symbol: sym.nullable() }).strict()).max(LIMITS.posts), frozenAt: z.number().int().positive() }).strict()

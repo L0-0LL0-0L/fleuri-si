@@ -1,119 +1,87 @@
 // @vitest-environment node
-// Pollen Access enforcement against the real 0016 SQL (PGlite): free baseline, live eligibility gates
-// (wallet link, mainnet, readiness, PDA/owner/pool, active vs pending stake), refunds, replays, cross-owner.
+// Server-side Pollen Access logic against the real SQL on PGlite: fail-closed eligibility with sanitized reasons,
+// bonus-cycle atomicity/refund/replay and research-credit refunds.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { accessDb, readyChecks } from "@/test/pglite-access";
-import { AccessError, cycleKey, eligibility, metered, redeemReport, reserve, usage, type AccessDeps } from "./access.server";
-import { ACCESS_POLICY, utcDay } from "@/pq/access";
+import { bonusCycle, eligibility, redeemReport, reportInputHash, usage, type AccessDeps } from "./access.server";
+import { utcDay } from "@/pq/access";
 
 const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222";
-const WA = "WalletA111111111111111111111111111111111111", WB = "WalletB111111111111111111111111111111111111";
-const PROG = "Prog111111111111111111111111111111111111111", POOL = "Pool111111111111111111111111111111111111111";
-const pda = (w: string) => `pos-${w}`;
-let db: Awaited<ReturnType<typeof accessDb>>; let deps: AccessDeps; let chain: Record<string, any>;
-const state = (wallet: string, over: any = {}) => ({ cluster: "mainnet-beta", programId: PROG, checks: readyChecks(), slot: 900, pool: { address: POOL },
-  position: { address: pda(wallet), owner: wallet, pool: POOL, active: "5000000", pendingAmount: "0" }, ...over });
+const W = "WalletA111111111111111111111111111111111111";
+const MINT = "25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri";
+let db: Awaited<ReturnType<typeof accessDb>>;
+const live = (over: any = {}) => ({ cluster: "mainnet-beta", programId: "P", checks: readyChecks(), slot: 7, pool: { address: "POOL" }, position: { address: "pos", owner: W, pool: "POOL", active: "5", pendingAmount: "0" }, ...over });
+const deps = (read: (w: string) => Promise<any>): AccessDeps => ({ get db() { return db; }, readStaking: read, derivePosition: () => "pos" } as AccessDeps);
+const ready = deps(async () => live());
 
 beforeEach(async () => {
   db = await accessDb();
-  await db.pg.query("insert into owners values($1,$2,true),($3,$4,true)", [A, WA, B, WB]);
-  chain = {};
-  deps = { db: db as any, readStaking: vi.fn(async (w: string) => chain[w] ?? state(w, { programId: null, checks: readyChecks({ configured: false, program: false, code: false, pool: false, vaults: false }), position: null, pool: null })), derivePosition: (_p, w) => pda(w) };
+  await db.pg.query("insert into owners values($1,$2,true),($3,$2,true)", [A, W, B]);
 }, 30_000);
-const useBase = async (owner: string, n = ACCESS_POLICY.owner_cycle.base) => { for (let i = 0; i < n; i++) await metered(deps, owner, "owner_cycle", `base-key-${i}`, async () => ({ ok: true, value: 1 })); };
 
-describe("free baseline", () => {
-  it("is used first with no chain read, and stays free for everyone", async () => {
-    await useBase(A, 3);
-    expect(deps.readStaking).not.toHaveBeenCalled();
-    expect((await usage(db as any, A, utcDay(Date.now()))).owner_cycle).toEqual({ base: 3, extra: 0 });
+describe("eligibility fails closed", () => {
+  const cases: [string, any][] = [
+    ["read throws with RPC details", async () => { throw new Error("fetch https://rpc.example/?api-key=SECRET123 failed"); }],
+    ["devnet", async () => live({ cluster: "devnet" })],
+    ["unknown network", async () => live({ cluster: "weird-net https://x" })],
+    ["truthy non-boolean check", async () => live({ checks: readyChecks().map((c) => (c.id === "code" ? { ...c, ok: "true" } : c)) })],
+    ["failed check with raw detail", async () => live({ checks: readyChecks({ vaults: false }).map((c) => ({ ...c, detail: "RPC https://rpc.example/?key=SECRET123" })) })],
+    ["missing checks", async () => live({ checks: undefined })],
+    ["negative stake", async () => live({ position: { address: "pos", owner: W, pool: "POOL", active: "-5", pendingAmount: "0" } })],
+    ["pending unstake only", async () => live({ position: { address: "pos", owner: W, pool: "POOL", active: "0", pendingAmount: "9" } })],
+    ["other wallet's position", async () => live({ position: { address: "pos", owner: "Other", pool: "POOL", active: "5", pendingAmount: "0" } })],
+    ["non-canonical position", async () => live({ position: { address: "fake", owner: W, pool: "POOL", active: "5", pendingAmount: "0" } })],
+  ];
+  for (const [name, read] of cases) it(name, async () => {
+    const e = await eligibility(deps(read), A, true);
+    expect(e.eligible).toBe(false);
+    expect(JSON.stringify(e)).not.toMatch(/SECRET|https?:\/\//);
   });
-  it("deep trials and research credits have no free units: they lock without a stake", async () => {
-    await expect(reserve(deps, A, "deep_trial", "trial:x1234567")).rejects.toMatchObject({ kind: "locked" });
-    await expect(reserve(deps, A, "research_report", "report:x1234567")).rejects.toMatchObject({ kind: "locked" });
-  });
-});
-
-describe("eligibility gates", () => {
-  it("unready / undeployed staking keeps extra units locked with live blockers", async () => {
-    await useBase(A);
-    const e = await reserve(deps, A, "owner_cycle", "extra-key-1").catch((x) => x);
-    expect(e).toBeInstanceOf(AccessError); expect(e.kind).toBe("locked");
-    expect(e.blockers.join(" ")).toMatch(/configured/);
-    expect((await usage(db as any, A, utcDay(Date.now()))).owner_cycle.extra).toBe(0);
-  });
-  it("a verified mainnet active stake on the canonical PDA unlocks extra units", async () => {
-    chain[WA] = state(WA);
-    await useBase(A);
-    expect((await reserve(deps, A, "owner_cycle", "extra-key-2")).tier).toBe("extra");
-  });
-  for (const [name, over, re] of [
-    ["devnet stake", { cluster: "devnet" }, /mainnet/],
-    ["pending-unstake only", { position: { address: pda(WA), owner: WA, pool: POOL, active: "0", pendingAmount: "9" } }, /pending/],
-    ["position owned by another wallet", { position: { address: pda(WA), owner: WB, pool: POOL, active: "5", pendingAmount: "0" } }, /different wallet/],
-    ["non-canonical position", { position: { address: "elsewhere", owner: WA, pool: POOL, active: "5", pendingAmount: "0" } }, /canonical/],
-    ["wrong pool", { position: { address: pda(WA), owner: WA, pool: "OtherPool", active: "5", pendingAmount: "0" } }, /different pool/],
-    ["code hash mismatch", { checks: readyChecks({ code: false }) }, /code/],
-    ["mint authority not revoked", { checks: readyChecks({ mintAuth: false }) }, /mintAuth/],
-  ] as const) it(`rejects ${name}`, async () => {
-    chain[WA] = state(WA, over);
-    const el = await eligibility(deps, A, true);
-    expect(el.eligible).toBe(false); expect(el.blockers.join(" ")).toMatch(re);
-  });
-  it("an unverified or missing wallet link never reads the chain", async () => {
+  it("an unverified wallet is never read", async () => {
     await db.pg.query("update owners set wallet_verified=false where id=$1", [A]);
-    const el = await eligibility(deps, A, true);
-    expect(el.eligible).toBe(false); expect(deps.readStaking).not.toHaveBeenCalled();
+    const read = vi.fn(async () => live());
+    expect((await eligibility(deps(read), A, true)).eligible).toBe(false); expect(read).not.toHaveBeenCalled();
   });
-  it("a failed staking read keeps benefits locked", async () => {
-    deps.readStaking = vi.fn(async () => { throw new Error("rpc down"); });
-    const el = await eligibility(deps, A, true);
-    expect(el.eligible).toBe(false); expect(el.blockers[0]).toMatch(/read failed/);
-  });
-  it("caches per owner and wallet only; a re-linked wallet or another owner re-reads; extra spending reads fresh", async () => {
-    chain[WA] = state(WA);
-    await eligibility(deps, A); await eligibility(deps, A);
-    expect(deps.readStaking).toHaveBeenCalledTimes(1);
-    expect((await eligibility(deps, B)).eligible).toBe(false); // B has no stake; A's cache doesn't leak
-    await db.pg.query("update owners set wallet_address=$2 where id=$1", [A, WB]);
-    expect((await eligibility(deps, A)).eligible).toBe(false);
-    await useBase(A);
-    chain[WB] = state(WB);
-    expect((await reserve(deps, A, "owner_cycle", "extra-fresh")).tier).toBe("extra");
+  it("a fully ready mainnet active position qualifies", async () => {
+    expect(await eligibility(ready, A, true)).toMatchObject({ eligible: true, activeStake: "5", cluster: "mainnet-beta" });
   });
 });
 
-describe("metering", () => {
-  it("refunds a failed action and lets the same key retry", async () => {
-    const run = vi.fn().mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce({ ok: true, value: 7 });
-    await expect(metered(deps, A, "owner_cycle", "retry-key", run)).rejects.toThrow("boom");
-    expect(await metered(deps, A, "owner_cycle", "retry-key", run)).toBe(7);
-    expect((await usage(db as any, A, utcDay(Date.now()))).owner_cycle.base).toBe(1);
+describe("bonus cycles", () => {
+  const commitVia = async (c: any) => { const r = await db.rpc(c.fn, c.args({ cycles: [{ bucket: c.bucket }] }, { message: "Bonus cycle: hold" })); if (r.error) throw new Error(r.error.message); return { message: "Bonus cycle: hold" }; };
+  it("debits with the effect; a retry after a lost reply replays without a second effect", async () => {
+    const req = { requestId: "aaaaaaaa-0000-4000-8000-000000000001", agentId: "a_1", useAi: false };
+    expect((await bonusCycle(ready, A, req, commitVia)).replay).toBe(false);
+    const run = vi.fn(commitVia);
+    expect(await bonusCycle(ready, A, req, run)).toMatchObject({ replay: true, message: "Bonus cycle: hold" });
+    expect(run).not.toHaveBeenCalled();
+    expect((await usage(db, W, utcDay(Date.now()))).owner_cycle).toBe(1);
   });
-  it("never runs a consumed key twice and refuses a concurrent duplicate", async () => {
-    let n = 0; let release!: () => void;
-    const slow = () => new Promise<{ ok: boolean; value: number }>((r) => { release = () => r({ ok: true, value: ++n }); });
-    const first = metered(deps, A, "owner_cycle", await cycleKey("a_1", "owner:1"), slow);
-    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
-    await expect(metered(deps, A, "owner_cycle", await cycleKey("a_1", "owner:1"), slow)).rejects.toThrow(/in progress/);
-    release(); expect(await first).toBe(1);
-    await expect(metered(deps, A, "owner_cycle", await cycleKey("a_1", "owner:1"), slow)).rejects.toThrow(/already ran/);
-    expect(n).toBe(1);
+  it("is shared by both workspaces on the wallet", async () => {
+    await bonusCycle(ready, A, { requestId: "aaaaaaaa-0000-4000-8000-000000000002", agentId: "a_1", useAi: false }, commitVia);
+    await bonusCycle(ready, B, { requestId: "aaaaaaaa-0000-4000-8000-000000000003", agentId: "a_2", useAi: false }, commitVia);
+    expect((await usage(db, W, utcDay(Date.now()))).owner_cycle).toBe(2);
+  });
+  it("a failure before commit refunds and leaves no effect", async () => {
+    await expect(bonusCycle(ready, A, { requestId: "aaaaaaaa-0000-4000-8000-000000000004", agentId: "a_1", useAi: false }, async () => { throw new Error("AI down"); })).rejects.toThrow("AI down");
+    expect((await usage(db, W, utcDay(Date.now()))).owner_cycle).toBe(0);
+    expect((await db.pg.query<any>("select count(*)::int n from garden_effects")).rows[0].n).toBe(0);
+  });
+  it("is locked when staking isn't ready, without running anything", async () => {
+    const run = vi.fn(commitVia);
+    await expect(bonusCycle(deps(async () => live({ checks: readyChecks({ configured: false }) })), A, { requestId: "aaaaaaaa-0000-4000-8000-000000000005", agentId: "a_1", useAi: false }, run)).rejects.toMatchObject({ kind: "locked" });
+    expect(run).not.toHaveBeenCalled();
   });
 });
 
 describe("research credits", () => {
-  it("locked without stake; with stake creates one saved report per request, refunds on failure", async () => {
-    const build = vi.fn(async (m: string) => ({ mint: m, facts: { ok: true } }));
-    await expect(redeemReport(deps, A, { requestId: "aaaaaaaa-0000-4000-8000-000000000001", mint: "M".repeat(43) }, build)).rejects.toMatchObject({ kind: "locked" });
-    expect(build).not.toHaveBeenCalled();
-    chain[WA] = state(WA);
-    const r1 = await redeemReport(deps, A, { requestId: "aaaaaaaa-0000-4000-8000-000000000002", mint: "M".repeat(43) }, build);
-    const r2 = await redeemReport(deps, A, { requestId: "aaaaaaaa-0000-4000-8000-000000000002", mint: "M".repeat(43) }, build);
-    expect(r2).toEqual({ id: r1.id, replay: true }); expect(build).toHaveBeenCalledTimes(1);
-    await expect(redeemReport(deps, A, { requestId: "aaaaaaaa-0000-4000-8000-000000000003", mint: "M".repeat(43) }, async () => { throw new Error("rpc"); })).rejects.toThrow(/refunded/);
-    expect((await usage(db as any, A, utcDay(Date.now()))).research_report.extra).toBe(1);
-    // Another owner can't see or replay A's report.
-    await expect(redeemReport(deps, B, { requestId: "aaaaaaaa-0000-4000-8000-000000000002", mint: "M".repeat(43) }, build)).rejects.toMatchObject({ kind: "locked" });
+  it("saves one owner-private report, replays it, and refunds a failed build", async () => {
+    const r1 = await redeemReport(ready, A, { requestId: "aaaaaaaa-0000-4000-8000-00000000000a", mint: MINT }, async () => ({ facts: 1 }));
+    expect(r1.replay).toBe(false);
+    expect(await redeemReport(ready, A, { requestId: "aaaaaaaa-0000-4000-8000-00000000000a", mint: MINT }, async () => { throw new Error("no"); })).toMatchObject({ id: r1.id, replay: true });
+    await expect(redeemReport(ready, A, { requestId: "aaaaaaaa-0000-4000-8000-00000000000a", mint: "So11111111111111111111111111111111111111112" }, async () => ({}))).rejects.toMatchObject({ kind: "conflict" });
+    await expect(redeemReport(ready, A, { requestId: "aaaaaaaa-0000-4000-8000-00000000000b", mint: MINT }, async () => { throw new Error("rpc"); })).rejects.toThrow(/refunded/);
+    expect((await usage(db, W, utcDay(Date.now()))).research_report).toBe(1);
+    expect(await reportInputHash(MINT)).toMatch(/^[0-9a-f]{64}$/);
   });
 });

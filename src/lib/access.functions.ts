@@ -6,7 +6,7 @@ import { addr } from "./observatory.functions";
 
 const safe = (e: unknown) => {
   const m = e instanceof Error ? e.message : "";
-  return { ok: false as const, error: (e as any)?.kind ? m : "Pollen Access could not be checked right now.", kind: ((e as any)?.kind ?? "other") as string, blockers: ((e as any)?.blockers ?? []) as string[] };
+  return { ok: false as const, error: e instanceof Error && (e as any).kind ? m : "Pollen Access could not be checked right now.", kind: ((e as any)?.kind ?? "other") as string, blockers: ((e as any)?.blockers ?? []) as string[] };
 };
 
 /** Policy, today's usage and server-verified eligibility for the signed-in owner. */
@@ -17,7 +17,8 @@ export const accessStatus = createServerFn({ method: "POST" })
     try {
       const A = await import("./access.server"); const P = await import("@/pq/access");
       const deps = await A.defaultDeps(); const now = Date.now(); const day = P.utcDay(now);
-      const [el, used] = await Promise.all([A.eligibility(deps, context.userId, !!data.fresh), A.usage(deps.db, context.userId, day)]);
+      const el = await A.eligibility(deps, context.userId, !!data.fresh);
+      const used = await A.usage(deps.db, el.wallet, day); // shared wallet budget; only counts, never other owners' rows
       return { ok: true as const, data: { policyVersion: P.ACCESS_POLICY_VERSION, policy: P.ACCESS_POLICY, day, resetsAt: new Date(P.nextResetUtc(now)).toISOString(), used, eligibility: el } };
     } catch (e) { return safe(e); }
   });

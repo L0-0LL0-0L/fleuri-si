@@ -39,6 +39,7 @@ export async function mutateGarden<R>(
   ownerId: string | null,
   fn: (draft: GardenState) => { result: R; cycles?: CycleRow[]; thoughtMode?: "rules" | "ai" | "owner" | "system" },
   maxAttempts = 5,
+  commit?: { fn: string; args: (payload: unknown, result: R) => Record<string, unknown> },
 ): Promise<R> {
   const db = await admin();
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -46,13 +47,15 @@ export async function mutateGarden<R>(
     const before = structuredClone(state);
     const out = fn(state); // throws DomainError on invalid input -> nothing is written
     const payload = commitPayload(before, state, version, out.cycles ?? [], out.thoughtMode ?? "owner");
-    const { error } = await db.rpc("garden_commit", { p: payload as any });
+    // `commit` lets a caller bind extra effects to the same transaction (e.g. a Pollen Access debit).
+    const { error } = commit ? await (db as any).rpc(commit.fn, commit.args(payload, out.result)) : await db.rpc("garden_commit", { p: payload as any });
     if (!error) return out.result;
     if (error.code === "40001" || /version_conflict/.test(error.message)) {
       await new Promise((r) => setTimeout(r, 40 * attempt + Math.random() * 60));
       continue;
     }
     if (error.code === "23505" && /cycle_runs/.test(error.message + (error.details ?? ""))) throw new DuplicateCycleError("That cycle already ran — try again in a few seconds.");
+    if (/access_stale/.test(error.message)) throw new Error("access_stale");
     throw new Error(`Cloud commit failed: ${error.message}`);
   }
   throw new ConflictError("The garden was busy; please try again.");

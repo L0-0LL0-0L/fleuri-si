@@ -6,7 +6,7 @@ import { EmptyState, ListSkeleton, PageHeader, SandboxBadge } from "@/components
 import { FlowerTiles } from "@/components/PixelFlower";
 import { Panel } from "@/components/pq/ui";
 import { ExecutionModeNote, MetricDefinitions, TrialReport, type TrialRow } from "@/components/greenhouse/TrialReport";
-import { DEEP_LIMITS, LIMITS, SCENARIOS, isDeep, trialWork, SCENARIO_INFO, verifyBundle, type ReplayStatus, type Scenario } from "@/domain/greenhouse";
+import { DEEP_LIMITS, DEEP_PROFILE, LIMITS, SCENARIOS, trialWork, SCENARIO_INFO, verifyBundle, type ReplayStatus, type Scenario } from "@/domain/greenhouse";
 import { ghMyRuns, ghPublish, ghRun, ghStart } from "@/lib/greenhouse.functions";
 import { cn } from "@/lib/utils";
 import { useGarden } from "@/store/garden";
@@ -36,6 +36,8 @@ function Greenhouse() {
   const [seed, setSeed] = useState(20261011);
   const [reps, setReps] = useState(3);
   const [cycles, setCycles] = useState(30);
+  const [deep, setDeep] = useState(false);
+  const L = deep ? { reps: DEEP_LIMITS.reps, cyclesMax: DEEP_LIMITS.cyclesMax } : { reps: LIMITS.reps, cyclesMax: LIMITS.cyclesMax };
   const [scen, setScen] = useState<Scenario[]>([...SCENARIOS]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -87,7 +89,7 @@ function Greenhouse() {
     if (!picked.length) return setError("Pick at least one agent.");
     if (!scen.length) return setError("Pick at least one scenario.");
     if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) return setError("Seed must be a whole number from 0 to 4294967295.");
-    void start({ requestId: crypto.randomUUID(), config: { agentIds: picked, seed, repetitions: reps, cycles, scenarios: scen } });
+    void start({ requestId: crypto.randomUUID(), config: deep ? { profile: DEEP_PROFILE, agentIds: picked, seed, repetitions: reps, cycles, scenarios: scen } : { agentIds: picked, seed, repetitions: Math.min(reps, LIMITS.reps), cycles: Math.min(cycles, LIMITS.cyclesMax), scenarios: scen } });
   }
   async function onImport(file: File) {
     if (file.size > LIMITS.bundleBytes) return setImported({ status: "invalid", detail: "Bundle is larger than the 2 MB limit." });
@@ -134,10 +136,10 @@ function Greenhouse() {
             </fieldset>
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="text-sm font-semibold">Seed<input type="number" min={0} max={4294967295} className="field mt-1 w-full" value={seed} onChange={(e) => setSeed(Math.floor(Number(e.target.value)))} /></label>
-              <label className="text-sm font-semibold">Repetitions (1–{DEEP_LIMITS.reps})<input type="number" min={1} max={DEEP_LIMITS.reps} className="field mt-1 w-full" value={reps} onChange={(e) => setReps(Math.min(DEEP_LIMITS.reps, Math.max(1, Math.floor(Number(e.target.value) || 1))))} /></label>
-              <label className="text-sm font-semibold">Cycles ({LIMITS.cyclesMin}–{DEEP_LIMITS.cyclesMax})<input type="number" min={LIMITS.cyclesMin} max={DEEP_LIMITS.cyclesMax} className="field mt-1 w-full" value={cycles} onChange={(e) => setCycles(Math.min(DEEP_LIMITS.cyclesMax, Math.max(LIMITS.cyclesMin, Math.floor(Number(e.target.value) || LIMITS.cyclesMin))))} /></label>
+              <label className="text-sm font-semibold">Repetitions (1–{L.reps})<input type="number" min={1} max={L.reps} className="field mt-1 w-full" value={reps} onChange={(e) => setReps(Math.min(L.reps, Math.max(1, Math.floor(Number(e.target.value) || 1))))} /></label>
+              <label className="text-sm font-semibold">Cycles ({LIMITS.cyclesMin}–{L.cyclesMax})<input type="number" min={LIMITS.cyclesMin} max={L.cyclesMax} className="field mt-1 w-full" value={cycles} onChange={(e) => setCycles(Math.min(L.cyclesMax, Math.max(LIMITS.cyclesMin, Math.floor(Number(e.target.value) || LIMITS.cyclesMin))))} /></label>
             </div>
-            <p className="text-xs">Free trials: up to {LIMITS.reps} repetitions and {LIMITS.cyclesMax} cycles. Going beyond that is a <strong>deep trial</strong>. It uses one <Link to="/access" className="underline">Pollen Access</Link> credit and is capped at {DEEP_LIMITS.work} agent-cycles.{isDeep({ repetitions: reps, cycles }) ? ` This trial is deep: ${trialWork({ agentIds: picked, repetitions: reps, cycles, scenarios: scen })} agent-cycles.` : ""}</p>
+            <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={deep} onChange={() => { const d = !deep; setDeep(d); if (!d) { setReps((r) => Math.min(r, LIMITS.reps)); setCycles((c) => Math.min(c, LIMITS.cyclesMax)); } }} /><span><strong>Deep trial</strong> (uses one <Link to="/access" className="underline">Pollen Access</Link> credit). Free trials allow up to {LIMITS.reps} repetitions and {LIMITS.cyclesMax} cycles. Deep trials allow up to {DEEP_LIMITS.reps} and {DEEP_LIMITS.cyclesMax}, must go beyond a free limit and are capped at {DEEP_LIMITS.work} agent-cycles.{deep ? ` This one: ${trialWork({ agentIds: picked, repetitions: reps, cycles, scenarios: scen })} agent-cycles.` : ""} Deep trials can't be turned into research receipts yet.</span></label>
             <button type="button" className="btn btn-red" disabled={!!busy || !picked.length || !scen.length} onClick={submit}>{busy ?? "Run trial"}</button>
           </>}
         </Panel>
