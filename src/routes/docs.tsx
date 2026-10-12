@@ -70,6 +70,12 @@ function Docs() {
         <p className="text-sm">Receipts are private by default. Publishing shows the receipt, your wallet and your identity registration to anyone with the link. The registration statement includes your workspace account ID. Making it private again hides the page but cannot recall copies already downloaded.</p>
         <p className="text-sm">Optionally, your wallet can record the receipt's hash in a Memo transaction after you review the exact fee and content. Verifiers re-check that transaction on a network they choose. The chain stores the hash; it does not check ML-DSA. Receipts attached to a launch proposal stay frozen as advisory evidence during review and approval.</p>
       </section>
+      <section className="hair space-y-3 bg-paper-light p-4" aria-labelledby="docs-observatory">
+        <h2 id="docs-observatory" className="display text-xl">pollen observatory. look, don't touch.</h2>
+        <p className="text-sm">The <Link to="/observatory" className="underline">Pollen Observatory</Link> reads any Meteora fee-sharing vault without a wallet or sign-in. It shows the vault's current totals and each recipient's fixed share, claimed and claimable amounts, read at a stated slot.</p>
+        <p className="text-sm">Below that is a window of recent transactions for the vault and its token vault. Load older adds more, and totals cover only what's loaded, never all history. Failed transactions are left out; unreadable ones are marked.</p>
+        <p className="text-sm">A deposit is called a trading fee only when its own transaction proves it came from a DBC or DAMM v2 fee claim. Surplus, migration fees and rewards are shown separately, and anything unproven is "unknown". Tokens sent straight to the token vault aren't counted as rewards. One proved deposit says nothing about where future fees will go. You can download what you see as JSON or CSV.</p>
+      </section>
       <FlowerTiles count={8} cols={4} />
     </article>
   );

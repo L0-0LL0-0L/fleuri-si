@@ -53,6 +53,8 @@ export async function readVault(conn: Connection, address: string) {
     owner: v.owner.toBase58(), base: v.base.toBase58(), tokenVault: v.tokenVault.toBase58(), totalShare: Number(v.totalShare),
     funded: b.totalFundedFee, claimed: b.totalClaimedFee, unclaimed: b.totalUnclaimedFee, dust: (BigInt(b.totalFundedFee) - BigInt(b.totalClaimedFee) - BigInt(b.totalUnclaimedFee)).toString(), feePerShare: fps.toString(),
     recipients: users,
+    // Recipient address by on-chain user index ("" for empty slots); claim events reference this index.
+    recipientSlots: (v.users as any[]).map((u) => (u.address.toBase58() === NULL_KEY ? "" : u.address.toBase58())),
   };
 }
 
