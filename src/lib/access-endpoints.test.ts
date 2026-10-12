@@ -48,7 +48,7 @@ describe("gardenCommand run (owner cycles)", () => {
       expect((await run()).ok).toBe(true);
       expect((await run()).message).toMatch(/already ran/); // same 5 s bucket
       expect(m.mutate).toHaveBeenCalledTimes(1);
-      await db.pg.exec(`insert into access_reservations(owner_id,action,request_key,day,tier,status) select '${OWNER}','owner_cycle','fill-'||g,(now() at time zone 'utc')::date,'base','consumed' from generate_series(1,${ACCESS_POLICY.owner_cycle.base}) g`);
+      await db.pg.exec(`insert into access_reservations(owner_id,action,request_key,day,tier,status) select '${OWNER}','owner_cycle','fill-key-'||g,(now() at time zone 'utc')::date,'base','consumed' from generate_series(1,${ACCESS_POLICY.owner_cycle.base}) g`);
       vi.setSystemTime(new Date("2026-10-13T00:00:11Z"));
       const r = await run();
       expect(r.ok).toBe(false); expect(r.message).toMatch(/Pollen Access/);
