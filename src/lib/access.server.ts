@@ -112,11 +112,18 @@ export async function bonusCycle(deps: AccessDeps, ownerId: string, req: { reque
 }
 
 /** Deep trial: reserve, start the fenced trial, then settle against the frozen run for this exact request. */
-export async function deepTrial<T>(deps: AccessDeps, ownerId: string, requestId: string, normalizedConfigJson: string, go: () => Promise<T>): Promise<T> {
+export type DeepClaim = { fn: string; extra: Record<string, unknown> };
+export async function deepTrial<T>(deps: AccessDeps, ownerId: string, requestId: string, normalizedConfigJson: string, go: (claim: DeepClaim) => Promise<T>): Promise<T> {
   const a = await acquire(deps, ownerId, "deep_trial", requestId, await sha256Hex(`deep|${normalizedConfigJson}`));
-  if (a.state === "done") return go(); // recovery/replay: startTrial resumes the stored frozen run; nothing is re-spent
+  // Every deep claim goes through access_claim_deep_trial: with a current lease it creates the frozen run and binds the
+  // credit in one transaction; for an already-bound credit (state done) it can only recover the existing run.
+  const claim: DeepClaim = { fn: "access_claim_deep_trial", extra: { _id: a.id, _lease: a.state === "done" ? null : a.lease } };
+  if (a.state === "done") return go(claim);
   try {
-    return await go();
+    return await go(claim);
+  } catch (e) {
+    if (/access_stale/.test((e as Error)?.message ?? "")) throw new AccessError("stale", accessError("access_stale").message);
+    throw e;
   } finally {
     const s = await deps.db.rpc("access_settle_trial", { _owner: ownerId, _id: a.id, _lease: a.lease });
     if (s.error && !/access_stale/.test(String(s.error.message))) console.error("[access] trial settle failed");

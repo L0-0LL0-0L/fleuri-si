@@ -127,6 +127,20 @@
       "when": 1791847758418,
       "tag": "0017_0017_pollen_access_fenced",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791848382707,
+      "tag": "0018_0018_pollen_access_deep_binding",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791848426292,
+      "tag": "0019_0019_pollen_access_deep_binding_apply",
+      "breakpoints": true
     }
   ]
 }
