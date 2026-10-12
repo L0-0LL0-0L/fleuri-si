@@ -202,11 +202,11 @@ export async function watch(poolAddress: string, extraVault?: string) {
       try { nowUnix = await conn.getBlockTime(r4.slot); } catch { nowUnix = null; }
       d.positions.forEach((addr, k) => {
         const info = r4.infos[k];
-        if (!info) { positionErrors.push({ address: addr, reason: "The position account no longer exists (it may have been closed)." }); return; }
+        if (!info) { positionErrors.push({ address: addr, reason: "No position account exists here (never created, or closed)." }); return; }
         let p: any;
         try { p = dammCoder.decode("position", info.data); } catch { positionErrors.push({ address: addr, reason: "The account does not decode as a DAMM v2 position." }); return; }
         const nftMint = s(p.nftMint);
-        const mi = r4.infos[2 + k], ai = r4.infos[4 + k];
+        const N = d.positions.length; const mi = r4.infos[N + k], ai = r4.infos[2 * N + k];
         const nftAcct = ai && ai.data.length >= 72 ? { mint: b58(ai.data.subarray(0, 32)), holder: b58(ai.data.subarray(32, 64)), amount: u64(ai.data, 64).toString() } : null;
         const mf = mintFacts(nftMints[k], mi ?? null);
         const iv = p.innerVesting ?? {};
