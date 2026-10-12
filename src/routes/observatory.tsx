@@ -77,7 +77,8 @@ export function Observatory() {
     if (!param && current.current) { gen.current++; current.current = null; paging.current = false; setSnap(null); setHist(emptyHistory()); setErr(""); setHistErr(""); setBusy(null); setInput(""); }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [param]);
-  useEffect(() => () => { gen.current++; }, []);
+  // StrictMode replays effects: clear the address/paging refs too, so the replayed param effect reloads.
+  useEffect(() => () => { gen.current++; current.current = null; paging.current = false; }, []);
 
   async function load(address: string) {
     const g = ++gen.current; current.current = address; paging.current = false;
