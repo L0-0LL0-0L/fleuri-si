@@ -95,7 +95,7 @@ export async function readState(wallet: string | null) {
         out.feeSource = { address: p.feeVault, funded: v?.funded ?? null, recipientIndex: p.recipientIndex, share: chk.share, totalShare: chk.totalShare, unclaimedForPool: chk.claimable?.toString() ?? null, issues };
         if (wallet) {
           const pos = snap.view.position;
-          out.position = pos ? { address: d.position(wallet).toBase58(), ...big(pos.state), claimable: pos.claimable.toString() } : null;
+          out.position = pos ? { address: d.position(wallet).toBase58(), pool: pos.pool, owner: pos.owner, ...big(pos.state), claimable: pos.claimable.toString() } : null;
           out.balances = { fleuri: amountOf(A.ataF), wsol: amountOf(A.ataW) };
         }
       } else facts.feeSourceDetail = "No pool, so no fee source.";
