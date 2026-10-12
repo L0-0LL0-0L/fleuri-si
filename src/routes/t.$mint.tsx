@@ -60,7 +60,7 @@ function TokenPage() {
       <Panel title="Status">
         <p className="font-semibold">{migrated ? (dammPool ? "Graduated · live on DAMM v2" : "Graduated · DAMM v2 pool not yet confirmed") : "Live · on the bonding curve"}</p>
         {progress != null && !migrated && <><div className="hair h-3 bg-paper"><div className="h-full bg-poppy" style={{ width: `${progress}%` }} /></div><p className="text-sm">{fmt(c.raisedSol, 3)} / {fmt(c.thresholdSol, 2)} SOL raised on the bonding curve ({fmt(progress, 1)}%)</p></>}
-        {curvePool && <p className="text-sm">Bonding-curve pool: <a className="underline break-all" href={explorerAddr(curvePool, l?.cluster ?? "mainnet-beta")} target="_blank" rel="noreferrer">{curvePool}</a></p>}
+        {curvePool && <p className="text-sm">Bonding-curve pool: <a className="underline break-all" href={explorerAddr(curvePool, l?.cluster ?? "mainnet-beta")} target="_blank" rel="noreferrer">{curvePool}</a> · <Link to="/watchtower" search={{ pool: curvePool }} className="underline">graduation watchtower</Link></p>}
         {dammPool && <p className="text-sm">DAMM v2 pool: <a className="underline break-all" href={explorerAddr(dammPool, l?.cluster ?? "mainnet-beta")} target="_blank" rel="noreferrer">{dammPool}</a></p>}
         {l && <Link to="/passport/$hash" params={{ hash: l.passports.manifest_hash }} className="text-sm underline">Open living passport &amp; evidence download ↗</Link>}
       </Panel>

@@ -154,7 +154,7 @@ export function Observatory() {
   return <div className="space-y-4">
     <PageHeader title="pollen observatory." kicker="public · read-only · Meteora Dynamic Fee Sharing">{snap && <RealBadge cluster={snap.cluster} />}</PageHeader>
     <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-      <p className="max-w-prose text-sm">Look inside any fee-sharing vault without a wallet. See what it holds right now, who shares it, and where each recent deposit came from. A deposit is labelled a trading fee only when its own transaction proves it. No sign-in, no signing, nothing is sent. Manage your own vaults on <Link to="/pollen" className="underline">Pollen</Link>.</p>
+      <p className="max-w-prose text-sm">Look inside any fee-sharing vault without a wallet. See what it holds right now, who shares it, and where each recent deposit came from. A deposit is labelled a trading fee only when its own transaction proves it. No sign-in, no signing, nothing is sent. Manage your own vaults on <Link to="/pollen" className="underline">Pollen</Link>. Checking whether a graduated pool routes fees into a vault? Use the <Link to="/watchtower" search={{}} className="underline">Graduation Watchtower</Link>.</p>
       <FlowerTiles count={4} cols={4} className="w-40" />
     </div>
 
