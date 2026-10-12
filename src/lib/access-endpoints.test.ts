@@ -81,7 +81,7 @@ describe("ghStart (Greenhouse)", () => {
   });
   it("rejects configs over the deep compute budget at the endpoint", async () => {
     staked = true;
-    await expect((ghStart as any)({ data: { requestId: "aaaaaaaa-0000-4000-8000-000000000003", config: cfg({ agentIds: ["a", "b", "c", "d"], repetitions: 10, cycles: 120, scenarios: ["control", "bull"] }) }, context: ctx })).rejects.toThrow();
+    await expect((ghStart as any)({ data: { requestId: "aaaaaaaa-0000-4000-8000-000000000003", config: cfg({ agentIds: ["a", "b", "c", "d"], repetitions: 10, cycles: 120, scenarios: ["control", "sell_pressure"] }) }, context: ctx })).rejects.toThrow();
     expect(m.start).not.toHaveBeenCalled();
   });
 });
