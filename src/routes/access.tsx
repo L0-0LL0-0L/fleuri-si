@@ -65,7 +65,7 @@ export function AccessPage() {
   return <div className="space-y-4">
     <PageHeader title="pollen access." kicker="stake $FLEURI · grow your workspace" />
     <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-      <p className="max-w-prose text-sm">An active <Link to="/staking" className="underline">Pollen Staking</Link> position unlocks extras for your workspace: more owner-triggered agent cycles, deeper <Link to="/greenhouse" className="underline">Greenhouse</Link> trials and research credits for saved Botanist reports. The server checks your stake live on Solana mainnet each time it matters. Free use stays free. Garden balances are virtual vSOL and never count as stake.</p>
+      <p className="max-w-prose text-sm">An active <Link to="/staking" className="underline">Pollen Staking</Link> position unlocks extras for your workspace: more owner-triggered agent cycles, deeper <Link to="/greenhouse" className="underline">Greenhouse</Link> trials and research credits for saved Botanist reports. The server checks your stake live on Solana mainnet each time it matters. Free trials stay free, and every workspace gets 100 free manual cycles a day. Garden balances are virtual vSOL and never count as stake.</p>
       <FlowerTiles count={4} cols={4} className="w-40" />
     </div>
 
