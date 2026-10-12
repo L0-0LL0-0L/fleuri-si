@@ -67,7 +67,7 @@ export function OwnerControls({ agent }: { agent: Agent }) {
           className="btn btn-red"
           type="button"
           disabled={agent.status !== "active" || busy}
-          title={agent.status !== "active" ? "Resume the agent to run a cycle" : "Runs one server-side cycle using Lovable AI (falls back to rules-based simulation if AI is unavailable)"}
+          title={agent.status !== "active" ? "Resume the agent to run a cycle" : "Runs one server-side cycle using Lovable AI (falls back to rules-based simulation if AI is unavailable). Extra daily cycles come with Pollen Access."}
           onClick={() => run({ type: "run", agentId: agent.id, useAi: true })}
         >
           {busy ? "Thinking…" : "Run a cycle"}
