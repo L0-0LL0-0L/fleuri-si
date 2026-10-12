@@ -6,7 +6,7 @@ import { accessDb, readyChecks } from "@/test/pglite-access";
 
 const m = vi.hoisted(() => ({ deps: null as any, mutate: vi.fn(), start: vi.fn(), build: vi.fn() }));
 vi.mock("@tanstack/react-start", () => ({
-  createServerFn: () => { const b: any = { v: null, middleware: () => b, inputValidator: (v: any) => { b.v = v; return b; }, handler: (h: any) => (o: any) => h({ data: b.v ? b.v(o.data) : o.data, context: o.context }) }; return b; },
+  createServerFn: () => { const b: any = { v: null, middleware: () => b, inputValidator: (v: any) => { b.v = v; return b; }, handler: (h: any) => async (o: any) => h({ data: b.v ? b.v(o.data) : o.data, context: o.context }) }; return b; },
 }));
 vi.mock("@/integrations/supabase/auth-middleware", () => ({ requireSupabaseAuth: {} }));
 vi.mock("@/integrations/supabase/client.server", () => ({ get supabaseAdmin() { return m.deps.db; } }));
