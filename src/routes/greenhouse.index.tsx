@@ -6,7 +6,7 @@ import { EmptyState, ListSkeleton, PageHeader, SandboxBadge } from "@/components
 import { FlowerTiles } from "@/components/PixelFlower";
 import { Panel } from "@/components/pq/ui";
 import { ExecutionModeNote, MetricDefinitions, TrialReport, type TrialRow } from "@/components/greenhouse/TrialReport";
-import { LIMITS, SCENARIOS, SCENARIO_INFO, verifyBundle, type ReplayStatus, type Scenario } from "@/domain/greenhouse";
+import { DEEP_LIMITS, LIMITS, SCENARIOS, isDeep, trialWork, SCENARIO_INFO, verifyBundle, type ReplayStatus, type Scenario } from "@/domain/greenhouse";
 import { ghMyRuns, ghPublish, ghRun, ghStart } from "@/lib/greenhouse.functions";
 import { cn } from "@/lib/utils";
 import { useGarden } from "@/store/garden";
