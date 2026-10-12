@@ -116,7 +116,7 @@ export function AccessPage() {
       </li>)}</ul> : <p className="text-xs text-ink-soft">No saved reports yet.</p>}
     </Panel>}
 
-    <Panel title="How Pollen Access works (v1)">
+    <Panel title="How Pollen Access works (v2)">
       <ul className="list-disc space-y-1 pl-5 text-sm">
         <li><strong>Who qualifies:</strong> any positive <em>active</em> Pollen Staking position. Pending unstake doesn't count. There are no tiers or multipliers.</li>
         <li><strong>Proof:</strong> the wallet linked to your workspace by a signed message must own the position at its canonical address in the live pool. That pool must pass these staking checks on mainnet: {REQUIRED_CHECKS.join(", ")}. Devnet, old snapshots, browser storage and garden vSOL never count.</li>
