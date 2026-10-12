@@ -25,6 +25,25 @@ describe("watchtower page", () => {
     m.search = {}; v.rerender(<Watchtower />);
     await waitFor(() => expect(screen.queryByText("reason-B")).toBeNull());
   });
+  it("drops pool A when pool B is loading, rejected or mismatched, so A can't be read or exported", async () => {
+    m.watch.mockResolvedValueOnce(reply(A));
+    m.search = { pool: A }; const v = render(<Watchtower />);
+    await screen.findByText("reason-A");
+    let failB!: (e: any) => void;
+    m.watch.mockImplementationOnce(() => new Promise((_, rej) => { failB = rej; }));
+    m.search = { pool: B }; v.rerender(<Watchtower />);
+    await waitFor(() => expect(screen.queryByText("reason-A")).toBeNull());
+    expect(screen.queryByRole("button", { name: "Download JSON" })).toBeNull();
+    await act(async () => failB(new TypeError("Failed to fetch")));
+    expect(screen.queryByText("reason-A")).toBeNull(); expect(screen.queryByRole("button", { name: "Download JSON" })).toBeNull();
+    cleanup();
+    m.watch.mockResolvedValueOnce(reply(A)).mockResolvedValueOnce(reply(A)); // second reply answers B with A's data
+    m.search = { pool: A }; const w = render(<Watchtower />);
+    await screen.findByText("reason-A");
+    m.search = { pool: B }; w.rerender(<Watchtower />);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/did not match/);
+    expect(screen.queryByText("reason-A")).toBeNull(); expect(screen.queryByRole("button", { name: "Download JSON" })).toBeNull();
+  });
   it("shows a safe error on failure and on a network rejection", async () => {
     m.watch.mockResolvedValueOnce({ ok: false, error: "This account is not owned by Meteora Dynamic Bonding Curve." });
     m.search = { pool: A }; const v = render(<Watchtower />);

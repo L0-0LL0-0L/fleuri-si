@@ -62,14 +62,14 @@ export function Watchtower() {
 
   async function load(pool: string, vault?: string) {
     const g = ++gen.current; current.current = `${pool}|${vault ?? ""}`;
-    setBusy(true); setErr(""); setNote("");
+    setBusy(true); setErr(""); setNote(""); setRes(null);
     try {
       const r = await wtWatch({ data: vault ? { pool, vault } : { pool } });
       if (g !== gen.current) return;
       if (!r.ok) { setRes(null); setErr(r.error); return; }
-      if (r.data.input.pool.address !== pool) { setErr("The reply did not match the requested pool, so it was discarded."); return; }
+      if (r.data.input.pool.address !== pool) { setRes(null); setErr("The reply did not match the requested pool, so it was discarded."); return; }
       setRes(r.data as Result);
-    } catch { if (g === gen.current) setErr("The read could not be completed. Check your connection and try again."); }
+    } catch { if (g === gen.current) { setRes(null); setErr("The read could not be completed. Check your connection and try again."); } }
     finally { if (g === gen.current) setBusy(false); }
   }
   function submit(pool: string, vault: string) {

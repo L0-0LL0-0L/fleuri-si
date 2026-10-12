@@ -23,9 +23,9 @@ vi.mock("@meteora-ag/dynamic-bonding-curve-sdk", async (orig) => {
 });
 
 import { DAMM_V2_PROGRAM, DBC_PROGRAM, DFS_PROGRAM, SOL_MINT, TOKEN_PROGRAM, TOKEN_2022_PROGRAM } from "@/pq/watchtower";
-import { DAMM_V2_MIGRATION_FEE_ADDRESS, deriveDammV2PoolAddress, deriveDbcPoolAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
-import { DISCOVERY_MAX_REQUESTS, SIG_PAGE, discoverPositions, mintFacts, tokenAccount, tryVault, watch } from "./watchtower.server";
-import { publicMessage } from "./observatory.server";
+import { deriveDbcTokenVaultAddress, DAMM_V2_MIGRATION_FEE_ADDRESS, deriveDammV2PoolAddress, deriveDbcPoolAddress } from "@meteora-ag/dynamic-bonding-curve-sdk";
+import { DISCOVERY_MAX_REQUESTS, SIG_PAGE, bounded, discoverPositions, mintFacts, tokenAccount, tryVault, watch } from "./watchtower.server";
+import { PublicError, publicMessage } from "./observatory.server";
 
 const k = () => Keypair.generate().publicKey.toBase58();
 const acct = (owner: string, tag: string, data = Buffer.alloc(200)) => ({ owner: new PublicKey(owner), data: Object.assign(data, { tag }), lamports: 1, executable: false });
@@ -44,7 +44,7 @@ beforeEach(() => {
   config = cfg();
   dammPool = { tokenAMint: BASE, tokenBMint: SOL_MINT, liquidity: "10", permanentLockLiquidity: "0", collectFeeMode: 1, poolStatus: 0, activationType: 1, creator: CREATOR, poolFees: {}, metrics: { totalPosition: "500" } };
   m.decode.mockImplementation((name: string, d: any) => {
-    if (name === "virtualPool" && d.tag === "pool") return { config: CONFIG, creator: CREATOR, baseMint: BASE, baseVault: k(), quoteVault: k(), quoteReserve: "100", baseReserve: "0", isMigrated: 1, migrationProgress: 3 };
+    if (name === "virtualPool" && d.tag === "pool") return { config: CONFIG, creator: CREATOR, baseMint: BASE, baseVault: deriveDbcTokenVaultAddress(new PublicKey(POOL), new PublicKey(BASE)).toBase58(), quoteVault: deriveDbcTokenVaultAddress(new PublicKey(POOL), new PublicKey(SOL_MINT)).toBase58(), quoteReserve: "100", baseReserve: "0", isMigrated: 1, migrationProgress: 3 };
     if (name === "poolConfig" && d.tag === "config") return config;
     if (name === "pool" && d.tag === "damm") return dammPool;
     throw new Error("bad discriminator");
@@ -123,19 +123,39 @@ describe("discovery budget", () => {
 });
 
 describe("vault and token layouts", () => {
-  it("flags unsupported, wrong-mint and frozen DFS token vaults", async () => {
-    const V = k(), TV = k();
-    m.readVault.mockResolvedValue({ address: V, mint: SOL_MINT, tokenVault: TV, supported: true, feeVaultType: 1, recipients: [{ address: k() }], pdaIssues: [], accountSlot: 9 });
-    m.accounts.set(TV, acct(TOKEN_PROGRAM, "tv", tokAcc(SOL_MINT, k(), 0n, 1)));
-    expect(await tryVault({ getAccountInfo: async (p: PublicKey) => m.accounts.get(p.toBase58()) } as any, V)).toMatchObject({ issues: [], slot: 9 });
-    m.accounts.set(TV, acct(TOKEN_PROGRAM, "tv", tokAcc(k(), k(), 0n, 2)));
-    const bad = await tryVault({ getAccountInfo: async (p: PublicKey) => m.accounts.get(p.toBase58()) } as any, V);
-    expect(bad!.issues!.join(" ")).toMatch(/different mint/); expect(bad!.issues!.join(" ")).toMatch(/initialized, unfrozen/);
-    m.readVault.mockResolvedValue({ address: V, mint: k(), tokenVault: TV, supported: false, feeVaultType: 1, recipients: [], pdaIssues: [], accountSlot: 9 });
-    expect((await tryVault({ getAccountInfo: async () => null } as any, V))!.issues!.join(" ")).toMatch(/not a supported/);
+  it("requires the derived SPL token vault, held by the DFS vault authority, with an initialized mint", async () => {
+    const { deriveFeeVaultAuthorityAddress, deriveTokenVaultAddress } = await import("@meteora-ag/dynamic-fee-sharing-sdk");
+    const V = k(), TV = deriveTokenVaultAddress(new PublicKey(V)).toBase58(), AUTH = deriveFeeVaultAuthorityAddress().toBase58();
+    const conn = { getAccountInfo: async (p: PublicKey) => m.accounts.get(p.toBase58()) ?? null } as any;
+    const vault = (over: any = {}) => ({ address: V, mint: SOL_MINT, tokenVault: TV, supported: true, feeVaultType: 1, recipients: [{ address: k() }], pdaIssues: [], accountSlot: 9, ...over });
+    m.readVault.mockResolvedValue(vault());
+    m.accounts.set(TV, acct(TOKEN_PROGRAM, "tv", tokAcc(SOL_MINT, AUTH, 0n, 1)));
+    expect(await tryVault(conn, V)).toMatchObject({ issues: [], slot: 9 });
+    const issues = async () => (await tryVault(conn, V))!.issues!.join(" ");
+    m.accounts.set(TV, acct(TOKEN_PROGRAM, "tv", tokAcc(SOL_MINT, V, 0n, 1)));
+    expect(await issues()).toMatch(/vault authority/); // holder must be the program's authority PDA
+    m.accounts.set(TV, acct(TOKEN_2022_PROGRAM, "tv", tokAcc(SOL_MINT, AUTH, 0n, 1)));
+    expect(await issues()).toMatch(/not an SPL Token account/);
+    m.accounts.set(TV, acct(TOKEN_PROGRAM, "tv", tokAcc(k(), AUTH, 0n, 2)));
+    expect(await issues()).toMatch(/different mint.*initialized, unfrozen/);
+    m.accounts.set(TV, acct(TOKEN_PROGRAM, "tv", tokAcc(SOL_MINT, AUTH, 0n, 1)));
+    m.accounts.set(SOL_MINT, acct(TOKEN_PROGRAM, "mint", mint(0n, 9, false)));
+    expect(await issues()).toMatch(/initialized SPL Token mint/);
+    m.readVault.mockResolvedValue(vault({ tokenVault: k() }));
+    expect(await issues()).toMatch(/program-derived token vault/);
+    m.readVault.mockResolvedValue(vault({ supported: false }));
+    expect(await issues()).toMatch(/not a supported/);
     m.readVault.mockRejectedValue(new Error("not DFS"));
-    expect(await tryVault({} as any, V)).toBeNull();
+    expect(await tryVault(conn, V)).toBeNull();
     void DFS_PROGRAM;
+  });
+  it("bounds hung reads with a safe timeout and stops the lookup", async () => {
+    vi.useFakeTimers();
+    try {
+      const p = bounded(new Promise(() => {}), 50).catch((e) => e);
+      await vi.advanceTimersByTimeAsync(60);
+      const e = await p; expect(e).toBeInstanceOf(PublicError); expect(publicMessage(e)).toMatch(/timed out/);
+    } finally { vi.useRealTimers(); }
   });
   it("decodes mint authorities and short accounts as unknown", () => {
     const d = mint(); d.writeUInt32LE(1, 0); new PublicKey(CREATOR).toBuffer().copy(d, 4);

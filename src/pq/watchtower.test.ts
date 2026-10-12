@@ -117,3 +117,29 @@ describe("watchtower strict evidence", () => {
     expect(poolChecks(i).find((c) => c.id === "baseMint")!.status).toBe("unavailable");
   });
 });
+
+describe("review regressions", () => {
+  it("never graduates with a mismatched DAMM address, foreign config, non-canonical PDA or vaults", () => {
+    const cases: ((i: WatchInput) => void)[] = [
+      (i) => { i.damm.facts!.address = "OTHER"; },
+      (i) => { i.config!.address = "C2"; },
+      (i) => { i.config!.owner = "X"; },
+      (i) => { i.pool.derivedAddress = "OTHER"; },
+      (i) => { i.pool.derivedAddress = null; },
+      (i) => { i.pool.derivedQuoteVault = "OTHER"; },
+    ];
+    for (const f of cases) { const i = base(); dammOk(i); f(i); expect(stage(i).stage).toBe("migrated_unverified"); }
+  });
+  it("does not verify a position or lock badge when the DAMM v2 pool is unverified", () => {
+    const i = base(); dammOk(i); i.damm.facts!.owner = "X";
+    const v = assessPosition(i, pos()); expect(v.status).toBe("failed"); expect(v.lockBadge).toBeNull(); expect(v.allPermanent).toBe(false);
+  });
+  it("keeps creator routing pending when the pool collects fees in both tokens", () => {
+    const i = base(); i.config!.creatorTradingFeePercentage = 50;
+    i.vaults = [{ address: "CR", mint: SOL_MINT, tokenVault: "T", recipients: ["R1", "R2"], pdaIssues: [], issues: [] }];
+    expect(routing(i, []).find((r) => r.source === "DBC creator trading fee")!.status).toBe("verified");
+    i.config!.collectFeeMode = 1;
+    const r = routing(i, []).find((r) => r.source === "DBC creator trading fee")!;
+    expect(r.status).toBe("pending"); expect(r.detail.join(" ")).toMatch(/both tokens/);
+  });
+});
