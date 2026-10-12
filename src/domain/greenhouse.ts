@@ -52,13 +52,19 @@ const r9 = (n: number) => Math.round(n * 1e9) / 1e9;
 // ---------- schemas (shared strict parser) ----------
 const fin = z.number().finite();
 const sym = z.string().regex(/^[A-Z]{3,6}$/);
+/** Deep trials (Pollen Access): beyond the free LIMITS, within a fixed agent-cycle compute budget. */
+export const DEEP_LIMITS = { reps: 10, cyclesMax: 120, work: 9600 } as const;
+/** Agent-cycles a trial simulates (each run also has a baseline, so actual work is about double). */
+export const trialWork = (c: { agentIds: unknown[]; repetitions: number; cycles: number; scenarios: unknown[] }) => c.agentIds.length * c.repetitions * c.cycles * c.scenarios.length;
+/** True when a config needs a deep-trial credit (anything above the free limits). */
+export const isDeep = (c: { repetitions: number; cycles: number }) => c.repetitions > LIMITS.reps || c.cycles > LIMITS.cyclesMax;
 export const ConfigSchema = z.object({
   agentIds: z.array(z.string().min(1).max(40)).min(1).max(LIMITS.agents).refine((a) => new Set(a).size === a.length, "duplicate agents"),
   seed: z.number().int().min(0).max(0xffffffff),
-  repetitions: z.number().int().min(1).max(LIMITS.reps),
-  cycles: z.number().int().min(LIMITS.cyclesMin).max(LIMITS.cyclesMax),
+  repetitions: z.number().int().min(1).max(DEEP_LIMITS.reps),
+  cycles: z.number().int().min(LIMITS.cyclesMin).max(DEEP_LIMITS.cyclesMax),
   scenarios: z.array(z.enum(SCENARIOS)).min(1).max(4).refine((a) => new Set(a).size === a.length, "duplicate scenarios"),
-}).strict();
+}).strict().refine((c) => !isDeep(c) || trialWork(c) <= DEEP_LIMITS.work, { message: `Deep trials are limited to ${DEEP_LIMITS.work} agent-cycles (agents × repetitions × cycles × scenarios).` });
 export type TrialConfig = z.infer<typeof ConfigSchema>;
 export const MarketCoinSchema = z.object({ symbol: sym, name: z.string().max(40), vSol: fin.positive().max(1e9), vTok: fin.positive().max(1e15), raised: fin.min(0).max(1e9), graduated: z.boolean() }).strict();
 export const MarketSchema = z.object({ coins: z.array(MarketCoinSchema).min(1).max(LIMITS.coins), posts: z.array(z.object({ symbol: sym.nullable() }).strict()).max(LIMITS.posts), frozenAt: z.number().int().positive() }).strict()
@@ -316,7 +322,7 @@ export function boundedJson(v: unknown, maxDepth = 12, maxNodes = 600_000): stri
 }
 export type ReplayStatus = { status: "verified" | "mismatch" | "unsupported" | "invalid"; detail: string; recomputed?: { inputHash: string; outputHash: string } };
 const hex64 = z.string().regex(/^[0-9a-f]{64}$/, "must be a 64-hex checksum");
-const BundleShape = z.object({ format: z.literal(BUNDLE_FORMAT), runId: z.string().max(64).nullable(), createdAt: z.string().max(40).nullable(), input: z.object({ engineVersion: z.string().max(40), scenarioVersion: z.string().max(40), config: z.unknown(), market: z.unknown(), policies: z.array(z.unknown()).max(LIMITS.agents) }).strict(), inputHash: hex64, output: z.object({ runs: z.array(z.unknown()).max(1000), baselines: z.array(z.unknown()).max(1000), scorecards: z.array(z.unknown()).max(1000), tapes: z.record(z.string().max(40), z.array(z.unknown()).max(LIMITS.cyclesMax)) }).strict(), outputHash: hex64, contentHash: hex64, note: z.string().max(400) }).strict();
+const BundleShape = z.object({ format: z.literal(BUNDLE_FORMAT), runId: z.string().max(64).nullable(), createdAt: z.string().max(40).nullable(), input: z.object({ engineVersion: z.string().max(40), scenarioVersion: z.string().max(40), config: z.unknown(), market: z.unknown(), policies: z.array(z.unknown()).max(LIMITS.agents) }).strict(), inputHash: hex64, output: z.object({ runs: z.array(z.unknown()).max(1000), baselines: z.array(z.unknown()).max(1000), scorecards: z.array(z.unknown()).max(1000), tapes: z.record(z.string().max(40), z.array(z.unknown()).max(DEEP_LIMITS.cyclesMax)) }).strict(), outputHash: hex64, contentHash: hex64, note: z.string().max(400) }).strict();
 
 /** Engine-independent integrity: bounded shape plus the ORIGINAL stored checksum claims recomputed over the
  * bundled input/output exactly as stored. Never re-executes, so it is safe for engines this build cannot run. */
