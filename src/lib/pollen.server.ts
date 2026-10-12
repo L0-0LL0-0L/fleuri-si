@@ -29,11 +29,12 @@ async function ready() {
 /** Reads a vault from chain; throws unless it is a DFS account for a supported mint. */
 export async function readVault(conn: Connection, address: string) {
   const a = pk(address, "vault address");
-  const info = await conn.getAccountInfo(a);
+  // One confirmed account read: the decoded counters and the returned context slot describe the same state.
+  const { context, value: info } = await conn.getAccountInfoAndContext(a, "confirmed");
   if (!info) throw new Error("No account at this address.");
   if (info.owner.toBase58() !== DFS_PROGRAM_ID) throw new Error("This account is not owned by Meteora Dynamic Fee Sharing.");
   const client = new DynamicFeeSharingClient(conn, "confirmed");
-  const v: any = await client.getFeeVault(a);
+  const v: any = (client as any).program.coder.accounts.decode("feeVault", info.data);
   const mint = v.tokenMint.toBase58();
   const mintInfo = await conn.getAccountInfo(v.tokenMint);
   const supported = mint in POLLEN_MINTS && mintInfo?.owner.equals(TOKEN_PROGRAM_ID);
@@ -48,6 +49,7 @@ export async function readVault(conn: Connection, address: string) {
   const totalUnclaimed = users.reduce((a, u) => a + BigInt(u.unclaimed), 0n);
   const b = { totalFundedFee: v.totalFundedFee.toString(), totalClaimedFee: totalClaimed.toString(), totalUnclaimedFee: totalUnclaimed.toString() };
   return {
+    accountSlot: context.slot,
     address, mint, supported: !!supported, symbol: POLLEN_MINTS[mint]?.symbol ?? "unsupported", decimals: POLLEN_MINTS[mint]?.decimals ?? null,
     feeVaultType: Number(v.feeVaultType), pdaIssues: pdaProblems({ feeVaultType: Number(v.feeVaultType), derived: deriveFeeVaultPdaAddress(v.base, v.tokenMint).toBase58(), address }),
     owner: v.owner.toBase58(), base: v.base.toBase58(), tokenVault: v.tokenVault.toBase58(), totalShare: Number(v.totalShare),

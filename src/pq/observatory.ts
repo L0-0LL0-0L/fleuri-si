@@ -59,16 +59,18 @@ export interface RawTx {
   meta: null | { err: unknown; loadedAddresses?: { writable: string[]; readonly: string[] } | null; innerInstructions?: { index: number; instructions: RawIx[] }[] | null };
 }
 
+export type Evidence = "proved" | "unproved" | "ambiguous";
 export type Entry =
-  | { kind: "fund"; amount: string; source: SourceLabel; sourceProgram: string | null; evidence: "proved" | "ambiguous"; feePerShare: string }
-  | { kind: "claim"; amount: string; recipient: string; index: number; recipientMatch: boolean; evidence: "proved" | "ambiguous" }
-  | { kind: "direct_transfer"; amount: string; tokenProgram: string };
+  | { kind: "fund"; amount: string; source: SourceLabel; sourceProgram: string | null; evidence: Evidence; feePerShare: string; note?: string }
+  | { kind: "claim"; amount: string; recipient: string; index: number; recipientMatch: boolean; evidence: Evidence; note?: string }
+  | { kind: "direct_transfer"; amount: string; tokenProgram: string; scope: "outside_dfs" | "unclassified" };
 
 export type TxStatus = "success" | "failed" | "unavailable" | "unsupported" | "undecodable";
 export interface ObservedTx {
   signature: string; slot: number | null; blockTime: number | null; status: TxStatus; reason?: string;
   via: ("vault" | "tokenVault")[]; entries: Entry[]; otherVaultEvents: number;
 }
+export interface DecodeCtx { vault: string; tokenVault: string; recipients: string[]; mint?: string }
 
 const eq = (d: Uint8Array, o: number, t: readonly number[]) => d.length >= o + t.length && t.every((x, i) => d[o + i] === x);
 const u64 = (d: Uint8Array, o: number) => new DataView(d.buffer, d.byteOffset, d.length).getBigUint64(o, true);
@@ -82,6 +84,7 @@ export function b58encode(b: Uint8Array): string {
   return s;
 }
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i]);
+const DEFAULT_KEY = "11111111111111111111111111111111";
 
 /** Full account list: static keys, then loaded writable, then loaded readonly (v0 ordering). */
 export function accountKeys(tx: RawTx): string[] {
@@ -89,90 +92,103 @@ export function accountKeys(tx: RawTx): string[] {
   return [...tx.transaction.message.accountKeys, ...(la?.writable ?? []), ...(la?.readonly ?? [])];
 }
 
-interface Ix { program: string; accounts: string[]; data: Uint8Array; stack: number | null; outer: number }
+interface Ix { program: string; accounts: string[]; data: Uint8Array; stack: number | null }
 function flatten(tx: RawTx, keys: string[]): Ix[][] {
-  const at = (i: number) => { const k = keys[i]; if (k === undefined) throw new Error("account index out of range"); return k; };
-  const conv = (r: RawIx, outer: number, stack: number | null): Ix => ({ program: at(r.programIdIndex), accounts: r.accounts.map(at), data: b58decode(r.data), stack, outer });
+  const at = (i: number) => { const k = keys[i]; if (k === undefined) throw new Error("An account index is out of range."); return k; };
+  const conv = (r: RawIx, stack: number | null): Ix => ({ program: at(r.programIdIndex), accounts: r.accounts.map(at), data: b58decode(r.data), stack });
   const inner = new Map((tx.meta?.innerInstructions ?? []).map((g) => [g.index, g.instructions]));
-  return tx.transaction.message.instructions.map((r, i) => [conv(r, i, 1), ...(inner.get(i) ?? []).map((x) => conv(x, i, x.stackHeight ?? null))]);
+  return tx.transaction.message.instructions.map((r, i) => [conv(r, 1), ...(inner.get(i) ?? []).map((x) => conv(x, x.stackHeight ?? null))]);
 }
 
 function fundEvent(d: Uint8Array) {
-  if (!eq(d, 0, EVENT_IX_TAG) || !eq(d, 8, EVT_FUND) || d.length < 16 + 32 + 32 + 8 + 16 + 4) return null;
+  if (!eq(d, 0, EVENT_IX_TAG) || !eq(d, 8, EVT_FUND) || d.length < 108) return null;
   const len = new DataView(d.buffer, d.byteOffset, d.length).getUint32(104, true);
-  if (d.length < 108 + len) return null;
-  return { sourceProgram: b58encode(d.subarray(16, 48)), vault: b58encode(d.subarray(48, 80)), amount: u64(d, 80), feePerShare: u128(d, 88), payload: d.subarray(108, 108 + len) };
+  if (d.length !== 108 + len) return null;
+  return { sourceProgram: b58encode(d.subarray(16, 48)), vault: b58encode(d.subarray(48, 80)), amount: u64(d, 80), feePerShare: u128(d, 88), payload: d.subarray(108) };
 }
 function claimEvent(d: Uint8Array) {
-  if (!eq(d, 0, EVENT_IX_TAG) || !eq(d, 8, EVT_CLAIM) || d.length < 16 + 73) return null;
+  if (!eq(d, 0, EVENT_IX_TAG) || !eq(d, 8, EVT_CLAIM) || d.length !== 16 + 73) return null;
   return { vault: b58encode(d.subarray(16, 48)), user: b58encode(d.subarray(48, 80)), index: d[80], amount: u64(d, 81) };
 }
 const isDfsEvent = (x: Ix) => x.program === DFS_PROGRAM_ID && eq(x.data, 0, EVENT_IX_TAG) && x.accounts[0] === DFS_EVENT_AUTHORITY;
+type Kind = "fund" | "claimFund" | "claim";
+function dfsKind(x: Ix): Kind | null {
+  if (x.program !== DFS_PROGRAM_ID) return null;
+  return eq(x.data, 0, IX.fundFee) ? "fund" : eq(x.data, 0, IX.fundByClaimingFee) ? "claimFund" : eq(x.data, 0, IX.claimFee) ? "claim" : null;
+}
+function payloadArg(d: Uint8Array): Uint8Array | null {
+  if (d.length < 12) return null;
+  const len = new DataView(d.buffer, d.byteOffset, d.length).getUint32(8, true);
+  return d.length === 12 + len ? d.subarray(12) : null;
+}
 
 /**
- * Decodes one transaction for one vault. `recipients` are the vault's fixed recipient addresses by index.
- * Failed transactions yield no entries (they move nothing).
+ * Decodes one transaction for one vault. Only RPC-confirmed success counts; failed transactions yield
+ * no entries. Every DFS-emitted event for the vault is kept exactly once: bound to its invocation when
+ * the nesting is provable, otherwise listed with an unknown source / unverified claim.
  */
-export function decodeTx(signature: string, tx: RawTx | null, ctx: { vault: string; tokenVault: string; recipients: string[] }, via: ObservedTx["via"] = []): ObservedTx {
+export function decodeTx(signature: string, tx: RawTx | null, ctx: DecodeCtx, via: ("vault" | "tokenVault")[] = []): ObservedTx {
   const base = { signature, slot: tx?.slot ?? null, blockTime: tx?.blockTime ?? null, via, entries: [] as Entry[], otherVaultEvents: 0 };
   if (!tx) return { ...base, status: "unavailable", reason: "The RPC returned no transaction for this signature." };
   if (tx.version !== undefined && tx.version !== "legacy" && tx.version !== 0) return { ...base, status: "unsupported", reason: `Transaction version ${String(tx.version)} is not supported.` };
-  if (!tx.meta) return { ...base, status: "unavailable", reason: "The RPC returned no status metadata, so success cannot be shown." };
-  if (tx.meta.err != null) return { ...base, status: "failed", reason: "Failed on chain; nothing moved." };
+  const meta = tx.meta as Record<string, unknown> | null | undefined;
+  if (!meta || typeof meta !== "object" || !("err" in meta) || meta.err === undefined) return { ...base, status: "unavailable", reason: "The RPC returned no status metadata, so success cannot be shown." };
+  if (meta.err !== null) return { ...base, status: "failed", reason: "Failed on chain; nothing moved." };
   let groups: Ix[][];
   try { groups = flatten(tx, accountKeys(tx)); } catch (e) { return { ...base, status: "undecodable", reason: (e as Error).message }; }
   const entries: Entry[] = []; let other = 0;
   for (const g of groups) {
-    const consumed = new Set<number>();
-    let dfsTouched = false;
-    // Invocations of DFS fund/claim, each matched to the events DFS emitted directly beneath it.
+    const known = g.every((x) => x.stack != null);
+    const consumed = new Set<number>(); const covered = new Set<number>();
+    let ownInvocations = 0;
     g.forEach((x, i) => {
-      if (x.program !== DFS_PROGRAM_ID) return;
-      const isFund = eq(x.data, 0, IX.fundFee), isClaimFund = eq(x.data, 0, IX.fundByClaimingFee), isClaim = eq(x.data, 0, IX.claimFee);
-      if (!isFund && !isClaimFund && !isClaim) return;
-      dfsTouched = true;
-      if (x.accounts[0] !== ctx.vault) return;
-      // Children = following instructions until the stack returns to this level.
-      const kids: number[] = []; let ambiguous = x.stack == null;
-      for (let j = i + 1; j < g.length; j++) {
-        const y = g[j];
-        if (x.stack != null && y.stack != null && y.stack <= x.stack) break;
-        if (y.stack == null) { ambiguous = true; }
-        if (x.stack == null || y.stack == null || y.stack === x.stack + 1) kids.push(j);
-      }
-      const evIdx = kids.filter((j) => isDfsEvent(g[j]) && !consumed.has(j));
-      if (isClaim) {
-        const ev = evIdx.map((j) => ({ j, e: claimEvent(g[j].data) })).filter((z) => z.e && z.e.vault === ctx.vault);
-        if (ev.length !== 1) return;
-        consumed.add(ev[0].j); const e = ev[0].e!;
-        const user = x.accounts[5];
-        entries.push({ kind: "claim", amount: e.amount.toString(), recipient: e.user, index: e.index, recipientMatch: e.user === user && ctx.recipients[e.index] === e.user, evidence: ambiguous ? "ambiguous" : "proved" });
+      const kind = dfsKind(x);
+      if (!kind || x.accounts[0] !== ctx.vault) return;
+      ownInvocations++;
+      if (!known) return;
+      const h = x.stack!; const desc: number[] = [];
+      for (let j = i + 1; j < g.length && g[j].stack! > h; j++) desc.push(j);
+      const kids = desc.filter((j) => g[j].stack === h + 1);
+      if (kind !== "claim") desc.forEach((j) => covered.add(j));
+      const evs = kids.filter((j) => !consumed.has(j) && isDfsEvent(g[j]));
+      if (kind === "claim") {
+        const m = evs.map((j) => ({ j, e: claimEvent(g[j].data) })).filter((z) => z.e?.vault === ctx.vault);
+        if (m.length !== 1) return;
+        consumed.add(m[0].j); const e = m[0].e!;
+        const ok = x.data.length === 9 && x.data[8] === e.index && x.accounts[5] === e.user && ctx.recipients[e.index] === e.user
+          && x.accounts[2] === ctx.tokenVault && x.accounts[7] === DFS_EVENT_AUTHORITY && (!ctx.mint || x.accounts[3] === ctx.mint);
+        entries.push({ kind: "claim", amount: e.amount.toString(), recipient: e.user, index: e.index, recipientMatch: ok, evidence: ok ? "proved" : "unproved", note: ok ? undefined : "The claim's index, user or accounts do not match the vault's recipient slot." });
         return;
       }
-      const ev = evIdx.map((j) => ({ j, e: fundEvent(g[j].data) })).filter((z) => z.e && z.e.vault === ctx.vault);
-      if (ev.length !== 1) return;
-      consumed.add(ev[0].j); const e = ev[0].e!;
+      const m = evs.map((j) => ({ j, e: fundEvent(g[j].data) })).filter((z) => z.e?.vault === ctx.vault);
+      if (m.length !== 1) return;
+      consumed.add(m[0].j); const e = m[0].e!;
       let source: SourceLabel = "unknown";
-      if (!ambiguous && isFund) source = "manual";
-      if (!ambiguous && isClaimFund) {
-        // Payload arg = u32 length + bytes; sourceProgram is account 3. The CPI into it must carry the exact payload.
-        const dv = new DataView(x.data.buffer, x.data.byteOffset, x.data.length);
-        const len = x.data.length >= 12 ? dv.getUint32(8, true) : -1;
-        const payload = len >= 0 && x.data.length >= 12 + len ? x.data.subarray(12, 12 + len) : null;
-        const sp = x.accounts[3];
-        const cpi = kids.some((j) => g[j].program === sp && payload && sameBytes(g[j].data, payload));
-        if (payload && cpi && e.sourceProgram === sp && sameBytes(e.payload, payload)) source = classifySource(sp, payload);
+      if (kind === "fund") {
+        const okAccts = x.accounts[1] === ctx.tokenVault && x.accounts[6] === DFS_EVENT_AUTHORITY && (!ctx.mint || x.accounts[2] === ctx.mint);
+        if (okAccts && x.data.length === 16 && e.amount <= u64(x.data, 8) && e.sourceProgram === DEFAULT_KEY && e.payload.length === 0) source = "manual";
+      } else {
+        const payload = payloadArg(x.data); const sp = x.accounts[3];
+        const okAccts = x.accounts[1] === ctx.tokenVault && x.accounts[4] === DFS_EVENT_AUTHORITY;
+        const cpi = !!payload && kids.some((j) => g[j].program === sp && sameBytes(g[j].data, payload));
+        if (payload && okAccts && cpi && e.sourceProgram === sp && sameBytes(e.payload, payload)) source = classifySource(sp, payload);
       }
-      entries.push({ kind: "fund", amount: e.amount.toString(), source, sourceProgram: isClaimFund ? x.accounts[3] ?? null : null, evidence: ambiguous ? "ambiguous" : "proved", feePerShare: e.feePerShare.toString() });
+      entries.push({ kind: "fund", amount: e.amount.toString(), source, sourceProgram: kind === "claimFund" ? x.accounts[3] ?? null : null, evidence: source === "unknown" ? "unproved" : "proved", feePerShare: e.feePerShare.toString() });
     });
-    // DFS events for other vaults are counted, never attributed.
-    g.forEach((x, j) => { if (!consumed.has(j) && isDfsEvent(x)) { const f = fundEvent(x.data) ?? claimEvent(x.data); if (f && f.vault !== ctx.vault) other++; } });
-    // Plain SPL transfers into the token vault outside any DFS invocation: shown, never counted as funding.
-    if (!dfsTouched) for (const x of g) {
-      if (x.program !== TOKEN_PROGRAM && x.program !== TOKEN_2022_PROGRAM) continue;
-      const dest = x.data[0] === 3 && x.data.length >= 9 ? x.accounts[1] : x.data[0] === 12 && x.data.length >= 10 ? x.accounts[2] : null;
-      if (dest === ctx.tokenVault) entries.push({ kind: "direct_transfer", amount: u64(x.data, 1).toString(), tokenProgram: x.program });
-    }
+    g.forEach((x, j) => {
+      if (consumed.has(j) || !isDfsEvent(x)) return;
+      const f = fundEvent(x.data), c = f ? null : claimEvent(x.data);
+      const v = f?.vault ?? c?.vault; if (!v) return;
+      if (v !== ctx.vault) { other++; return; }
+      const note = "Emitted by the fee-sharing program, but its invocation could not be proved from this transaction.";
+      if (f) entries.push({ kind: "fund", amount: f.amount.toString(), source: "unknown", sourceProgram: null, evidence: "ambiguous", feePerShare: f.feePerShare.toString(), note });
+      else if (c) entries.push({ kind: "claim", amount: c.amount.toString(), recipient: c.user, index: c.index, recipientMatch: false, evidence: "ambiguous", note });
+    });
+    g.forEach((x, j) => {
+      if (covered.has(j) || (x.program !== TOKEN_PROGRAM && x.program !== TOKEN_2022_PROGRAM)) return;
+      const dest = x.data[0] === 3 && x.data.length === 9 ? x.accounts[1] : x.data[0] === 12 && x.data.length === 10 ? x.accounts[2] : null;
+      if (dest === ctx.tokenVault) entries.push({ kind: "direct_transfer", amount: u64(x.data, 1).toString(), tokenProgram: x.program, scope: known || ownInvocations === 0 ? "outside_dfs" : "unclassified" });
+    });
   }
   return { ...base, status: "success", entries, otherVaultEvents: other };
 }
@@ -196,35 +212,41 @@ export function mergeHistory(h: History, page: { txs: ObservedTx[]; coverage: Pa
   return { txs, coverage: { ...h.coverage, ...page.coverage } as Record<Stream, StreamCoverage> };
 }
 
-/** Sums successful, proved entries inside the observed window only. Never a lifetime figure. */
+
+/** Totals only successful entries in the observed window, never a lifetime figure. Unverified claims stay separate. */
 export function windowTotals(txs: ObservedTx[]) {
-  const t = { funded: 0n, tradingFee: 0n, manual: 0n, other: 0n, unknown: 0n, claimed: 0n, directUncounted: 0n };
+  const t = { funded: 0n, tradingFee: 0n, manual: 0n, other: 0n, unknown: 0n, claimed: 0n, claimedUnverified: 0n, directUncounted: 0n, directUnclassified: 0n };
   for (const x of txs) if (x.status === "success") for (const e of x.entries) {
     const a = BigInt(e.amount);
     if (e.kind === "fund") { t.funded += a; if (TRADING_FEE_SOURCES.includes(e.source)) t.tradingFee += a; else if (e.source === "manual") t.manual += a; else if (e.source === "unknown") t.unknown += a; else t.other += a; }
-    else if (e.kind === "claim") t.claimed += a;
-    else t.directUncounted += a;
+    else if (e.kind === "claim") { if (e.recipientMatch && e.evidence === "proved") t.claimed += a; else t.claimedUnverified += a; }
+    else if (e.scope === "outside_dfs") t.directUncounted += a; else t.directUnclassified += a;
   }
   return Object.fromEntries(Object.entries(t).map(([k, v]) => [k, v.toString()])) as Record<keyof typeof t, string>;
 }
+export const gapCount = (txs: ObservedTx[]) => txs.filter((t) => t.status === "unavailable" || t.status === "undecodable" || t.status === "unsupported").length;
 
 // ---- export ----
 export function csvCell(v: unknown): string {
   let s = v == null ? "" : String(v);
-  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // neutralise spreadsheet formulas
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 export const CSV_HEADER = ["signature", "slot", "block_time_utc", "status", "found_via", "kind", "amount_base_units", "decimals", "source", "source_program", "evidence", "recipient", "recipient_index", "recipient_match", "note"];
-export function historyCsv(txs: ObservedTx[], decimals: number | null): string {
-  const rows: unknown[][] = [CSV_HEADER];
+/** Public metadata written above the table so a CSV stays interpretable on its own. */
+export type ExportMeta = Record<string, string | number | boolean | null>;
+export function historyCsv(txs: ObservedTx[], decimals: number | null, meta?: ExportMeta): string {
+  const rows: unknown[][] = [];
+  if (meta) { rows.push(["metadata_key", "metadata_value"]); for (const [k, v] of Object.entries(meta)) rows.push([k, v ?? ""]); rows.push([]); }
+  rows.push(CSV_HEADER);
   for (const t of txs) {
     const time = t.blockTime == null ? "unknown" : new Date(t.blockTime * 1000).toISOString();
     const head = [t.signature, t.slot ?? "unknown", time, t.status, t.via.join("+")];
     if (!t.entries.length) rows.push([...head, "", "", decimals ?? "", "", "", "", "", "", "", t.reason ?? (t.status === "success" ? "no activity for this vault" : "")]);
     for (const e of t.entries) {
-      if (e.kind === "fund") rows.push([...head, "fund", e.amount, decimals ?? "", e.source, e.sourceProgram ?? "", e.evidence, "", "", "", ""]);
-      else if (e.kind === "claim") rows.push([...head, "claim", e.amount, decimals ?? "", "", "", e.evidence, e.recipient, e.index, e.recipientMatch, ""]);
-      else rows.push([...head, "direct_transfer", e.amount, decimals ?? "", "", "", "", "", "", "", "Direct token transfer: outside DFS funding, not counted"]);
+      if (e.kind === "fund") rows.push([...head, "fund", e.amount, decimals ?? "", e.source, e.sourceProgram ?? "", e.evidence, "", "", "", e.note ?? ""]);
+      else if (e.kind === "claim") rows.push([...head, "claim", e.amount, decimals ?? "", "", "", e.evidence, e.recipient, e.index, e.recipientMatch, e.recipientMatch ? "" : (e.note ?? "Unverified claim: not in verified totals")]);
+      else rows.push([...head, e.scope === "outside_dfs" ? "direct_transfer" : "unclassified_transfer", e.amount, decimals ?? "", "", "", "", "", "", "", e.scope === "outside_dfs" ? "Direct token transfer: outside DFS funding, not counted" : "Transfer into the token vault whose nesting could not be proved: not counted"]);
     }
   }
   return rows.map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
