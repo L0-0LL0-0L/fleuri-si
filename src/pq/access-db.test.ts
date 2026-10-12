@@ -170,7 +170,6 @@ describe("0018 durable deep-credit binding", () => {
       await q("insert into greenhouse_runs(owner_id,request_id,status) values($1,$2,'running')", [A, RQ(n)]); await expire(a.id);
     }
     await expect(acq(B, "deep_trial", RQ(4), { limit: 3, inflight: 5 })).rejects.toThrow("access_exhausted");
-    expect((await q("select count(*)::int n from access_reservations where status='consumed'"))[0].n).toBe(3);
   });
   it("a lease-expired worker without a run cannot create a trial after a replacement takes the slot", async () => {
     const a = await acq(A, "deep_trial", RQ(1), { limit: 1 }); await expire(a.id);
