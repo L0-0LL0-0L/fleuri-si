@@ -138,7 +138,7 @@ export function decodeTx(signature: string, tx: RawTx | null, ctx: { vault: stri
         const y = g[j];
         if (x.stack != null && y.stack != null && y.stack <= x.stack) break;
         if (y.stack == null) { ambiguous = true; }
-        if (x.stack == null || y.stack === x.stack + 1) kids.push(j);
+        if (x.stack == null || y.stack == null || y.stack === x.stack + 1) kids.push(j);
       }
       const evIdx = kids.filter((j) => isDfsEvent(g[j]) && !consumed.has(j));
       if (isClaim) {
