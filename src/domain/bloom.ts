@@ -97,7 +97,7 @@ export const bodyHash = (roundId: string, manifest: Manifest) => hashOf("fleuri.
 export const tapeSeed = (seedHex: string, roundId: string) => seed32("fleuri.bloom.tape.v1", seedHex, roundId);
 
 // ---------- evaluation ----------
-export interface RevealedEntry { entryId: string; agentId: string; commit: string; createdAt: string; salt: string; manifest: Manifest; basePolicy: PolicySnapshot }
+export interface RevealedEntry { entryId: string; seq: number; agentId: string; commit: string; createdAt: string; salt: string; manifest: Manifest; basePolicy: PolicySnapshot }
 export interface EventScore { event: BloomEvent; forecast: number; hits: number; n: number; brier: number }
 export interface ScenarioResult { scenario: Scenario; n: number; sealedReturn: Stat; baseReturn: Stat; baselineReturn: Stat; vsBaseline: Stat; vsBasePolicy: Stat; winsVsBaseline: number; winsVsBasePolicy: number; maxDrawdown: Stat; attempts: number; rejections: number; faults: number }
 export interface EntryResult { entryId: string; agentId: string; status: "scored" | "invalid"; reason: string | null; sealedPolicyHash: string | null; basePolicyHash: string; scenarios: ScenarioResult[]; events: EventScore[]; brier: number | null; referenceBrier: number | null; overallVsBaseline: Stat | null; n: number }
@@ -113,7 +113,7 @@ export function evaluateRound(roundId: string, rulesRaw: BloomRules, marketRaw: 
   const cfg = { agentIds: ["x"], seed, repetitions: rules.repetitions, cycles: rules.cycles, scenarios: rules.scenarios } as TrialConfig;
   const base = new Map<string, RunResult>();
   for (const sc of rules.scenarios) for (let rep = 0; rep < rules.repetitions; rep++) base.set(`${sc}:${rep}`, runBaseline(market, cfg, sc, rep));
-  const results: EntryResult[] = [...entries].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.entryId.localeCompare(b.entryId)).map((e) => {
+  const results: EntryResult[] = [...entries].sort((a, b) => a.seq - b.seq).map((e) => {
     const empty = { entryId: e.entryId, agentId: e.agentId, sealedPolicyHash: null, basePolicyHash: String((e.basePolicy as any)?.policyHash ?? ""), scenarios: [], events: [], brier: null, referenceBrier: null, overallVsBaseline: null, n: 0 };
     let m: Manifest, bp: PolicySnapshot;
     try {
@@ -155,7 +155,7 @@ export const outputHash = (o: RoundOutput) => hashOf("fleuri.bloom.output.v1", o
 export const contentHash = (p: { rulesHash: string; marketHash: string; seedCommit: string; commits: string[]; outputHash: string | null }) => hashOf("fleuri.bloom.content.v1", p);
 
 // ---------- portable evidence bundle + strict local verifier ----------
-export interface BundleEntry { entryId: string; agentId: string; commit: string; createdAt: string; status: string; salt: string | null; manifest: unknown; basePolicy: unknown }
+export interface BundleEntry { entryId: string; seq: number; agentId: string; commit: string; createdAt: string; status: string; salt: string | null; manifest: unknown; basePolicy: unknown }
 export interface Bundle {
   format: typeof BUNDLE_FORMAT;
   round: { id: string; slug: string; title: string; status: string; createdAt: string; commitClosesAt: string; rules: BloomRules; rulesHash: string; market: FrozenMarket; marketHash: string; seedCommit: string };
@@ -190,7 +190,7 @@ export function verifyBloomBundle(text: string): BloomVerify {
   if (seed == null) add("seed", false, "Seed not revealed: nothing can be scored yet.");
   else add("seed", typeof seed === "string" && H64.test(seed) && seedCommit(seed) === r.seedCommit, "Revealed seed matches the commitment published at round creation.");
   const ids = new Set<string>();
-  for (const e of raw.entries) { if (!e || typeof e.entryId !== "string" || ids.has(e.entryId)) return { status: "invalid", detail: "Duplicate or malformed entry id.", checks }; ids.add(e.entryId); }
+  for (const e of raw.entries) { if (!e || typeof e.entryId !== "string" || !Number.isSafeInteger(e.seq) || ids.has(e.entryId)) return { status: "invalid", detail: "Duplicate or malformed entry id.", checks }; ids.add(e.entryId); }
   if (raw.output == null) {
     const ok = checks.every((c) => c.ok || c.id === "seed");
     return { status: ok ? "verified" : "mismatch", detail: raw.error ? `Round has no scores: ${String(raw.error).slice(0, 200)}. Commitments checked.` : "Round has no scores yet. Commitments checked.", checks, bundle: raw };
@@ -198,12 +198,14 @@ export function verifyBloomBundle(text: string): BloomVerify {
   if (!checks.every((c) => c.ok)) return { status: "mismatch", detail: "A commitment or hash did not match.", checks, bundle: raw };
   let out: RoundOutput;
   try {
-    const revealed: RevealedEntry[] = raw.entries.map((e: any) => ({ entryId: e.entryId, agentId: String(e.agentId), commit: String(e.commit), createdAt: String(e.createdAt), salt: String(e.salt ?? ""), manifest: e.manifest, basePolicy: e.basePolicy }));
+    const revealed: RevealedEntry[] = raw.entries.map((e: any) => ({ entryId: e.entryId, seq: e.seq, agentId: String(e.agentId), commit: String(e.commit), createdAt: String(e.createdAt), salt: String(e.salt ?? ""), manifest: e.manifest, basePolicy: e.basePolicy }));
     out = evaluateRound(r.id, rules, market, seed, revealed);
   } catch (e) { return { status: "invalid", detail: `Recompute failed: ${(e as Error).message.slice(0, 160)}`, checks }; }
   add("output", stableJson(out) === stableJson(raw.output), "Scenarios, paired comparisons and Brier scores recomputed locally.");
   const oh = outputHash(out);
   add("outputHash", oh === raw.outputHash, "Output hash recomputed.");
+  const seqs = raw.entries.map((e: any) => e.seq);
+  add("order", seqs.every((x: number, i: number) => i === 0 || x > seqs[i - 1]), "Entries are listed in submission order.");
   add("contentHash", contentHash({ rulesHash: r.rulesHash, marketHash: r.marketHash, seedCommit: r.seedCommit, commits: raw.entries.map((e: any) => e.commit), outputHash: oh }) === raw.contentHash, "Content hash binds rules, market, seed commitment, every commitment and the output.");
   const ok = checks.every((c) => c.ok);
   return { status: ok ? "verified" : "mismatch", detail: ok ? "Every commitment, scenario, comparison and score recomputed and matched." : "Recomputed results differ from the bundle.", checks, bundle: raw };
