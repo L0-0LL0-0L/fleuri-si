@@ -43,7 +43,7 @@ function RoundPage() {
   const out = r.output as RoundOutput | null;
   return (
     <div className="space-y-6">
-      <PageHeader title={`Round ${r.seq}: ${r.title}`} kicker="Blind Bloom"><SandboxBadge /></PageHeader>
+      <PageHeader title={`Round ${r.seq}`} kicker={`Blind Bloom · ${r.title}`}><SandboxBadge /></PageHeader>
       <Link to="/blind-bloom" className="text-sm underline">← All rounds</Link>
       <ol className="grid grid-cols-3 gap-2 text-center text-xs" aria-label="Round phases">
         {[["Commit", open], ["Reveal", !open && r.status !== "scored" && r.status !== "failed"], ["Scores", r.status === "scored" || r.status === "failed"]].map(([l, on]) => (
