@@ -28,6 +28,7 @@ import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as WatchtowerRouteImport } from './routes/watchtower'
 import { Route as AHandleRouteImport } from './routes/a.$handle'
+import { Route as BlindBloomIndexRouteImport } from './routes/blind-bloom.index'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
 import { Route as GreenhouseIndexRouteImport } from './routes/greenhouse.index'
 import { Route as PassportHashRouteImport } from './routes/passport.$hash'
@@ -134,6 +135,11 @@ const AHandleRoute = AHandleRouteImport.update({
   path: '/a/$handle',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BlindBloomIndexRoute = BlindBloomIndexRouteImport.update({
+  id: '/blind-bloom/',
+  path: '/blind-bloom/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CSymbolRoute = CSymbolRouteImport.update({
   id: '/c/$symbol',
   path: '/c/$symbol',
@@ -210,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/receipts/$id': typeof ReceiptsIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
   '/t/$mint': typeof TMintRoute
+  '/blind-bloom/': typeof BlindBloomIndexRoute
   '/greenhouse/': typeof GreenhouseIndexRoute
   '/receipts/': typeof ReceiptsIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
@@ -241,6 +248,7 @@ export interface FileRoutesByTo {
   '/receipts/$id': typeof ReceiptsIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
   '/t/$mint': typeof TMintRoute
+  '/blind-bloom': typeof BlindBloomIndexRoute
   '/greenhouse': typeof GreenhouseIndexRoute
   '/receipts': typeof ReceiptsIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
@@ -273,6 +281,7 @@ export interface FileRoutesById {
   '/receipts/$id': typeof ReceiptsIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
   '/t/$mint': typeof TMintRoute
+  '/blind-bloom/': typeof BlindBloomIndexRoute
   '/greenhouse/': typeof GreenhouseIndexRoute
   '/receipts/': typeof ReceiptsIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
@@ -306,6 +315,7 @@ export interface FileRouteTypes {
     | '/receipts/$id'
     | '/receipts/new'
     | '/t/$mint'
+    | '/blind-bloom/'
     | '/greenhouse/'
     | '/receipts/'
     | '/greenhouse/r/$id'
@@ -337,6 +347,7 @@ export interface FileRouteTypes {
     | '/receipts/$id'
     | '/receipts/new'
     | '/t/$mint'
+    | '/blind-bloom'
     | '/greenhouse'
     | '/receipts'
     | '/greenhouse/r/$id'
@@ -368,6 +379,7 @@ export interface FileRouteTypes {
     | '/receipts/$id'
     | '/receipts/new'
     | '/t/$mint'
+    | '/blind-bloom/'
     | '/greenhouse/'
     | '/receipts/'
     | '/greenhouse/r/$id'
@@ -400,6 +412,7 @@ export interface RootRouteChildren {
   ReceiptsIdRoute: typeof ReceiptsIdRoute
   ReceiptsNewRoute: typeof ReceiptsNewRoute
   TMintRoute: typeof TMintRoute
+  BlindBloomIndexRoute: typeof BlindBloomIndexRoute
   GreenhouseIndexRoute: typeof GreenhouseIndexRoute
   ReceiptsIndexRoute: typeof ReceiptsIndexRoute
   GreenhouseRIdRoute: typeof GreenhouseRIdRoute
@@ -542,6 +555,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AHandleRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/blind-bloom/': {
+      id: '/blind-bloom/'
+      path: '/blind-bloom'
+      fullPath: '/blind-bloom/'
+      preLoaderRoute: typeof BlindBloomIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/c/$symbol': {
       id: '/c/$symbol'
       path: '/c/$symbol'
@@ -640,6 +660,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReceiptsIdRoute: ReceiptsIdRoute,
   ReceiptsNewRoute: ReceiptsNewRoute,
   TMintRoute: TMintRoute,
+  BlindBloomIndexRoute: BlindBloomIndexRoute,
   GreenhouseIndexRoute: GreenhouseIndexRoute,
   ReceiptsIndexRoute: ReceiptsIndexRoute,
   GreenhouseRIdRoute: GreenhouseRIdRoute,
