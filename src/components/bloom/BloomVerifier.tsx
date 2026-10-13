@@ -25,8 +25,8 @@ export function BloomVerifier() {
       <textarea id="bloom-paste" className="hair num h-24 w-full bg-paper-light p-2 text-xs" value={text} onChange={(e) => setText(e.target.value)} />
       {err && <p role="alert" className="text-sm text-destructive">{err}</p>}
       {res && (
-        <div role="status" className="hair bg-paper-light p-3 text-sm">
-          <p className="font-bold">{res.status === "verified" ? "Verified" : res.status === "mismatch" ? "Does not match" : res.status === "unsupported" ? "Unsupported version" : "Invalid bundle"} — {res.detail}</p>
+        <div role="status" data-bloom-result className="hair bg-paper-light p-3 text-sm">
+          <p className="font-bold">{({ verified: "Verified", pending: "Pending — not revealed yet", partial: "Partly checked — no scores", mismatch: "Does not match", unsupported: "Unsupported version", invalid: "Invalid bundle" } as const)[res.status]} — {res.detail}</p>
           <ul className="mt-2 space-y-1">
             {res.checks.map((c) => <li key={c.id} className="flex gap-2"><span className="chip">{c.ok ? "pass" : "fail"}</span><span>{c.detail}</span></li>)}
           </ul>
