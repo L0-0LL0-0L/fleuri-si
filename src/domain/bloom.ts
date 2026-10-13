@@ -165,9 +165,23 @@ export interface Bundle {
 export const BUNDLE_NOTE = "Blind Bloom vSOL sandbox round, exported as stored by a server-mediated prototype. The server generated the seed and held sealed strategies, so it could have known them early; commitments only prove nothing changed after they were published. Database timestamps are not on-chain timestamps. Not trustless, not a model-execution attestation, not a prediction of real markets or Meteora DBC/DLMM behaviour.";
 
 export type BloomCheck = { id: string; ok: boolean; detail: string };
-export type BloomVerify = { status: "verified" | "mismatch" | "unsupported" | "invalid"; detail: string; checks: BloomCheck[]; bundle?: Bundle };
+/** verified: everything recomputed. pending: seed not yet revealed (commitments only). partial: revealed but no scores (failed round). */
+export type BloomVerify = { status: "verified" | "pending" | "partial" | "mismatch" | "unsupported" | "invalid"; detail: string; checks: BloomCheck[]; bundle?: Bundle };
 
-/** Strict: size cap, duplicate-key rejection, non-finite rejection, known versions only; recomputes everything. */
+const iso = z.string().max(40).refine((s) => Number.isFinite(Date.parse(s)), "not a timestamp");
+const h64 = z.string().regex(H64);
+const EnvelopeSchema = z.object({
+  format: z.literal(BUNDLE_FORMAT),
+  round: z.object({ id: z.string().uuid(), slug: z.string().max(40), title: z.string().max(80), status: z.enum(["open", "evaluating", "scored", "failed"]), createdAt: iso, commitClosesAt: iso, rules: z.unknown(), rulesHash: h64, market: z.unknown(), marketHash: h64, seedCommit: h64 }).strict(),
+  reveal: z.object({ seedHex: h64.nullable(), revealedAt: iso.nullable() }).strict(),
+  entries: z.array(z.object({ entryId: z.string().uuid(), seq: z.number().int().positive(), agentId: z.string().min(1).max(40), commit: h64, createdAt: iso, status: z.enum(["sealed", "revealed"]), salt: h64.nullable(), manifest: z.unknown(), basePolicy: z.unknown() }).strict()).max(BLOOM_LIMITS.entriesMax),
+  output: z.unknown(), outputHash: h64.nullable(), contentHash: h64.nullable(), error: z.string().max(300).nullable(), note: z.string().max(1000),
+}).strict();
+
+/**
+ * Strict: size cap, duplicate-key and non-finite rejection, exact envelope schema, known versions only;
+ * recomputes everything that is revealed. Signatures/hashes here never prove when something happened.
+ */
 export function verifyBloomBundle(text: string): BloomVerify {
   const checks: BloomCheck[] = [];
   let raw: any;
@@ -175,38 +189,59 @@ export function verifyBloomBundle(text: string): BloomVerify {
   catch (e) { return { status: "invalid", detail: (e as Error).message, checks }; }
   const bad = boundedJson(raw, 40, 2_000_000); if (bad) return { status: "invalid", detail: bad, checks };
   if (!raw || typeof raw !== "object" || raw.format !== BUNDLE_FORMAT) return { status: "unsupported", detail: `Unsupported bundle format ${String(raw?.format)}.`, checks };
-  const keys = Object.keys(raw).sort().join(",");
-  if (keys !== "contentHash,entries,error,format,note,output,outputHash,reveal,round") return { status: "invalid", detail: "Unexpected or missing top-level fields.", checks };
+  const r0 = raw.round?.rules;
+  if (r0?.version !== BLOOM_VERSION || r0?.engineVersion !== ENGINE_VERSION || r0?.scenarioVersion !== SCENARIO_VERSION || r0?.scoringVersion !== SCORING_VERSION)
+    return { status: "unsupported", detail: `Unsupported round versions ${String(r0?.version)}/${String(r0?.engineVersion)}/${String(r0?.scoringVersion)}.`, checks };
+  const env = EnvelopeSchema.safeParse(raw);
+  if (!env.success) return { status: "invalid", detail: `Bundle envelope invalid at ${env.error.issues[0]?.path.join(".")}: ${env.error.issues[0]?.message}`, checks };
   const r = raw.round;
-  if (!r || typeof r !== "object" || r.rules?.version !== BLOOM_VERSION || r.rules?.engineVersion !== ENGINE_VERSION || r.rules?.scenarioVersion !== SCENARIO_VERSION || r.rules?.scoringVersion !== SCORING_VERSION)
-    return { status: "unsupported", detail: `Unsupported round versions ${String(r?.rules?.version)}/${String(r?.rules?.engineVersion)}/${String(r?.rules?.scoringVersion)}.`, checks };
   let rules: BloomRules, market: FrozenMarket;
   try { rules = RulesSchema.parse(r.rules); market = MarketSchema.parse(r.market); } catch (e) { return { status: "invalid", detail: `Round rules or market invalid: ${(e as Error).message.slice(0, 160)}`, checks }; }
-  if (!Array.isArray(raw.entries) || raw.entries.length > rules.maxEntries) return { status: "invalid", detail: "Entries missing or above the round limit.", checks };
+  if (raw.entries.length > rules.maxEntries) return { status: "invalid", detail: "Entries above the round limit.", checks };
+  const ids = new Set<string>(); let lastSeq = 0;
+  for (const e of raw.entries) {
+    if (ids.has(e.entryId)) return { status: "invalid", detail: "Duplicate entry id.", checks };
+    if (e.seq <= lastSeq) return { status: "invalid", detail: "Entries must be listed in strictly increasing, unique submission order.", checks };
+    ids.add(e.entryId); lastSeq = e.seq;
+  }
+  const seed: string | null = raw.reveal.seedHex, revealed = seed !== null;
+  // Phase consistency: revealed fields appear together, only after the deadline, and never for open rounds.
+  const closes = Date.parse(r.commitClosesAt);
+  const phaseErr =
+    (raw.reveal.revealedAt === null) !== !revealed ? "Seed and reveal time must appear together." :
+    revealed && Date.parse(raw.reveal.revealedAt) < closes ? "Reveal time is before the commit deadline." :
+    revealed && r.status === "open" ? "An open round cannot have a revealed seed." :
+    !revealed && r.status !== "open" ? "A closed round must include its revealed seed." :
+    raw.entries.some((e: any) => Date.parse(e.createdAt) >= closes) ? "An entry was created at or after the commit deadline." :
+    raw.entries.some((e: any) => revealed ? e.status !== "revealed" || e.salt === null || e.manifest == null || e.basePolicy == null : e.status !== "sealed" || e.salt !== null || e.manifest != null || e.basePolicy != null) ? "Entry reveal fields do not match the round phase." :
+    r.status === "scored" ? (raw.output == null || !raw.outputHash || !raw.contentHash ? "A scored round must include its output and hashes." : null) :
+    raw.output != null || raw.outputHash !== null || raw.contentHash !== null ? "Only scored rounds carry outputs." :
+    r.status === "failed" && !raw.error ? "A failed round must say why." : null;
+  if (phaseErr) return { status: "invalid", detail: phaseErr, checks };
   const add = (id: string, ok: boolean, detail: string) => checks.push({ id, ok, detail });
   add("rules", rulesHash(rules) === r.rulesHash, "Rules hash recomputed.");
   add("market", marketHash(market) === r.marketHash, "Frozen market hash recomputed.");
-  const seed = raw.reveal?.seedHex;
-  if (seed == null) add("seed", false, "Seed not revealed: nothing can be scored yet.");
-  else add("seed", typeof seed === "string" && H64.test(seed) && seedCommit(seed) === r.seedCommit, "Revealed seed matches the commitment published at round creation.");
-  const ids = new Set<string>();
-  for (const e of raw.entries) { if (!e || typeof e.entryId !== "string" || !Number.isSafeInteger(e.seq) || ids.has(e.entryId)) return { status: "invalid", detail: "Duplicate or malformed entry id.", checks }; ids.add(e.entryId); }
-  if (raw.output == null) {
-    const ok = checks.every((c) => c.ok || c.id === "seed");
-    return { status: ok ? "verified" : "mismatch", detail: raw.error ? `Round has no scores: ${String(raw.error).slice(0, 200)}. Commitments checked.` : "Round has no scores yet. Commitments checked.", checks, bundle: raw };
+  if (revealed) {
+    add("seed", seedCommit(seed) === r.seedCommit, "Revealed seed matches the commitment published at round creation.");
+    raw.entries.forEach((e: any, i: number) => {
+      let ok = false;
+      try { const m = parseManifest(e.manifest, rules); ok = m.agentId === e.agentId && submissionCommit({ roundId: r.id, agentId: e.agentId, basePolicyHash: m.basePolicyHash, manifest: m, salt: e.salt }) === e.commit; } catch { ok = false; }
+      add(`commit${i + 1}`, ok, `Entry ${e.seq}: revealed strategy and salt reproduce its published commitment.`);
+    });
   }
-  if (!checks.every((c) => c.ok)) return { status: "mismatch", detail: "A commitment or hash did not match.", checks, bundle: raw };
+  const allOk = () => checks.every((c) => c.ok);
+  if (!revealed) return { status: allOk() ? "pending" : "mismatch", detail: allOk() ? "Seed not revealed yet: rules and market hashes checked; strategies stay sealed, nothing can be scored." : "A rules or market hash did not match.", checks, bundle: raw };
+  if (r.status !== "scored") return { status: allOk() ? "partial" : "mismatch", detail: allOk() ? `Revealed seed and every commitment checked; no scores (${r.status === "failed" ? String(raw.error).slice(0, 160) : "evaluation still running"}).` : "A revealed seed or commitment did not match.", checks, bundle: raw };
+  if (!allOk()) return { status: "mismatch", detail: "A commitment or hash did not match.", checks, bundle: raw };
   let out: RoundOutput;
   try {
-    const revealed: RevealedEntry[] = raw.entries.map((e: any) => ({ entryId: e.entryId, seq: e.seq, agentId: String(e.agentId), commit: String(e.commit), createdAt: String(e.createdAt), salt: String(e.salt ?? ""), manifest: e.manifest, basePolicy: e.basePolicy }));
-    out = evaluateRound(r.id, rules, market, seed, revealed);
+    const rev: RevealedEntry[] = raw.entries.map((e: any) => ({ entryId: e.entryId, seq: e.seq, agentId: e.agentId, commit: e.commit, createdAt: e.createdAt, salt: e.salt, manifest: e.manifest, basePolicy: e.basePolicy }));
+    out = evaluateRound(r.id, rules, market, seed, rev);
   } catch (e) { return { status: "invalid", detail: `Recompute failed: ${(e as Error).message.slice(0, 160)}`, checks }; }
   add("output", stableJson(out) === stableJson(raw.output), "Scenarios, paired comparisons and Brier scores recomputed locally.");
   const oh = outputHash(out);
   add("outputHash", oh === raw.outputHash, "Output hash recomputed.");
-  const seqs = raw.entries.map((e: any) => e.seq);
-  add("order", seqs.every((x: number, i: number) => i === 0 || x > seqs[i - 1]), "Entries are listed in submission order.");
   add("contentHash", contentHash({ rulesHash: r.rulesHash, marketHash: r.marketHash, seedCommit: r.seedCommit, commits: raw.entries.map((e: any) => e.commit), outputHash: oh }) === raw.contentHash, "Content hash binds rules, market, seed commitment, every commitment and the output.");
-  const ok = checks.every((c) => c.ok);
-  return { status: ok ? "verified" : "mismatch", detail: ok ? "Every commitment, scenario, comparison and score recomputed and matched." : "Recomputed results differ from the bundle.", checks, bundle: raw };
+  const ok = allOk();
+  return { status: ok ? "verified" : "mismatch", detail: ok ? "Every commitment, scenario, comparison and score recomputed and matched. Hashes prove consistency, not when anything happened." : "Recomputed results differ from the bundle.", checks, bundle: raw };
 }

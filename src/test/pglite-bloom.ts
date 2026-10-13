@@ -9,7 +9,7 @@ export async function bloomDb() {
   await pg.exec(`create table public.agents(id text primary key, handle text not null, name text not null, archetype text not null, risk int not null, strategy text not null default '', persona text not null default '', owner_id text not null, status text not null default 'active');
     create table public.launch_proposals(id uuid primary key default gen_random_uuid(), agent_handle text not null, origin_agent_id text, origin_policy_hash text, status text not null default 'proposed', name text not null default 'x', symbol text not null default 'XX', created_at timestamptz not null default now());
     grant select on public.agents, public.launch_proposals to anon, authenticated;`);
-  await pg.exec(await readFile(new URL("../pq/sql/0020_blind_bloom.sql", import.meta.url), "utf8"));
+  for (const f of ["0020_blind_bloom.sql", "0021_blind_bloom_fail_fence.sql"]) await pg.exec(await readFile(new URL(`../pq/sql/${f}`, import.meta.url), "utf8"));
   // Controllable clock: replace bloom_now() in this isolated database only.
   await pg.exec(`create table public.test_clock(t timestamptz); insert into public.test_clock values (now());
     create or replace function public.bloom_now() returns timestamptz language sql stable as $$ select t from public.test_clock $$;`);

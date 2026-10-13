@@ -14,12 +14,12 @@ const SEED = "ab".repeat(32), ROUND = "11111111-1111-4111-8111-111111111111";
 const entry = (id: string, seq: number, base = pol(id), settings: B.Manifest["settings"] = { archetype: "weed", risk: 5 }, preds = { beats_baseline: 40, beats_base_policy: 50, ends_in_profit: 30, drawdown_over_15: 70 }) => {
   const manifest: B.Manifest = { format: B.MANIFEST_FORMAT, agentId: id, basePolicyHash: base.policyHash, settings, predictions: preds };
   const salt = (seq.toString(16).padStart(2, "0")).repeat(32);
-  return { entryId: `e${seq}`, seq, agentId: id, commit: B.submissionCommit({ roundId: ROUND, agentId: id, basePolicyHash: base.policyHash, manifest, salt }), createdAt: "t", salt, manifest, basePolicy: base };
+  return { entryId: `eeeeeeee-0000-4000-8000-${String(seq).padStart(12, "0")}`, seq, agentId: id, commit: B.submissionCommit({ roundId: ROUND, agentId: id, basePolicyHash: base.policyHash, manifest, salt }), createdAt: `2026-10-13T00:00:0${seq}Z`, salt, manifest, basePolicy: base };
 };
 function bundleOf(entries: B.RevealedEntry[]) {
   const out = B.evaluateRound(ROUND, rules, market, SEED, entries); const oh = B.outputHash(out);
-  const b: B.Bundle = { format: B.BUNDLE_FORMAT, round: { id: ROUND, slug: "round-1", title: "t", status: "scored", createdAt: "c", commitClosesAt: "d", rules, rulesHash: B.rulesHash(rules), market, marketHash: B.marketHash(market), seedCommit: B.seedCommit(SEED) },
-    reveal: { seedHex: SEED, revealedAt: "r" }, entries: entries.map((e) => ({ ...e, status: "revealed" })), output: out, outputHash: oh,
+  const b: B.Bundle = { format: B.BUNDLE_FORMAT, round: { id: ROUND, slug: "round-1", title: "t", status: "scored", createdAt: "2026-10-13T00:00:00Z", commitClosesAt: "2026-10-14T00:00:00Z", rules, rulesHash: B.rulesHash(rules), market, marketHash: B.marketHash(market), seedCommit: B.seedCommit(SEED) },
+    reveal: { seedHex: SEED, revealedAt: "2026-10-14T00:00:01Z" }, entries: entries.map((e) => ({ ...e, status: "revealed" })), output: out, outputHash: oh,
     contentHash: B.contentHash({ rulesHash: B.rulesHash(rules), marketHash: B.marketHash(market), seedCommit: B.seedCommit(SEED), commits: entries.map((e) => e.commit), outputHash: oh }), error: null, note: B.BUNDLE_NOTE };
   return structuredClone(b);
 }
@@ -61,7 +61,7 @@ describe("Blind Bloom scoring", () => {
     const bad = { ...entry("ag_a", 1), salt: "ff".repeat(32) };
     const out = B.evaluateRound(ROUND, rules, market, SEED, [bad, entry("ag_b", 2)]);
     expect(out.entries.map((e) => e.status)).toEqual(["invalid", "scored"]);
-    expect(out.ranking).toEqual(["e2"]);
+    expect(out.ranking).toEqual(["eeeeeeee-0000-4000-8000-000000000002"]);
   });
   it("rejects manifests with missing/extra/non-integer forecasts", () => {
     const m = entry("ag_a", 1).manifest;
@@ -102,8 +102,33 @@ describe("Blind Bloom bundle verifier", () => {
     const extra = good() as any; extra.leak = 1; expect(B.verifyBloomBundle(JSON.stringify(extra)).status).toBe("invalid");
     const dup = good(); dup.entries[1].entryId = dup.entries[0].entryId; expect(B.verifyBloomBundle(JSON.stringify(dup)).status).toBe("invalid");
   });
-  it("an unscored (failed) round still verifies its commitments and says it has no scores", () => {
-    const b = good(); b.output = null; b.outputHash = null; b.contentHash = null; b.error = "Evaluation gave up after 3 attempts";
-    const v = B.verifyBloomBundle(JSON.stringify(b)); expect(v.status).toBe("verified"); expect(v.detail).toMatch(/no scores/);
+  it("a failed round with a genuine revealed seed is only partial, and a tampered revealed seed is a mismatch", () => {
+    const fail = () => { const b = good(); b.round.status = "failed"; b.output = null; b.outputHash = null; b.contentHash = null; b.error = "Evaluation gave up after 3 attempts"; return b; };
+    const v = B.verifyBloomBundle(JSON.stringify(fail())); expect(v.status).toBe("partial"); expect(v.detail).toMatch(/no scores/);
+    const t = fail(); t.reveal.seedHex = "cd".repeat(32); expect(B.verifyBloomBundle(JSON.stringify(t)).status).toBe("mismatch");
+    const c = fail(); c.entries[0].salt = "ee".repeat(32); expect(B.verifyBloomBundle(JSON.stringify(c)).status).toBe("mismatch");
+  });
+  it("an unrevealed round is pending (never verified) and cannot smuggle sealed fields", () => {
+    const sealed = () => { const b = good(); b.round.status = "open"; b.reveal = { seedHex: null, revealedAt: null }; b.output = null; b.outputHash = null; b.contentHash = null; b.entries = b.entries.map((e) => ({ ...e, status: "sealed", salt: null, manifest: null, basePolicy: null })); return b; };
+    expect(B.verifyBloomBundle(JSON.stringify(sealed())).status).toBe("pending");
+    const leak = sealed(); leak.entries[0].salt = "aa".repeat(32); expect(B.verifyBloomBundle(JSON.stringify(leak)).status).toBe("invalid");
+    const closed = sealed(); closed.round.status = "failed"; closed.error = "x"; expect(B.verifyBloomBundle(JSON.stringify(closed)).status).toBe("invalid");
+  });
+  it("rejects bad envelopes: unknown fields, statuses, ids, hashes, timestamps and order", () => {
+    const cases: ((b: any) => void)[] = [
+      (b) => { b.entries[0].extra = 1; }, (b) => { b.round.leak = 1; }, (b) => { b.reveal.extra = 1; },
+      (b) => { b.entries[0].status = "winner"; }, (b) => { b.round.status = "done"; },
+      (b) => { b.entries[0].entryId = "e1"; }, (b) => { b.round.id = "not-a-uuid"; },
+      (b) => { b.entries[0].commit = "XYZ"; }, (b) => { b.entries[0].salt = "12"; }, (b) => { b.round.seedCommit = "0"; },
+      (b) => { b.entries[0].createdAt = "yesterday"; }, (b) => { b.entries[1].createdAt = "2026-10-14T00:00:00Z"; },
+      (b) => { b.reveal.revealedAt = "2026-10-13T23:59:59Z"; }, (b) => { b.entries[1].seq = 1; }, (b) => { b.entries[0].seq = 1.5; },
+      (b) => { b.output = null; },
+    ];
+    for (const f of cases) { const b = good(); f(b); expect(B.verifyBloomBundle(JSON.stringify(b)).status).toBe("invalid"); }
+  });
+  it("sealed risk/archetype change what the rules engine actually does", () => {
+    const lo = B.evaluateRound(ROUND, rules, market, SEED, [entry("ag_a", 1, pol("ag_a"), { archetype: "gardener", risk: 1 })]).entries[0];
+    const hi = B.evaluateRound(ROUND, rules, market, SEED, [entry("ag_a", 1, pol("ag_a"), { archetype: "weed", risk: 5 })]).entries[0];
+    expect(stableJson(lo.scenarios)).not.toBe(stableJson(hi.scenarios));
   });
 });

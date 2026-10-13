@@ -148,6 +148,13 @@
       "when": 1791880928614,
       "tag": "0020_0020_blind_bloom",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791881244930,
+      "tag": "0021_0021_blind_bloom_fail_fence",
+      "breakpoints": true
     }
   ]
 }

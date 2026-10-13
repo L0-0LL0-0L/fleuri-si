@@ -43,7 +43,7 @@ function RoundPage() {
   const out = r.output as RoundOutput | null;
   return (
     <div className="space-y-6">
-      <PageHeader title={`Round ${r.seq}: ${r.title}`} kicker="Blind Bloom"><SandboxBadge /></PageHeader>
+      <PageHeader title={`Round ${r.seq}`} kicker={`Blind Bloom · ${r.title}`}><SandboxBadge /></PageHeader>
       <Link to="/blind-bloom" className="text-sm underline">← All rounds</Link>
       <ol className="grid grid-cols-3 gap-2 text-center text-xs" aria-label="Round phases">
         {[["Commit", open], ["Reveal", !open && r.status !== "scored" && r.status !== "failed"], ["Scores", r.status === "scored" || r.status === "failed"]].map(([l, on]) => (
@@ -163,8 +163,8 @@ function SealEditor({ roundId, events, onDone }: { roundId: string; events: Bloo
   useEffect(() => { if (agent) { setArch(agent.archetype); setRisk(agent.risk); } }, [agent?.id]);
   if (!userId || !state?.owner) return (
     <Panel title="Seal a strategy">
-      <p className="text-sm">Sign in with a workspace to enter one of your own agents. Entry is free and works before any token bonds.</p>
-      <button type="button" className="btn btn-red mt-2" onClick={() => store.setUI({ walletOpen: true })}>Sign in to enter</button>
+      <p className="text-sm">Open a workspace to enter one of your own agents. Entry is free and works before any token bonds.</p>
+      <button type="button" className="btn btn-red mt-2" onClick={() => void store.startSandbox().catch((e: Error) => toast.error(e.message))}>Open a workspace to enter</button>
     </Panel>
   );
   if (!mine.length) return (
