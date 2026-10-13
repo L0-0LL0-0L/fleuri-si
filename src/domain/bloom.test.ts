@@ -11,7 +11,7 @@ const market: FrozenMarket = { coins: [
 const rules: B.BloomRules = { ...B.PRESET_RULES, repetitions: 2, cycles: 12, scenarios: ["control", "sell_pressure"] };
 const pol = (id: string, archetype: PolicySnapshot["archetype"] = "pollinator", risk = 3): PolicySnapshot => { const p = { agentId: id, handle: id, name: id, archetype, risk, strategy: "s", persona: "p" }; return { ...p, policyHash: policyHash(p) }; };
 const SEED = "ab".repeat(32), ROUND = "11111111-1111-4111-8111-111111111111";
-const entry = (id: string, seq: number, base = pol(id), settings = { archetype: "weed" as const, risk: 5 }, preds = { beats_baseline: 40, beats_base_policy: 50, ends_in_profit: 30, drawdown_over_15: 70 }) => {
+const entry = (id: string, seq: number, base = pol(id), settings: B.Manifest["settings"] = { archetype: "weed", risk: 5 }, preds = { beats_baseline: 40, beats_base_policy: 50, ends_in_profit: 30, drawdown_over_15: 70 }) => {
   const manifest: B.Manifest = { format: B.MANIFEST_FORMAT, agentId: id, basePolicyHash: base.policyHash, settings, predictions: preds };
   const salt = (seq.toString(16).padStart(2, "0")).repeat(32);
   return { entryId: `e${seq}`, seq, agentId: id, commit: B.submissionCommit({ roundId: ROUND, agentId: id, basePolicyHash: base.policyHash, manifest, salt }), createdAt: "t", salt, manifest, basePolicy: base };

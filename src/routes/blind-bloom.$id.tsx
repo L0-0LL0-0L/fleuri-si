@@ -24,7 +24,7 @@ export const Route = createFileRoute("/blind-bloom/$id")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  errorComponent: ({ error }) => <EmptyState title="Round could not load" body={error.message} action={<Link to="/blind-bloom" className="btn btn-paper">All rounds</Link>} />,
+  errorComponent: ({ error }) => <EmptyState title="Round could not load" body={(error as Error).message} action={<Link to="/blind-bloom" className="btn btn-paper">All rounds</Link>} />,
   component: RoundPage,
 });
 
@@ -90,7 +90,7 @@ function RoundPage() {
         <p className="text-sm">The bundle contains only what is public now: rules, frozen market, seed commitment and commitments, plus — after the deadline — the revealed seed, sealed strategies, outputs and checksums. Failed and invalid entries are included.</p>
         <button type="button" className="btn btn-red mt-2" onClick={async () => {
           const b = await bloomBundle({ data: { id: r.id } });
-          if (!b.ok) return toast.error(b.error);
+          if (!b.ok) { toast.error(b.error); return; }
           downloadBlob(new Blob([b.bundle], { type: "application/json" }), `blind-bloom-round-${r.seq}.json`);
         }}>Download bundle</button>
         <div className="mt-4"><BloomVerifier /></div>
@@ -234,7 +234,7 @@ function MyEntries({ roundId, scored }: { roundId: string; scored: boolean }) {
             <p className="num text-[11px] break-all">commit {e.commit}</p>
             {scored && <button type="button" className="btn btn-paper mt-1" onClick={async () => {
               const p = await bloomProposals({ data: { agentId: e.agent_id } });
-              if (!p.ok) return toast.error(p.error);
+              if (!p.ok) { toast.error(p.error); return; }
               setLink({ entry: e, proposals: (p.proposals ?? []).filter((x: any) => x.origin_policy_hash === e.base_policy_hash) });
             }}>Link as launch-proposal evidence</button>}
           </li>

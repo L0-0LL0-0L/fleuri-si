@@ -42,7 +42,7 @@ export const bloomSubmit = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ roundId: uuid, requestId: uuid, manifest: z.unknown() }).strict().parse(d))
   .handler(async ({ data, context }) => {
-    try { const S = await import("./bloom.server"); return { ok: true as const, ...(await S.submit(await admin(), context.userId, data)) }; }
+    try { const S = await import("./bloom.server"); return { ok: true as const, ...(await S.submit(await admin(), context.userId, { ...data, manifest: data.manifest })) }; }
     catch (e) { return fail(e); }
   });
 
