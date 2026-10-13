@@ -29,6 +29,7 @@ import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as WatchtowerRouteImport } from './routes/watchtower'
 import { Route as AHandleRouteImport } from './routes/a.$handle'
 import { Route as BlindBloomIndexRouteImport } from './routes/blind-bloom.index'
+import { Route as BlindBloomIdRouteImport } from './routes/blind-bloom.$id'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
 import { Route as GreenhouseIndexRouteImport } from './routes/greenhouse.index'
 import { Route as PassportHashRouteImport } from './routes/passport.$hash'
@@ -140,6 +141,11 @@ const BlindBloomIndexRoute = BlindBloomIndexRouteImport.update({
   path: '/blind-bloom/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BlindBloomIdRoute = BlindBloomIdRouteImport.update({
+  id: '/blind-bloom/$id',
+  path: '/blind-bloom/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CSymbolRoute = CSymbolRouteImport.update({
   id: '/c/$symbol',
   path: '/c/$symbol',
@@ -211,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/verify': typeof VerifyRoute
   '/watchtower': typeof WatchtowerRoute
   '/a/$handle': typeof AHandleRoute
+  '/blind-bloom/$id': typeof BlindBloomIdRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
@@ -243,6 +250,7 @@ export interface FileRoutesByTo {
   '/verify': typeof VerifyRoute
   '/watchtower': typeof WatchtowerRoute
   '/a/$handle': typeof AHandleRoute
+  '/blind-bloom/$id': typeof BlindBloomIdRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
@@ -276,6 +284,7 @@ export interface FileRoutesById {
   '/verify': typeof VerifyRoute
   '/watchtower': typeof WatchtowerRoute
   '/a/$handle': typeof AHandleRoute
+  '/blind-bloom/$id': typeof BlindBloomIdRoute
   '/c/$symbol': typeof CSymbolRoute
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
@@ -310,6 +319,7 @@ export interface FileRouteTypes {
     | '/verify'
     | '/watchtower'
     | '/a/$handle'
+    | '/blind-bloom/$id'
     | '/c/$symbol'
     | '/passport/$hash'
     | '/receipts/$id'
@@ -342,6 +352,7 @@ export interface FileRouteTypes {
     | '/verify'
     | '/watchtower'
     | '/a/$handle'
+    | '/blind-bloom/$id'
     | '/c/$symbol'
     | '/passport/$hash'
     | '/receipts/$id'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/verify'
     | '/watchtower'
     | '/a/$handle'
+    | '/blind-bloom/$id'
     | '/c/$symbol'
     | '/passport/$hash'
     | '/receipts/$id'
@@ -407,6 +419,7 @@ export interface RootRouteChildren {
   VerifyRoute: typeof VerifyRoute
   WatchtowerRoute: typeof WatchtowerRoute
   AHandleRoute: typeof AHandleRoute
+  BlindBloomIdRoute: typeof BlindBloomIdRoute
   CSymbolRoute: typeof CSymbolRoute
   PassportHashRoute: typeof PassportHashRoute
   ReceiptsIdRoute: typeof ReceiptsIdRoute
@@ -562,6 +575,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BlindBloomIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/blind-bloom/$id': {
+      id: '/blind-bloom/$id'
+      path: '/blind-bloom/$id'
+      fullPath: '/blind-bloom/$id'
+      preLoaderRoute: typeof BlindBloomIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/c/$symbol': {
       id: '/c/$symbol'
       path: '/c/$symbol'
@@ -655,6 +675,7 @@ const rootRouteChildren: RootRouteChildren = {
   VerifyRoute: VerifyRoute,
   WatchtowerRoute: WatchtowerRoute,
   AHandleRoute: AHandleRoute,
+  BlindBloomIdRoute: BlindBloomIdRoute,
   CSymbolRoute: CSymbolRoute,
   PassportHashRoute: PassportHashRoute,
   ReceiptsIdRoute: ReceiptsIdRoute,

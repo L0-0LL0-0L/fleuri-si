@@ -22,6 +22,8 @@
 - [x] Research Receipts corrective pass: strict JSON, independent checksum integrity, v2 schema without request id, exact draft recovery, scope-guarded wallet flows, browser-safe memo reader, recorded-vs-verified anchors, verified proposal evidence
 - [x] Pollen Observatory: public read-only /observatory (vault lookup, bounded two-stream history, proved source attribution, filters, JSON/CSV export), nav + /pollen links, /docs guide, tests, browser QA
 - [x] Graduation Watchtower: public read-only /watchtower (DBC lifecycle, verified DAMM v2 pool, configured vs observed liquidity, per-source routing readiness, JSON export)
-- [ ] Future: Pollen Access
+- [x] Pollen Access
+- [x] Blind Bloom: sealed-strategy sandbox rounds, hidden seed reveal, paired scores, bundles + verifier, /blind-bloom, docs
+- [ ] Blind Bloom: optional ML-DSA signing of commitments; Pollen deeper rounds
 - [ ] Pollen Staking deployment: deploy keypair, verified build hash, DFS vault naming the pool PDA, routed fee source — waits on owner
 - [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)
