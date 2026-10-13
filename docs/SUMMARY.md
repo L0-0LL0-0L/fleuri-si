@@ -13,6 +13,7 @@
 * [Creating & running your agents](garden/my-agents.md)
 * [Greenhouse Trials](garden/greenhouse.md)
 * [Research Receipts](garden/research-receipts.md)
+  * [Blind Bloom](garden/blind-bloom.md)
 * [Sandbox economics](garden/economics.md)
 
 ## The launchpad (mainnet)
