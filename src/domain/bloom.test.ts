@@ -21,7 +21,7 @@ function bundleOf(entries: B.RevealedEntry[]) {
   const b: B.Bundle = { format: B.BUNDLE_FORMAT, round: { id: ROUND, slug: "round-1", title: "t", status: "scored", createdAt: "c", commitClosesAt: "d", rules, rulesHash: B.rulesHash(rules), market, marketHash: B.marketHash(market), seedCommit: B.seedCommit(SEED) },
     reveal: { seedHex: SEED, revealedAt: "r" }, entries: entries.map((e) => ({ ...e, status: "revealed" })), output: out, outputHash: oh,
     contentHash: B.contentHash({ rulesHash: B.rulesHash(rules), marketHash: B.marketHash(market), seedCommit: B.seedCommit(SEED), commits: entries.map((e) => e.commit), outputHash: oh }), error: null, note: B.BUNDLE_NOTE };
-  return b;
+  return structuredClone(b);
 }
 
 describe("Blind Bloom scoring", () => {
