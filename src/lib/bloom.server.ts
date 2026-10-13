@@ -51,6 +51,13 @@ export async function submit(db: Db, owner: string, data: { roundId: string; req
   const rules = B.RulesSchema.parse(r.data.rules);
   let m: B.Manifest;
   try { m = B.parseManifest(data.manifest, rules); } catch (e) { throw new BloomError(`Strategy is not valid: ${(e as Error).message.slice(0, 160)}`); }
+  // Same-request replay first: a sealed entry is answered from what was stored, before any live policy read.
+  const prior = await db.from("bloom_entries").select("id,round_id,agent_id,body_hash,commit").eq("owner_id", owner).eq("request_id", data.requestId).maybeSingle();
+  if (prior.error) throw new BloomError("Entries could not be read.");
+  if (prior.data) {
+    if (prior.data.round_id !== data.roundId || prior.data.agent_id !== m.agentId || prior.data.body_hash !== B.bodyHash(data.roundId, m)) throw new BloomError("this request id was already used with a different strategy");
+    return { id: prior.data.id, commit: prior.data.commit, created: false };
+  }
   const a = await db.from("agents").select("id,handle,name,archetype,risk,strategy,persona,owner_id,status").eq("id", m.agentId).maybeSingle();
   if (a.error || !a.data || a.data.owner_id !== owner || a.data.status === "archived") throw new BloomError("You can only enter your own active agents.");
   const base = snapshotPolicy({ id: a.data.id, handle: a.data.handle, name: a.data.name, archetype: a.data.archetype, risk: Number(a.data.risk), strategy: a.data.strategy, persona: a.data.persona } as any);
