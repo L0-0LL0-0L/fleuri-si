@@ -244,6 +244,210 @@ export type Database = {
         }
         Relationships: []
       }
+      bloom_entries: {
+        Row: {
+          agent_id: string
+          base_policy: Json
+          base_policy_hash: string
+          base_policy_reveal: Json | null
+          body_hash: string
+          commit: string
+          created_at: string
+          id: string
+          manifest: Json
+          manifest_reveal: Json | null
+          owner_id: string
+          request_id: string
+          round_id: string
+          salt: string
+          salt_reveal: string | null
+          seq: number
+          status: string
+        }
+        Insert: {
+          agent_id: string
+          base_policy: Json
+          base_policy_hash: string
+          base_policy_reveal?: Json | null
+          body_hash: string
+          commit: string
+          created_at?: string
+          id?: string
+          manifest: Json
+          manifest_reveal?: Json | null
+          owner_id: string
+          request_id: string
+          round_id: string
+          salt: string
+          salt_reveal?: string | null
+          seq?: never
+          status?: string
+        }
+        Update: {
+          agent_id?: string
+          base_policy?: Json
+          base_policy_hash?: string
+          base_policy_reveal?: Json | null
+          body_hash?: string
+          commit?: string
+          created_at?: string
+          id?: string
+          manifest?: Json
+          manifest_reveal?: Json | null
+          owner_id?: string
+          request_id?: string
+          round_id?: string
+          salt?: string
+          salt_reveal?: string | null
+          seq?: never
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bloom_entries_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: false
+            referencedRelation: "bloom_rounds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bloom_evidence: {
+        Row: {
+          agent_id: string
+          attached_at: string
+          content_hash: string
+          entry_id: string
+          id: string
+          owner_id: string
+          policy_hash: string
+          proposal_id: string
+          round_id: string
+        }
+        Insert: {
+          agent_id: string
+          attached_at?: string
+          content_hash: string
+          entry_id: string
+          id?: string
+          owner_id: string
+          policy_hash: string
+          proposal_id: string
+          round_id: string
+        }
+        Update: {
+          agent_id?: string
+          attached_at?: string
+          content_hash?: string
+          entry_id?: string
+          id?: string
+          owner_id?: string
+          policy_hash?: string
+          proposal_id?: string
+          round_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bloom_evidence_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "bloom_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bloom_evidence_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "launch_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bloom_evidence_round_id_fkey"
+            columns: ["round_id"]
+            isOneToOne: false
+            referencedRelation: "bloom_rounds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bloom_rounds: {
+        Row: {
+          attempts: number
+          commit_closes_at: string
+          content_hash: string | null
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          market: Json
+          market_hash: string
+          output: Json | null
+          output_hash: string | null
+          revealed_at: string | null
+          rules: Json
+          rules_hash: string
+          seed_commit: string
+          seed_hex: string
+          seed_reveal: string | null
+          seq: number
+          slug: string
+          status: string
+          title: string
+        }
+        Insert: {
+          attempts?: number
+          commit_closes_at: string
+          content_hash?: string | null
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          market: Json
+          market_hash: string
+          output?: Json | null
+          output_hash?: string | null
+          revealed_at?: string | null
+          rules: Json
+          rules_hash: string
+          seed_commit: string
+          seed_hex: string
+          seed_reveal?: string | null
+          seq: number
+          slug: string
+          status?: string
+          title: string
+        }
+        Update: {
+          attempts?: number
+          commit_closes_at?: string
+          content_hash?: string | null
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          market?: Json
+          market_hash?: string
+          output?: Json | null
+          output_hash?: string | null
+          revealed_at?: string | null
+          rules?: Json
+          rules_hash?: string
+          seed_commit?: string
+          seed_hex?: string
+          seed_reveal?: string | null
+          seq?: number
+          slug?: string
+          status?: string
+          title?: string
+        }
+        Relationships: []
+      }
       botanist_jobs: {
         Row: {
           accepted: Json | null
@@ -1486,6 +1690,52 @@ export type Database = {
           _mint: string
           _owner: string
           _report: Json
+        }
+        Returns: Json
+      }
+      bloom_attach_evidence: {
+        Args: { _entry: string; _owner: string; _proposal: string }
+        Returns: Json
+      }
+      bloom_claim_eval: { Args: { _round: string }; Returns: Json }
+      bloom_ensure_round: {
+        Args: {
+          _commit_secs: number
+          _market: Json
+          _market_hash: string
+          _rules: Json
+          _rules_hash: string
+          _title: string
+        }
+        Returns: Json
+      }
+      bloom_fail: {
+        Args: { _lease: string; _reason: string; _round: string }
+        Returns: Json
+      }
+      bloom_finalize: {
+        Args: {
+          _content_hash: string
+          _lease: string
+          _output: Json
+          _output_hash: string
+          _round: string
+        }
+        Returns: Json
+      }
+      bloom_now: { Args: never; Returns: string }
+      bloom_submit: {
+        Args: {
+          _agent: string
+          _base_policy: Json
+          _base_policy_hash: string
+          _body_hash: string
+          _commit: string
+          _manifest: Json
+          _owner: string
+          _request: string
+          _round: string
+          _salt: string
         }
         Returns: Json
       }
