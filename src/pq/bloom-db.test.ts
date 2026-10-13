@@ -48,6 +48,16 @@ describe("sealing", () => {
     await expect(S.submit(db, A, { roundId: round, requestId: req(1), manifest: manifest("ag_a", 4) })).rejects.toThrow(/different strategy/);
     await expect(S.submit(db, A, { roundId: round, requestId: req(2), manifest: manifest("ag_a", 4) })).rejects.toThrow(/already entered/);
   });
+  it("a same-request retry after the agent's policy changed replays the stored entry (no live policy read)", async () => {
+    const a = await S.submit(db, A, { roundId: round, requestId: req(1), manifest: manifest("ag_a") });
+    await q("update agents set risk=1, strategy='edited' where id='ag_a'");
+    expect(await S.submit(db, A, { roundId: round, requestId: req(1), manifest: manifest("ag_a") })).toEqual({ id: a.id, commit: a.commit, created: false });
+    await expect(S.submit(db, A, { roundId: round, requestId: req(1), manifest: manifest("ag_a", 2) })).rejects.toThrow(/different strategy/);
+  });
+  it("an open round's bundle is pending and contains no sealed secrets", async () => {
+    await S.submit(db, A, { roundId: round, requestId: req(1), manifest: manifest("ag_a") });
+    expect(B.verifyBloomBundle(JSON.stringify(await S.bundle(db, round))).status).toBe("pending");
+  });
   it("a stale base policy hash or a forged manifest for another agent is refused", async () => {
     await expect(S.submit(db, A, { roundId: round, requestId: req(1), manifest: manifest("ag_a", 5, "0".repeat(64)) })).rejects.toThrow(/policy changed/);
     await expect(db.rpc("bloom_submit", { _owner: A, _round: round, _request: req(3), _agent: "ag_c", _base_policy: { policyHash: baseHash("ag_c") }, _base_policy_hash: baseHash("ag_c"), _manifest: manifest("ag_c"), _body_hash: "a".repeat(64), _salt: "b".repeat(64), _commit: "c".repeat(64) }).then((r) => { if (r.error) throw new Error(r.error.message); })).rejects.toThrow(/own active agents/);
@@ -123,6 +133,7 @@ describe("reveal, evaluation and recovery", () => {
     const late = await db.rpc("bloom_finalize", { _round: round, _lease: c1.lease, _output: {}, _output_hash: "a".repeat(64), _content_hash: "b".repeat(64) });
     expect(late.error?.message).toMatch(/no longer current/);
     await db.advance(121);
+    expect((await db.rpc("bloom_fail", { _round: round, _lease: c2.lease, _reason: "late" })).data.applied).toBe(false); // expired lease cannot fail it
     expect(await S.advance(db, round)).toBe("scored");
     expect(B.verifyBloomBundle(JSON.stringify(await S.bundle(db, round))).status).toBe("verified");
   });
@@ -133,7 +144,7 @@ describe("reveal, evaluation and recovery", () => {
     const b = await S.bundle(db, round);
     expect(b!.round.status).toBe("failed"); expect(b!.error).toMatch(/3 attempts/);
     expect(b!.reveal.seedHex).toMatch(/^[0-9a-f]{64}$/); // failures still publish the seed and commitments
-    expect(B.verifyBloomBundle(JSON.stringify(b)).status).toBe("verified");
+    expect(B.verifyBloomBundle(JSON.stringify(b)).status).toBe("partial");
   });
 });
 
