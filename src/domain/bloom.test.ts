@@ -98,7 +98,7 @@ describe("Blind Bloom bundle verifier", () => {
     expect(B.verifyBloomBundle(txt.slice(0, txt.length - 20)).status).toBe("invalid");
     expect(B.verifyBloomBundle(" ".repeat(B.BLOOM_LIMITS.bundleBytes + 1)).status).toBe("invalid");
     expect(B.verifyBloomBundle(txt.replace('"tapeSeed":', '"tapeSeed":1e999,"x":')).status).toBe("invalid");
-    expect(B.verifyBloomBundle(txt.replace('{"contentHash"', '{"format":"x","contentHash"')).status).toBe("invalid");
+    expect(B.verifyBloomBundle(txt.replace('{"format":', '{"format":"x","format":')).status).toBe("invalid");
     const extra = good() as any; extra.leak = 1; expect(B.verifyBloomBundle(JSON.stringify(extra)).status).toBe("invalid");
     const dup = good(); dup.entries[1].entryId = dup.entries[0].entryId; expect(B.verifyBloomBundle(JSON.stringify(dup)).status).toBe("invalid");
   });
