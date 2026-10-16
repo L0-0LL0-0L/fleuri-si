@@ -775,6 +775,294 @@ export type Database = {
         }
         Relationships: []
       }
+      graft_events: {
+        Row: {
+          at: string
+          detail: Json
+          from_status: string | null
+          id: number
+          kind: string
+          mandate_id: string
+          owner_id: string
+          to_status: string | null
+        }
+        Insert: {
+          at?: string
+          detail?: Json
+          from_status?: string | null
+          id?: number
+          kind: string
+          mandate_id: string
+          owner_id: string
+          to_status?: string | null
+        }
+        Update: {
+          at?: string
+          detail?: Json
+          from_status?: string | null
+          id?: number
+          kind?: string
+          mandate_id?: string
+          owner_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graft_events_mandate_id_fkey"
+            columns: ["mandate_id"]
+            isOneToOne: false
+            referencedRelation: "graft_mandates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graft_incidents: {
+        Row: {
+          at: string
+          code: string
+          detail: string
+          id: string
+          job_id: string | null
+          mandate_id: string
+          owner_id: string
+        }
+        Insert: {
+          at?: string
+          code: string
+          detail: string
+          id?: string
+          job_id?: string | null
+          mandate_id: string
+          owner_id: string
+        }
+        Update: {
+          at?: string
+          code?: string
+          detail?: string
+          id?: string
+          job_id?: string | null
+          mandate_id?: string
+          owner_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graft_incidents_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "graft_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "graft_incidents_mandate_id_fkey"
+            columns: ["mandate_id"]
+            isOneToOne: false
+            referencedRelation: "graft_mandates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graft_jobs: {
+        Row: {
+          created_at: string
+          day: string
+          finished_at: string | null
+          generation: number
+          id: string
+          input: Json
+          input_hash: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          mandate_id: string
+          owner_id: string
+          request_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          day: string
+          finished_at?: string | null
+          generation?: number
+          id?: string
+          input: Json
+          input_hash: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          mandate_id: string
+          owner_id: string
+          request_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          day?: string
+          finished_at?: string | null
+          generation?: number
+          id?: string
+          input?: Json
+          input_hash?: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          mandate_id?: string
+          owner_id?: string
+          request_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graft_jobs_mandate_id_fkey"
+            columns: ["mandate_id"]
+            isOneToOne: false
+            referencedRelation: "graft_mandates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graft_mandates: {
+        Row: {
+          agent_id: string
+          agent_version: Json
+          agent_version_hash: string
+          approved_at: string | null
+          approved_hash: string | null
+          created_at: string
+          draft: Json
+          draft_hash: string
+          expires_at: string
+          id: string
+          owner_id: string
+          request_id: string
+          shared: boolean
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          agent_version: Json
+          agent_version_hash: string
+          approved_at?: string | null
+          approved_hash?: string | null
+          created_at?: string
+          draft: Json
+          draft_hash: string
+          expires_at: string
+          id?: string
+          owner_id: string
+          request_id: string
+          shared?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          agent_version?: Json
+          agent_version_hash?: string
+          approved_at?: string | null
+          approved_hash?: string | null
+          created_at?: string
+          draft?: Json
+          draft_hash?: string
+          expires_at?: string
+          id?: string
+          owner_id?: string
+          request_id?: string
+          shared?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      graft_proposals: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          expires_at: string
+          id: string
+          mandate_id: string
+          owner_id: string
+          proposal: Json
+          proposal_hash: string
+          request_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          expires_at: string
+          id?: string
+          mandate_id: string
+          owner_id: string
+          proposal: Json
+          proposal_hash: string
+          request_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          expires_at?: string
+          id?: string
+          mandate_id?: string
+          owner_id?: string
+          proposal?: Json
+          proposal_hash?: string
+          request_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graft_proposals_mandate_id_fkey"
+            columns: ["mandate_id"]
+            isOneToOne: false
+            referencedRelation: "graft_mandates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      graft_reports: {
+        Row: {
+          created_at: string
+          id: string
+          job_id: string
+          mandate_id: string
+          owner_id: string
+          report: Json
+          report_hash: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          job_id: string
+          mandate_id: string
+          owner_id: string
+          report: Json
+          report_hash: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          job_id?: string
+          mandate_id?: string
+          owner_id?: string
+          report?: Json
+          report_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graft_reports_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "graft_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "graft_reports_mandate_id_fkey"
+            columns: ["mandate_id"]
+            isOneToOne: false
+            referencedRelation: "graft_mandates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       greenhouse_evidence: {
         Row: {
           attached_at: string
@@ -2074,6 +2362,112 @@ export type Database = {
         }
       }
       garden_commit: { Args: { p: Json }; Returns: number }
+      graft_agent_db_digest: {
+        Args: { a: Database["public"]["Tables"]["agents"]["Row"] }
+        Returns: Json
+      }
+      graft_approve: {
+        Args: {
+          _agent_version: Json
+          _agent_version_hash: string
+          _draft_hash: string
+          _expires: string
+          _id: string
+          _owner: string
+        }
+        Returns: Json
+      }
+      graft_claim_job: {
+        Args: {
+          _agent_version_hash: string
+          _input: Json
+          _input_hash: string
+          _lease_secs: number
+          _mandate: string
+          _max_inflight: number
+          _owner: string
+          _owner_limit: number
+          _request: string
+        }
+        Returns: Json
+      }
+      graft_commit_report: {
+        Args: {
+          _job: string
+          _lease: string
+          _owner: string
+          _report: Json
+          _report_hash: string
+        }
+        Returns: Json
+      }
+      graft_create_draft: {
+        Args: {
+          _agent: string
+          _agent_version: Json
+          _agent_version_hash: string
+          _draft: Json
+          _draft_hash: string
+          _expires: string
+          _owner: string
+          _request: string
+        }
+        Returns: Json
+      }
+      graft_decide_proposal: {
+        Args: { _approve: boolean; _hash: string; _id: string; _owner: string }
+        Returns: Json
+      }
+      graft_deny: {
+        Args: {
+          _code: string
+          _detail: string
+          _job: string
+          _m: Database["public"]["Tables"]["graft_mandates"]["Row"]
+        }
+        Returns: Json
+      }
+      graft_fail_job: {
+        Args: {
+          _code: string
+          _detail: string
+          _job: string
+          _lease: string
+          _owner: string
+        }
+        Returns: Json
+      }
+      graft_log: {
+        Args: {
+          _detail: Json
+          _from: string
+          _kind: string
+          _m: string
+          _owner: string
+          _to: string
+        }
+        Returns: undefined
+      }
+      graft_now: { Args: never; Returns: string }
+      graft_propose: {
+        Args: {
+          _expires: string
+          _hash: string
+          _mandate: string
+          _owner: string
+          _proposal: Json
+          _request: string
+        }
+        Returns: Json
+      }
+      graft_set_shared: {
+        Args: { _id: string; _owner: string; _shared: boolean }
+        Returns: Json
+      }
+      graft_transition: {
+        Args: { _id: string; _owner: string; _to: string }
+        Returns: Json
+      }
       greenhouse_attach_evidence: {
         Args: { _owner: string; _proposal: string; _run: string }
         Returns: {

@@ -155,6 +155,13 @@
       "when": 1791881244930,
       "tag": "0021_0021_blind_bloom_fail_fence",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792190089108,
+      "tag": "0022_graft_research_steward",
+      "breakpoints": true
     }
   ]
 }
