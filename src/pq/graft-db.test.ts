@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Real-SQL tests of Graft 0022 through the server orchestration (PGlite, controllable clock in an isolated DB).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { graftDb } from "@/test/pglite-graft";
