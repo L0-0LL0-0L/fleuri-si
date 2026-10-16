@@ -51,7 +51,7 @@ begin
   if not found then raise exception 'not_owner: mandate not found'; end if;
   if m.status = 'active' and m.approved_hash = _draft_hash then return jsonb_build_object('status','active','applied',false); end if;
   if m.status <> 'review' then raise exception 'not_active: only a mandate in review can be approved (now %)', m.status; end if;
-  if m.draft_hash <> _draft_hash or m.agent_version_hash <> _agent_version_hash or m.expires_at <> _expires then raise exception 'request_mismatch: approval does not match the reviewed draft'; end if;
+  if m.draft_hash <> _draft_hash or m.expires_at <> _expires then raise exception 'request_mismatch: approval does not match the reviewed draft'; end if;
   if m.expires_at <= public.graft_now() then
     perform public.graft_transition_internal(m, 'expired');
     return jsonb_build_object('status','expired','applied',false,'denied','expired_mandate');
