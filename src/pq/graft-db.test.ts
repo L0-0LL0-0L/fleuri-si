@@ -49,7 +49,7 @@ describe("graft SQL", () => {
   it("approval binds the reviewed draft hash; retry with a changed draft is a mismatch; terms are immutable", async () => {
     const req = rid();
     const c = await G.createDraft(db, A, { requestId: req, terms: terms() }, okObs, clockMs);
-    await expect(G.createDraft(db, A, { requestId: req, terms: terms({ runsPerDay: 1 }) }, okObs, clockMs)).rejects.toThrow(/request_mismatch/);
+    await expect(G.createDraft(db, A, { requestId: req, terms: terms({ runsPerDay: 1 }) }, okObs, clockMs)).rejects.toThrow(/different terms/);
     expect((await G.createDraft(db, A, { requestId: req, terms: terms() }, okObs, clockMs)).created).toBe(false);
     await expect(G.approve(db, A, c.id, c.draftHash, okObs, clock)).rejects.toThrow(/only a mandate in review/);
     await G.transition(db, A, c.id, "review");
@@ -172,6 +172,7 @@ describe("graft SQL", () => {
 
   it("purchase proposals never grant payment; caps, allowlist and mandate binding enforced", async () => {
     const c = await activeMandate();
+    await G.run(db, A, { mandateId: c.id, requestId: rid() }, okObs, clock);
     const base = { mandateId: c.id, service: "botanist.report" as const, mint: POOL, minutes: 60, purpose: "deep report" };
     await expect(G.propose(db, A, { ...base, requestId: rid(), maxAtomic: "2000000" })).rejects.toThrow(/cap/);
     const p = await G.propose(db, A, { ...base, requestId: rid(), maxAtomic: "500000" });
