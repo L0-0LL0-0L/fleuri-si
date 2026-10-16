@@ -46,7 +46,7 @@ export const chainObserver: Observer = async (tool, pool) => {
       const { input, summary } = await watch(pool);
       const dv = W.dammVerified(input);
       const result = JSON.parse(JSON.stringify({ stage: summary.stage, progressBps: summary.progressBps, damm: dv, checks: summary.checks.map((c: any) => ({ id: c.id, status: c.status })), slots: input.slots, baseMint: input.pool.baseMint, config: input.pool.config, isMigrated: input.pool.isMigrated, migrationProgress: input.pool.migrationProgress }));
-      return { ok: true, fetchedAt: input.fetchedAt, slot: input.slots.pool, cluster: input.cluster, genesisHash: input.genesisHash, result, qualifications: [
+      return { ok: true, fetchedAt: input.fetchedAt, slot: input.slots.pool ?? 0, cluster: input.cluster, genesisHash: input.genesisHash, result, qualifications: [
         { id: "dbc_owner", label: "Account is a DBC virtual pool", status: "met", detail: "Owned by the DBC program and decoded with the installed SDK coder." },
         { id: "config", label: "Pool config decoded", status: input.config ? "met" : "unknown", detail: input.config ? "Config account read and decoded." : "Config could not be decoded." },
         { id: "stage", label: "Lifecycle stage observed", status: summary.stage.stage === "unsupported" ? "unknown" : "met", detail: `${summary.stage.stage}: ${summary.stage.reason}`.slice(0, 200) },
