@@ -65,3 +65,11 @@ export const graftPropose = createServerFn({ method: "POST" }).middleware([requi
 export const graftDecide = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: uuid, hash: hex, approve: z.boolean() }).strict().parse(d))
   .handler(async ({ data, context }) => { try { return { ok: true as const, ...(await (await S()).decide(await admin(), context.userId, data.id, data.hash, data.approve)) }; } catch (e) { return fail(e); } });
+
+export const graftEvidence = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ mandateId: uuid }).strict().parse(d))
+  .handler(async ({ data, context }) => { try { return { ok: true as const, ...(await (await S()).evidenceCandidates(await admin(), context.userId, data.mandateId)) }; } catch (e) { return fail(e); } });
+
+export const graftAttach = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ mandateId: uuid, kind: z.enum(["bloom_entry", "research_receipt"]), refId: uuid }).strict().parse(d))
+  .handler(async ({ data, context }) => { try { return { ok: true as const, ...(await (await S()).attachEvidence(await admin(), context.userId, data)) }; } catch (e) { return fail(e); } });

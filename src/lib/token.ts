@@ -12,7 +12,7 @@
  */
 export const FLEURI_MINT = "25bk5SwR8hyreMuD7pnjZwJUFKR1o869PaDA9fhuAuri";
 
-/** The verified Meteora DBC bonding-curve pool for $FLEURI (mainnet). */
+/** The Meteora DBC pool $FLEURI launched on (mainnet); read its current stage live, it may have graduated. */
 export const FLEURI_POOL = "Doz2NHbYq3suCN2bHTqEUYPVZdpobVgfqqhZEWR3AWnK";
 
 /** The confirmed transaction that created the mint and the curve. */

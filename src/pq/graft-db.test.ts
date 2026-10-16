@@ -268,4 +268,102 @@ describe("graft SQL", () => {
     const t2 = JSON.parse(JSON.stringify(b)); t2.incidents[0].gateCase.now = 0;
     expect(verifyBundle(JSON.stringify(t2)).valid).toBe(false);
   });
+
+  const tick = async (secs: number) => { await db.advance(secs); clockMs += secs * 1000; };
+  const pBase = (mandateId: string) => ({ mandateId, service: "botanist.report" as const, mint: POOL, maxAtomic: "500000", minutes: 60, purpose: "check" });
+
+  it("decision rechecks evidence TTL: stale evidence denies approval even when the proposal is recent and unexpired", async () => {
+    const c = await activeMandate();
+    expect((await G.run(db, A, { mandateId: c.id, requestId: rid() }, okObs, clock)).status).toBe("done");
+    const p = await G.propose(db, A, { ...pBase(c.id), requestId: rid() }, clockMs);
+    await tick(320); // TTL 300s from the observation; proposal still valid for ~55 min
+    const hash = (await db.pg.query<any>(`select proposal_hash from public.graft_proposals where id='${p.id}'`)).rows[0].proposal_hash;
+    expect(await G.decide(db, A, p.id, hash, true)).toMatchObject({ status: "proposed", applied: false, denied: "stale_proof" });
+    expect((await G.run(db, A, { mandateId: c.id, requestId: rid() }, okObs, clock)).status).toBe("done");
+    expect(await G.decide(db, A, p.id, hash, true)).toMatchObject({ status: "approved_awaiting_wallet_payment" });
+    const p2 = await G.propose(db, A, { ...pBase(c.id), requestId: rid() }, clockMs);
+    await tick(320);
+    const h2 = (await db.pg.query<any>(`select proposal_hash from public.graft_proposals where id='${p2.id}'`)).rows[0].proposal_hash;
+    expect(await G.decide(db, A, p2.id, h2, false)).toMatchObject({ status: "rejected" }); // rejection never needs evidence
+  });
+
+  it("evidence age is anchored to the observation fetchedAt, not the report commit time", async () => {
+    const c = await activeMandate();
+    const oldObs: G.Observer = async () => ({ ...(await okObs("watchtower.dbc_pool", POOL) as any), fetchedAt: new Date(clockMs - 100_000).toISOString() });
+    expect((await G.run(db, A, { mandateId: c.id, requestId: rid() }, oldObs, clock)).status).toBe("done");
+    await tick(250); // report is 250s old but its observation is 350s old (> TTL 300)
+    await expect(G.propose(db, A, { ...pBase(c.id), requestId: rid() }, clockMs)).rejects.toThrow(/stale_proof|evidence TTL/);
+  });
+
+  it("proposal retries bind the original body including minutes; same body recovers after time passes", async () => {
+    const c = await activeMandate();
+    await G.run(db, A, { mandateId: c.id, requestId: rid() }, okObs, clock);
+    const req = rid();
+    const p = await G.propose(db, A, { ...pBase(c.id), requestId: req }, clockMs);
+    await tick(30);
+    expect(await G.propose(db, A, { ...pBase(c.id), requestId: req }, clockMs)).toMatchObject({ id: p.id, created: false });
+    await expect(G.propose(db, A, { ...pBase(c.id), requestId: req, minutes: 30 }, clockMs)).rejects.toThrow(/different proposal/);
+    // concurrent SQL race with a different computed expiry but the same body recovers; another body rejects
+    const m = await G.getMandate(db, c.id);
+    const cur = (await db.pg.query<any>(`select request_body_hash, proposal from public.graft_proposals where id='${p.id}'`)).rows[0];
+    const other = { ...cur.proposal, expiresAt: new Date(clockMs + 120_000).toISOString() };
+    const r = await db.rpc("graft_propose_v3", { _owner: A, _mandate: c.id, _request: req, _proposal: other, _hash: "e".repeat(64), _expires: other.expiresAt, _agent_version_hash: m.agent_version_hash, _body_hash: cur.request_body_hash });
+    expect(r.data).toMatchObject({ id: p.id, created: false });
+    const r2 = await db.rpc("graft_propose_v3", { _owner: A, _mandate: c.id, _request: req, _proposal: other, _hash: "e".repeat(64), _expires: other.expiresAt, _agent_version_hash: m.agent_version_hash, _body_hash: "d".repeat(64) });
+    expect(r2.error?.message).toMatch(/request_mismatch/);
+  });
+
+  it("concurrent same-body draft requests resolve to one mandate independent of the clock", async () => {
+    const req = rid();
+    const [a, b] = await Promise.all([G.createDraft(db, A, { requestId: req, terms: terms() }, okObs, clockMs), G.createDraft(db, A, { requestId: req, terms: terms() }, okObs, clockMs + 7000)]);
+    expect(a.id).toBe(b.id); expect(a.draftHash).toBe(b.draftHash);
+    const row = (await db.pg.query<any>(`select * from public.graft_mandates where id='${a.id}'`)).rows[0];
+    const r = await db.rpc("graft_create_draft_v2", { _owner: A, _request: req, _agent: "ag1", _draft: row.draft, _draft_hash: "f".repeat(64), _agent_version: row.agent_version, _agent_version_hash: row.agent_version_hash, _expires: row.expires_at, _body_hash: row.request_body_hash });
+    expect(r.data).toMatchObject({ id: a.id, created: false, draftHash: row.draft_hash });
+    const r2 = await db.rpc("graft_create_draft_v2", { _owner: A, _request: req, _agent: "ag1", _draft: row.draft, _draft_hash: "f".repeat(64), _agent_version: row.agent_version, _agent_version_hash: row.agent_version_hash, _expires: row.expires_at, _body_hash: "a".repeat(64) });
+    expect(r2.error?.message).toMatch(/request_mismatch/);
+    await expect(db.pg.query(`update public.graft_mandates set request_body_hash='${"b".repeat(64)}' where id='${a.id}'`)).rejects.toThrow(/set once/);
+  });
+
+  it("revoke: a fresh run request is denied by the server", async () => {
+    const c = await activeMandate();
+    await G.transition(db, A, c.id, "revoked");
+    expect(await G.run(db, A, { mandateId: c.id, requestId: rid() }, okObs, clock)).toMatchObject({ status: "denied" });
+    expect((await db.pg.query("select count(*)::int n from public.graft_reports")).rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it("evidence links: owner-only, same agent and policy, draft-only, append-only, bound by approval", async () => {
+    const { policyHash } = await import("@/domain/greenhouse");
+    const pol = policyHash({ archetype: "gardener", risk: 3, strategy: "", persona: "" } as any);
+    const R = rid(), E1 = rid(), E2 = rid(), E3 = rid();
+    await db.pg.exec(`insert into public.bloom_rounds values ('${R}','r','scored');
+      insert into public.bloom_entries(id,round_id,owner_id,agent_id,base_policy_hash) values ('${E1}','${R}','${A}','ag1','${pol}'),('${E2}','${R}','${B}','ag2','${pol}'),('${E3}','${R}','${A}','ag1','${"9".repeat(64)}');`);
+    const c = await G.createDraft(db, A, { requestId: rid(), terms: terms() }, okObs, clockMs);
+    const att = (owner: string, ref: string, ph = pol, agent = "ag1") => { const man = { schema: "fleuri.graft.evidence-link/1", kind: "bloom_entry", refId: ref, agentId: agent, policyHash: ph }; return db.rpc("graft_attach_evidence", { _owner: owner, _mandate: c.id, _kind: "bloom_entry", _ref: ref, _policy_hash: ph, _manifest: man, _manifest_hash: "1".repeat(64) }); };
+    expect((await att(B, E2)).error?.message).toMatch(/not_owner/); // cross-owner mandate
+    expect((await att(A, E2)).error?.message).toMatch(/not_owner/); // someone else's entry / wrong agent
+    expect((await att(A, E1, pol, "ag2")).error?.message).toMatch(/request_mismatch/); // wrong agent in manifest
+    await expect(G.attachEvidence(db, A, { mandateId: c.id, kind: "bloom_entry", refId: E3 })).rejects.toThrow(/different policy/);
+    expect((await att(A, E1)).data).toMatchObject({ created: true });
+    expect((await att(A, E3, "9".repeat(64))).error?.message).toMatch(/same agent policy/); // mixed policies rejected in SQL
+    await expect(db.pg.query("delete from public.graft_evidence_links")).rejects.toThrow(/append-only/);
+    await G.transition(db, A, c.id, "review");
+    expect((await att(A, rid())).error?.message).toMatch(/only be attached to a draft/);
+    const r = await G.approve(db, A, c.id, c.draftHash, okObs, clock);
+    expect(r.status).toBe("active");
+    const m = await G.getMandate(db, c.id);
+    expect(m.approval_proof.evidenceManifestHash).toBe(m.evidence_manifest_hash);
+    const b = G.toBundle((await G.detail(db, c.id, A))!);
+    const { verifyBundle } = await import("@/domain/graft");
+    expect(verifyBundle(JSON.stringify(b)).checks.find((x) => x.id === "approval")!.status).toBe("pass");
+  });
+
+  it("ACL: service_role can call only the current wrappers; internal helpers and retired v1/v2 RPCs are definer-only", async () => {
+    await db.pg.exec("set role service_role;");
+    for (const f of ["graft_transition_internal(null::public.graft_mandates,'active')", "graft_approve(null,null,null,null,null,null)", "graft_propose_v2(null,null,null,null,null,null,null)", "graft_deny2(null::public.graft_mandates,null,null,null,null)", "graft_log(null,null,null,null,null,null)"])
+      await expect(db.pg.query(`select public.${f}`)).rejects.toThrow(/permission/);
+    await db.pg.exec("reset role;");
+    const owners = (await db.pg.query<any>("select distinct pg_get_userbyid(proowner) o from pg_proc where proname like 'graft%' and prosecdef")).rows;
+    expect(owners.length).toBe(1);
+  });
 });

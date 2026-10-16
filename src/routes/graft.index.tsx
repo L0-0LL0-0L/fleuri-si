@@ -106,7 +106,7 @@ function Draft({ onDone }: { onDone: () => void }) {
         <label className="text-sm font-bold md:col-span-2">Pool address (mainnet)
           <input className={`${field} num`} value={pool} onChange={(e) => fresh(setPool)(e.target.value.trim())} aria-invalid={!isAddress(pool)} spellCheck={false} />
           {!isAddress(pool) && <span className="text-xs text-poppy-deep">Not a valid 32-byte Solana address.</span>}
-          <span className="block text-xs font-normal">Prefilled with the $FLEURI bonding-curve pool. It was launched directly on Meteora, not through fleuri's launchpad.</span>
+          <span className="block text-xs font-normal">Prefilled with the $FLEURI Meteora DBC pool (its current stage is read live from chain). It was launched directly on Meteora, not through fleuri's launchpad.</span>
         </label>
         <p className="text-sm md:col-span-2"><strong>Approved tool:</strong> {TOOLS[tool].label}. No other tools can be added.</p>
         <label className="text-sm font-bold">Expires after <span className="num">{hours}</span> h

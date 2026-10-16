@@ -109,7 +109,7 @@ export function Watchtower() {
           <option value="">Choose…</option>{known.map((k) => <option key={k.pool} value={k.pool}>{short(k.pool)} · {k.cluster}</option>)}
         </select></label>}
       {cluster === "mainnet-beta" && <p className="text-xs">Just exploring? <button type="button" className="underline" disabled={busy} onClick={() => { setInput(EXAMPLE_POOL); submit(EXAMPLE_POOL, ""); }}>Try a public example pool</button> — a real mainnet pool that graduated, not launched by fleuri and unrelated to it.</p>}
-      {cluster === "mainnet-beta" && <p className="text-xs"><button type="button" className="underline" disabled={busy} onClick={() => { setInput(FLEURI_POOL); submit(FLEURI_POOL, ""); }}>Watch $FLEURI</button> — the $FLEURI bonding-curve pool. $FLEURI was launched directly on Meteora, not through fleuri's launchpad, so it has no passport. Its status is read live from chain each time.</p>}
+      {cluster === "mainnet-beta" && <p className="text-xs"><button type="button" className="underline" disabled={busy} onClick={() => { setInput(FLEURI_POOL); submit(FLEURI_POOL, ""); }}>Watch $FLEURI</button> — the $FLEURI Meteora DBC pool. $FLEURI was launched directly on Meteora, not through fleuri's launchpad, so it has no passport. Its status is read live from chain each time.</p>}
       {err && <p role="alert" className="text-sm text-poppy-deep break-words">{err}</p>}
       {note && <p role="status" className="text-sm">{note}</p>}
       {!res && !busy && !err && <p className="text-sm text-ink-soft">Paste a pool address to begin. Only accounts owned by the Meteora Dynamic Bonding Curve program are read.</p>}

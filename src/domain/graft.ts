@@ -8,7 +8,8 @@ import { b58decode } from "@/pq/memo-reader";
 export const MANDATE_SCHEMA = "fleuri.graft.mandate/1";
 export const AGENT_VERSION_SCHEMA = "fleuri.graft.agent-version/1";
 export const REPORT_SCHEMA = "fleuri.graft.report/1";
-export const BUNDLE_FORMAT = "fleuri.graft.bundle/1";
+export const BUNDLE_FORMAT = "fleuri.graft.bundle/2";
+export const BUNDLE_FORMAT_V1 = "fleuri.graft.bundle/1"; // pre-evidence exports: no "evidence" field
 export const PROPOSAL_SCHEMA = "fleuri.graft.purchase-proposal/1";
 export const PROMPT_TEMPLATE_VERSION = "garden-cycle-prompt/1";
 export const STEWARD_VERSION = "research-steward/1";
@@ -184,14 +185,24 @@ export const OBS_INPUT = "fleuri.graft.observation-input/1";
 export const OBS_RESULT = "fleuri.graft.observation-result/1";
 export const JOB_INPUT = "fleuri.graft.job-input/1";
 export const PROOF_SCHEMA = "fleuri.graft.approval-proof/1";
+export const DRAFT_REQUEST = "fleuri.graft.draft-request/1";
+export const PROPOSAL_REQUEST = "fleuri.graft.proposal-request/1";
+export const EVIDENCE_LINK = "fleuri.graft.evidence-link/1";
+export const EVIDENCE_MANIFEST = "fleuri.graft.evidence-manifest/1";
+export type EvidenceKind = "bloom_entry" | "research_receipt";
+export interface EvidenceLinkOut { kind: EvidenceKind; refId: string; agentId: string; policyHash: string; manifest: any; manifestHash: string; attachedAt: string }
+/** Order-independent hash of the attached supporting evidence, frozen into the approval proof. */
+export const evidenceManifestHash = (links: { kind: string; refId: string; manifestHash: string }[]) =>
+  hashOf(EVIDENCE_MANIFEST, links.map((l) => ({ kind: l.kind, refId: l.refId, manifestHash: l.manifestHash })).sort((a, b) => (a.kind + a.refId < b.kind + b.refId ? -1 : 1)));
 
 /** Hash chain over the exported history and incidents (self-consistency, not authenticity). */
-export function contentRoot(b: { events: unknown[]; incidents: unknown[]; reports: { reportHash: string }[]; proposals: { proposalHash: string }[] }) {
+export function contentRoot(b: { events: unknown[]; incidents: unknown[]; reports: { reportHash: string }[]; proposals: { proposalHash: string }[]; evidence?: { manifestHash: string }[] }) {
   let h = "0".repeat(64);
   for (const e of b.events) h = digest(`fleuri.graft.event\n${h}\n${stable(e)}`);
   for (const i of b.incidents) h = digest(`fleuri.graft.incident\n${h}\n${stable(i)}`);
   for (const r of b.reports) h = digest(`fleuri.graft.report\n${h}\n${r.reportHash}`);
   for (const p of b.proposals) h = digest(`fleuri.graft.proposal\n${h}\n${p.proposalHash}`);
+  for (const l of b.evidence ?? []) h = digest(`fleuri.graft.evidence\n${h}\n${l.manifestHash}`);
   return h;
 }
 
@@ -209,14 +220,14 @@ export function verifyBundle(text: string): { valid: boolean; checks: BundleChec
   catch (e) { add("parse", "Strict JSON", false, (e as Error).message); return { valid: false, checks, bundle: null }; }
   const m = b?.mandate;
   try {
-    keysExact(b, ["format", "mandate", "events", "reports", "incidents", "proposals", "contentRoot", "exportedAt", "disclosure"], "bundle");
-    if (b.format !== BUNDLE_FORMAT) { add("format", "Format version", "unsupported", `Unsupported format ${String(b.format).slice(0, 40)}`); return { valid: false, checks, bundle: null }; }
+    if (b?.format !== BUNDLE_FORMAT && b?.format !== BUNDLE_FORMAT_V1) { add("format", "Format version", "unsupported", `Unsupported format ${String(b?.format).slice(0, 40)}`); return { valid: false, checks, bundle: null }; }
+    keysExact(b, ["format", "mandate", "events", "reports", "incidents", "proposals", "contentRoot", "exportedAt", "disclosure", ...(b.format === BUNDLE_FORMAT ? ["evidence"] : [])], "bundle");
     keysExact(m, ["id", "status", "draft", "draftHash", "agentVersion", "agentVersionHash", "expiresAt", "approvedAt", "approvedHash", "approvalProof", "approvalProofHash", "createdAt"], "mandate");
     if (!isUuid(m.id) || !(m.status in TRANSITIONS) || !isHex(m.draftHash) || !isHex(m.agentVersionHash) || !isIso(m.expiresAt) || !isIso(m.createdAt)) throw new GraftError("invalid", "mandate fields malformed");
     if ((m.approvedAt === null) !== (m.approvedHash === null) || (m.approvedAt !== null && !isIso(m.approvedAt))) throw new GraftError("invalid", "approval fields inconsistent");
     if ((m.approvalProof === null) !== (m.approvalProofHash === null)) throw new GraftError("invalid", "approval proof fields inconsistent");
     validateDraft(m.draft, Date.parse(m.createdAt));
-    for (const k of ["events", "reports", "incidents", "proposals"]) if (!Array.isArray(b[k]) || b[k].length > 500) throw new GraftError("invalid", `${k} must be a bounded list`);
+    for (const k of ["events", "reports", "incidents", "proposals", ...(b.format === BUNDLE_FORMAT ? ["evidence"] : [])]) if (!Array.isArray(b[k]) || b[k].length > 500) throw new GraftError("invalid", `${k} must be a bounded list`);
     if (!isIso(b.exportedAt) || !isHex(b.contentRoot) || b.disclosure !== DISCLOSURE) throw new GraftError("invalid", "export envelope malformed");
   } catch (e) { add("schema", "Bundle schema", false, (e as Error).message); return { valid: false, checks, bundle: null }; }
   add("parse", "Strict JSON and schema", true, "No duplicate keys, finite numbers, known fields and versions, valid addresses, hashes and dates.");
@@ -231,10 +242,14 @@ export function verifyBundle(text: string): { valid: boolean; checks: BundleChec
   if (aOk && m.approvalProof) {
     try {
       const p = m.approvalProof;
-      aOk = p.schema === PROOF_SCHEMA && p.draftHash === m.draftHash && hashOf(PROOF_SCHEMA, p) === m.approvalProofHash && Array.isArray(p.observations) && p.observations.length > 0
+      const ev = (b.evidence ?? []) as EvidenceLinkOut[];
+      const pk = Object.keys(p).sort().join(",");
+      const evOk = "evidenceManifestHash" in p ? b.format === BUNDLE_FORMAT && p.evidenceManifestHash === evidenceManifestHash(ev) : ev.length === 0;
+      aOk = (pk === "draftHash,observations,schema" || pk === "draftHash,evidenceManifestHash,observations,schema") && evOk && p.schema === PROOF_SCHEMA && p.draftHash === m.draftHash && hashOf(PROOF_SCHEMA, p) === m.approvalProofHash && Array.isArray(p.observations) && p.observations.length > 0
         && p.observations.every((o: any) => (d.tools as string[]).includes(o.tool) && o.inputHash === hashOf(OBS_INPUT, { tool: o.tool, pool: d.pool }) && isHex(o.resultHash) && Number.isSafeInteger(o.slot) && o.slot > 0 && isIso(o.fetchedAt) && Date.parse(o.fetchedAt) <= Date.parse(m.approvedAt) + 30_000 && Date.parse(m.approvedAt) - Date.parse(o.fetchedAt) <= d.evidenceTtlSecs * 1000);
     } catch { aOk = false; }
   }
+  if (aOk && wasActive && !m.approvalProof && (b.evidence ?? []).length) aOk = false;
   add("approval", "Approval binding and evidence", aOk, m.approvedHash ? (m.approvalProof ? "Approval names this draft and carries fresh pool evidence within the TTL." : "Approval names this draft (recorded before evidence proofs existed).") : "Never approved.");
   // history
   let st: string | null = null; let hOk = true; let prev = m.createdAt as string;
@@ -300,6 +315,23 @@ export function verifyBundle(text: string): { valid: boolean; checks: BundleChec
     } catch (e) { pOk = false; pDetail = (e as Error).message; break; }
   }
   add("proposals", "Purchase proposals", pOk, pDetail);
+  // supporting evidence: same agent + policy only; never a permission, never covers the model/prompt/tools
+  let eOk = true; let eDetail = `${(b.evidence ?? []).length} supporting evidence link(s) recompute, bind this agent and were attached before review.`;
+  const eKeys = new Set<string>();
+  for (const l of (b.evidence ?? []) as any[]) {
+    try {
+      keysExact(l, ["kind", "refId", "agentId", "policyHash", "manifest", "manifestHash", "attachedAt"], "evidence");
+      const x = l.manifest;
+      if (!["bloom_entry", "research_receipt"].includes(l.kind) || !isUuid(l.refId) || !isHex(l.policyHash) || !isHex(l.manifestHash) || !isIso(l.attachedAt)) throw new Error("Malformed evidence link.");
+      if (eKeys.has(l.kind + l.refId)) throw new Error("Duplicate evidence link."); eKeys.add(l.kind + l.refId);
+      if (x?.schema !== EVIDENCE_LINK || hashOf(EVIDENCE_LINK, x) !== l.manifestHash) throw new Error("An evidence manifest hash does not recompute.");
+      if (x.kind !== l.kind || x.refId !== l.refId || x.agentId !== d.agentId || l.agentId !== d.agentId || x.policyHash !== l.policyHash) throw new Error("Evidence is bound to another agent or policy.");
+      if (x.coverage?.model !== "not_covered" || x.coverage?.promptTemplate !== "not_covered" || x.coverage?.tools !== "not_covered" || x.coverage?.policy !== "match") throw new Error("Evidence overstates what it covers.");
+      if (l.attachedAt < m.createdAt || (m.approvedAt && l.attachedAt > m.approvedAt)) throw new Error("Evidence was attached outside the draft window.");
+      if (!b.events.some((e: any) => e.kind === "evidence_attached" && e.detail?.manifestHash === l.manifestHash)) throw new Error("An evidence link is missing from the event history.");
+    } catch (e) { eOk = false; eDetail = (e as Error).message; break; }
+  }
+  add("evidence", "Supporting evidence", eOk, eDetail);
   let cOk = false; try { cOk = contentRoot(b) === b.contentRoot; } catch { cOk = false; }
   add("root", "Content root", cOk, cOk ? "History, incidents, reports and proposals hash to the exported root (detects accidental edits; not proof of authenticity)." : "Content root does not recompute.");
   const valid = checks.every((c) => c.status === "pass");

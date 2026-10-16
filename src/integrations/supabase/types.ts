@@ -816,6 +816,53 @@ export type Database = {
           },
         ]
       }
+      graft_evidence_links: {
+        Row: {
+          agent_id: string
+          attached_at: string
+          id: string
+          kind: string
+          mandate_id: string
+          manifest: Json
+          manifest_hash: string
+          owner_id: string
+          policy_hash: string
+          ref_id: string
+        }
+        Insert: {
+          agent_id: string
+          attached_at?: string
+          id?: string
+          kind: string
+          mandate_id: string
+          manifest: Json
+          manifest_hash: string
+          owner_id: string
+          policy_hash: string
+          ref_id: string
+        }
+        Update: {
+          agent_id?: string
+          attached_at?: string
+          id?: string
+          kind?: string
+          mandate_id?: string
+          manifest?: Json
+          manifest_hash?: string
+          owner_id?: string
+          policy_hash?: string
+          ref_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "graft_evidence_links_mandate_id_fkey"
+            columns: ["mandate_id"]
+            isOneToOne: false
+            referencedRelation: "graft_mandates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       graft_incidents: {
         Row: {
           at: string
@@ -935,9 +982,11 @@ export type Database = {
           created_at: string
           draft: Json
           draft_hash: string
+          evidence_manifest_hash: string | null
           expires_at: string
           id: string
           owner_id: string
+          request_body_hash: string | null
           request_id: string
           shared: boolean
           status: string
@@ -954,9 +1003,11 @@ export type Database = {
           created_at?: string
           draft: Json
           draft_hash: string
+          evidence_manifest_hash?: string | null
           expires_at: string
           id?: string
           owner_id: string
+          request_body_hash?: string | null
           request_id: string
           shared?: boolean
           status?: string
@@ -973,9 +1024,11 @@ export type Database = {
           created_at?: string
           draft?: Json
           draft_hash?: string
+          evidence_manifest_hash?: string | null
           expires_at?: string
           id?: string
           owner_id?: string
+          request_body_hash?: string | null
           request_id?: string
           shared?: boolean
           status?: string
@@ -993,6 +1046,7 @@ export type Database = {
           owner_id: string
           proposal: Json
           proposal_hash: string
+          request_body_hash: string | null
           request_id: string
           status: string
         }
@@ -1005,6 +1059,7 @@ export type Database = {
           owner_id: string
           proposal: Json
           proposal_hash: string
+          request_body_hash?: string | null
           request_id: string
           status?: string
         }
@@ -1017,6 +1072,7 @@ export type Database = {
           owner_id?: string
           proposal?: Json
           proposal_hash?: string
+          request_body_hash?: string | null
           request_id?: string
           status?: string
         }
@@ -2403,6 +2459,34 @@ export type Database = {
         }
         Returns: Json
       }
+      graft_approve_v3: {
+        Args: {
+          _agent_version: Json
+          _agent_version_hash: string
+          _draft_hash: string
+          _evidence_count: number
+          _evidence_hash: string
+          _expires: string
+          _id: string
+          _owner: string
+          _proof: Json
+          _proof_fetched_at: string
+          _proof_hash: string
+        }
+        Returns: Json
+      }
+      graft_attach_evidence: {
+        Args: {
+          _kind: string
+          _mandate: string
+          _manifest: Json
+          _manifest_hash: string
+          _owner: string
+          _policy_hash: string
+          _ref: string
+        }
+        Returns: Json
+      }
       graft_claim_job: {
         Args: {
           _agent_version_hash: string
@@ -2466,11 +2550,35 @@ export type Database = {
         }
         Returns: Json
       }
+      graft_create_draft_v2: {
+        Args: {
+          _agent: string
+          _agent_version: Json
+          _agent_version_hash: string
+          _body_hash: string
+          _draft: Json
+          _draft_hash: string
+          _expires: string
+          _owner: string
+          _request: string
+        }
+        Returns: Json
+      }
       graft_decide_proposal: {
         Args: { _approve: boolean; _hash: string; _id: string; _owner: string }
         Returns: Json
       }
       graft_decide_v2: {
+        Args: {
+          _agent_version_hash: string
+          _approve: boolean
+          _hash: string
+          _id: string
+          _owner: string
+        }
+        Returns: Json
+      }
+      graft_decide_v3: {
         Args: {
           _agent_version_hash: string
           _approve: boolean
@@ -2499,6 +2607,7 @@ export type Database = {
         }
         Returns: Json
       }
+      graft_evidence_at: { Args: { _mandate: string }; Returns: string }
       graft_fail_job: {
         Args: {
           _code: string
@@ -2546,6 +2655,19 @@ export type Database = {
       graft_propose_v2: {
         Args: {
           _agent_version_hash: string
+          _expires: string
+          _hash: string
+          _mandate: string
+          _owner: string
+          _proposal: Json
+          _request: string
+        }
+        Returns: Json
+      }
+      graft_propose_v3: {
+        Args: {
+          _agent_version_hash: string
+          _body_hash: string
           _expires: string
           _hash: string
           _mandate: string
