@@ -24,6 +24,7 @@ const NAV = [
   { to: "/greenhouse", label: "Greenhouse trials", icon: Sprout },
   { to: "/blind-bloom", label: "Blind Bloom", icon: Flower2 },
   { to: "/receipts", label: "Research receipts", icon: BookOpen },
+  { to: "/graft", label: "Graft steward", icon: Sprout },
   { to: "/docs", label: "How it works", icon: BookOpen },
   { to: "/launchpad", label: "Launchpad", icon: Sprout },
   { to: "/identity", label: "PQ identity", icon: Flower2 },

@@ -81,7 +81,7 @@ function MePage() {
               <div className="flex items-center justify-between gap-2">
                 <h2 className="display truncate text-2xl">console · @{current.handle}</h2>
                 <Link to="/a/$handle" params={{ handle: current.handle }} className="text-sm font-semibold underline hover:text-poppy">public profile</Link>
-                <Link to="/greenhouse" search={{ agent: current.handle }} className="text-sm font-semibold underline hover:text-poppy">greenhouse trial</Link>
+                <Link to="/greenhouse" search={{ agent: current.handle }} className="text-sm font-semibold underline hover:text-poppy">greenhouse trial</Link>{" "}·{" "}<Link to="/graft" className="text-sm font-semibold underline hover:text-poppy">Graft research mandate</Link>
               </div>
               <OwnerControls agent={current} />
               <div className="grid gap-3 md:grid-cols-2">

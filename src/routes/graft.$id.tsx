@@ -58,7 +58,7 @@ function Detail() {
         <div className="flex flex-wrap items-center gap-2"><StatusChip s={st} />{!owner && <span className="chip">Shared read-only view</span>}{m.shared && owner && <span className="chip">Shared publicly</span>}</div>
         <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
           <dt className="font-bold">Agent</dt><dd className="break-all">{m.agent_id} · {m.agent_version.db.archetype}, risk {m.agent_version.db.risk} · model {m.agent_version.modelId} · {m.agent_version.promptTemplate}</dd>
-          <dt className="font-bold">Pool</dt><dd className="num break-all"><Link to="/watchtower" search={{ pool: draft.pool.address } as any} className="underline">{draft.pool.address}</Link></dd>
+          <dt className="font-bold">Pool</dt><dd className="num break-all"><Link to="/watchtower" search={{ pool: draft.pool.address }} className="underline">{draft.pool.address}</Link></dd>
           <dt className="font-bold">Tools</dt><dd>{draft.tools.map((t: keyof typeof TOOLS) => TOOLS[t].label).join("; ")}</dd>
           <dt className="font-bold">Expires</dt><dd>{new Date(m.expires_at).toLocaleString()} ({new Date(m.expires_at).toISOString()})</dd>
           <dt className="font-bold">Budgets</dt><dd>{draft.budgets.runsPerDay} runs/day for this mandate (server-enforced, not on-chain) · evidence TTL {draft.evidenceTtlSecs}s · max observation age {draft.requirements.maxObservationAgeSecs}s</dd>
