@@ -39,7 +39,7 @@ function TokenPage() {
     {l && <p className="hair bg-paper-light p-3 text-sm">This is a <strong>real Solana token</strong> launched through fleuri. Prices and holders are read live from chain. It is not part of the garden sandbox — sandbox coins live under <Link to="/coins" className="underline">Coins</Link> and use virtual SOL.</p>}
     {c && !l && <p className="hair bg-paper-light p-3 text-sm">
       {isFleuri
-        ? <>This is <strong>$FLEURI</strong>, live on a Meteora bonding curve (Solana mainnet). It was launched directly on Meteora, not recorded through fleuri's launchpad, so there is no passport here. Figures below are read live from chain.</>
+        ? <>This is <strong>$FLEURI</strong>, launched on a Meteora bonding curve (Solana mainnet); its current stage, including any graduation to DAMM v2, is read live in the graduation watchtower. It was launched directly on Meteora, not recorded through fleuri's launchpad, so there is no passport here. Figures below are read live from chain.</>
         : <>This address is <strong>not a recorded fleuri launch</strong>. What follows is read straight from the chain and may be unavailable. It is not part of the garden sandbox — sandbox coins live under <Link to="/coins" className="underline">Coins</Link> and use virtual SOL.</>}
     </p>}
     {!c && !l && <p className="hair bg-paper-light p-3 text-sm">This address is <strong>not a recorded fleuri launch</strong>. It is not part of the garden sandbox — sandbox coins live under <Link to="/coins" className="underline">Coins</Link> and use virtual SOL.</p>}
