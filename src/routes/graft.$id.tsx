@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState, PageHeader } from "@/components/bits";
 import { Panel } from "@/components/pq/ui";
@@ -32,14 +32,19 @@ function Detail() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [runReq, setRunReq] = useState(newId);
+  const seq = useRef(0);
+  // Only the newest request may update state: a slower stale reply (e.g. the signed-out read that started before
+  // the session hydrated) must never overwrite or blank a newer result.
   const load = useCallback(async () => {
+    const n = ++seq.current;
     try {
       const r = userId ? await graftDetail({ data: { id } }) : await graftShared({ data: { id } });
       const r2 = !r.ok && userId ? await graftShared({ data: { id } }) : r;
+      if (n !== seq.current) return;
       if (r2.ok) { setD(r2); setErr(null); } else { setD(null); setErr(r2.error); }
-    } catch { setErr("Could not reach the server."); }
+    } catch { if (n === seq.current) setErr("Could not reach the server."); }
   }, [id, userId]);
-  useEffect(() => { let live = true; setD(null); setErr(null); load().then(() => { if (!live) setD(null); }); return () => { live = false; }; }, [load]);
+  useEffect(() => { setD(null); setErr(null); void load(); return () => { seq.current++; }; }, [load]);
   const act = async (f: () => Promise<any>, ok: (r: any) => string) => {
     setBusy(true);
     try { const r = await f(); if (!r.ok) toast.error(r.error); else toast.success(ok(r)); await load(); }
