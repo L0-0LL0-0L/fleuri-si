@@ -31,6 +31,8 @@ import { Route as AHandleRouteImport } from './routes/a.$handle'
 import { Route as BlindBloomIndexRouteImport } from './routes/blind-bloom.index'
 import { Route as BlindBloomIdRouteImport } from './routes/blind-bloom.$id'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
+import { Route as GraftIndexRouteImport } from './routes/graft.index'
+import { Route as GraftIdRouteImport } from './routes/graft.$id'
 import { Route as GreenhouseIndexRouteImport } from './routes/greenhouse.index'
 import { Route as PassportHashRouteImport } from './routes/passport.$hash'
 import { Route as ReceiptsIndexRouteImport } from './routes/receipts.index'
@@ -151,6 +153,16 @@ const CSymbolRoute = CSymbolRouteImport.update({
   path: '/c/$symbol',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GraftIndexRoute = GraftIndexRouteImport.update({
+  id: '/graft/',
+  path: '/graft/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GraftIdRoute = GraftIdRouteImport.update({
+  id: '/graft/$id',
+  path: '/graft/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GreenhouseIndexRoute = GreenhouseIndexRouteImport.update({
   id: '/greenhouse/',
   path: '/greenhouse/',
@@ -219,11 +231,13 @@ export interface FileRoutesByFullPath {
   '/a/$handle': typeof AHandleRoute
   '/blind-bloom/$id': typeof BlindBloomIdRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/graft/$id': typeof GraftIdRoute
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
   '/t/$mint': typeof TMintRoute
   '/blind-bloom/': typeof BlindBloomIndexRoute
+  '/graft/': typeof GraftIndexRoute
   '/greenhouse/': typeof GreenhouseIndexRoute
   '/receipts/': typeof ReceiptsIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
@@ -252,11 +266,13 @@ export interface FileRoutesByTo {
   '/a/$handle': typeof AHandleRoute
   '/blind-bloom/$id': typeof BlindBloomIdRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/graft/$id': typeof GraftIdRoute
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
   '/t/$mint': typeof TMintRoute
   '/blind-bloom': typeof BlindBloomIndexRoute
+  '/graft': typeof GraftIndexRoute
   '/greenhouse': typeof GreenhouseIndexRoute
   '/receipts': typeof ReceiptsIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
@@ -286,11 +302,13 @@ export interface FileRoutesById {
   '/a/$handle': typeof AHandleRoute
   '/blind-bloom/$id': typeof BlindBloomIdRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/graft/$id': typeof GraftIdRoute
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
   '/t/$mint': typeof TMintRoute
   '/blind-bloom/': typeof BlindBloomIndexRoute
+  '/graft/': typeof GraftIndexRoute
   '/greenhouse/': typeof GreenhouseIndexRoute
   '/receipts/': typeof ReceiptsIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
@@ -321,11 +339,13 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/blind-bloom/$id'
     | '/c/$symbol'
+    | '/graft/$id'
     | '/passport/$hash'
     | '/receipts/$id'
     | '/receipts/new'
     | '/t/$mint'
     | '/blind-bloom/'
+    | '/graft/'
     | '/greenhouse/'
     | '/receipts/'
     | '/greenhouse/r/$id'
@@ -354,11 +374,13 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/blind-bloom/$id'
     | '/c/$symbol'
+    | '/graft/$id'
     | '/passport/$hash'
     | '/receipts/$id'
     | '/receipts/new'
     | '/t/$mint'
     | '/blind-bloom'
+    | '/graft'
     | '/greenhouse'
     | '/receipts'
     | '/greenhouse/r/$id'
@@ -387,11 +409,13 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/blind-bloom/$id'
     | '/c/$symbol'
+    | '/graft/$id'
     | '/passport/$hash'
     | '/receipts/$id'
     | '/receipts/new'
     | '/t/$mint'
     | '/blind-bloom/'
+    | '/graft/'
     | '/greenhouse/'
     | '/receipts/'
     | '/greenhouse/r/$id'
@@ -421,11 +445,13 @@ export interface RootRouteChildren {
   AHandleRoute: typeof AHandleRoute
   BlindBloomIdRoute: typeof BlindBloomIdRoute
   CSymbolRoute: typeof CSymbolRoute
+  GraftIdRoute: typeof GraftIdRoute
   PassportHashRoute: typeof PassportHashRoute
   ReceiptsIdRoute: typeof ReceiptsIdRoute
   ReceiptsNewRoute: typeof ReceiptsNewRoute
   TMintRoute: typeof TMintRoute
   BlindBloomIndexRoute: typeof BlindBloomIndexRoute
+  GraftIndexRoute: typeof GraftIndexRoute
   GreenhouseIndexRoute: typeof GreenhouseIndexRoute
   ReceiptsIndexRoute: typeof ReceiptsIndexRoute
   GreenhouseRIdRoute: typeof GreenhouseRIdRoute
@@ -589,6 +615,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CSymbolRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/graft/': {
+      id: '/graft/'
+      path: '/graft'
+      fullPath: '/graft/'
+      preLoaderRoute: typeof GraftIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/graft/$id': {
+      id: '/graft/$id'
+      path: '/graft/$id'
+      fullPath: '/graft/$id'
+      preLoaderRoute: typeof GraftIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/greenhouse/': {
       id: '/greenhouse/'
       path: '/greenhouse'
@@ -677,11 +717,13 @@ const rootRouteChildren: RootRouteChildren = {
   AHandleRoute: AHandleRoute,
   BlindBloomIdRoute: BlindBloomIdRoute,
   CSymbolRoute: CSymbolRoute,
+  GraftIdRoute: GraftIdRoute,
   PassportHashRoute: PassportHashRoute,
   ReceiptsIdRoute: ReceiptsIdRoute,
   ReceiptsNewRoute: ReceiptsNewRoute,
   TMintRoute: TMintRoute,
   BlindBloomIndexRoute: BlindBloomIndexRoute,
+  GraftIndexRoute: GraftIndexRoute,
   GreenhouseIndexRoute: GreenhouseIndexRoute,
   ReceiptsIndexRoute: ReceiptsIndexRoute,
   GreenhouseRIdRoute: GreenhouseRIdRoute,
