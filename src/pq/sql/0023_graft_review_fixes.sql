@@ -93,7 +93,6 @@ begin
   if (_report->>'mandateId') is distinct from m.id::text or (_report->>'draftHash') is distinct from m.draft_hash or (_report->>'agentVersionHash') is distinct from m.agent_version_hash or (_report->>'inputHash') is distinct from j.input_hash then
     raise exception 'request_mismatch: report is not bound to this mandate and job';
   end if;
-  update public.graft_jobs set status = 'failed', finished_at = public.graft_now(), lease_token = null where id = _job and false; -- placeholder no-op keeps lock
   if m.status <> 'active' or m.expires_at <= public.graft_now() then
     update public.graft_jobs set status = 'failed', finished_at = public.graft_now(), lease_token = null where id = _job;
     return public.graft_deny2(m, _job, case when m.status = 'active' then 'expired_mandate' else 'not_active' end, 'The mandate stopped being active before the report was saved; no report was stored.', null);
