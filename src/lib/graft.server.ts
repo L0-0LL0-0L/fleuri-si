@@ -123,7 +123,11 @@ export async function run(db: any, owner: string, input: { mandateId: string; re
   if (c.denied) return { status: "denied" as const, code: c.denied as DenyCode };
   if (c.status !== "claimed") return { status: c.status as "done" | "busy" | "failed", job: c.job as string };
   const stored = c.input; // retries always use the stored frozen input
-  const fail = async (code: DenyCode, detail: string) => { must(await db.rpc("graft_fail_job", { _owner: owner, _job: c.job, _lease: c.lease, _code: code, _detail: clean(detail) })); return { status: "denied" as const, code, job: c.job as string }; };
+  const fail = async (code: DenyCode, detail: string) => {
+    const r = await db.rpc("graft_fail_job", { _owner: owner, _job: c.job, _lease: c.lease, _code: code, _detail: clean(detail) });
+    if (r.error) { if (/lease_lost/.test(r.error.message)) return { status: "denied" as const, code: "lease_lost" as DenyCode, job: c.job as string }; throw new Error(clean(r.error.message)); }
+    return { status: "denied" as const, code, job: c.job as string };
+  };
   const fresh = await getMandate(db, m.id); // reload current policy after claim
   const gateBase = { mandate: { status: fresh.status, expiresAt: fresh.expires_at, draftHash: fresh.draft_hash, agentVersionHash: fresh.agent_version_hash, draft }, currentAgentVersionHash: cur ? agentVersionHash(cur) : null };
   const pre = gate({ ...gateBase, now: clock(), request: { mandateDraftHash: stored.draftHash, inputHash: hashOf("fleuri.graft.job-input/1", stored), storedInputHash: inputHash } });

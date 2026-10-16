@@ -105,16 +105,31 @@ describe("graft SQL", () => {
     await expect(G.createDraft(db, A, { requestId: rid(), terms: terms() }, async () => ({ ok: false, reason: "unsupported_pool", detail: "x" }), clockMs)).rejects.toThrow(/not a supported DBC pool/);
   });
 
-  it("expired mandate refuses runs and approvals; expiry deadline race denies late commit", async () => {
-    const c = await activeMandate();
-    let commitRace = false;
-    const slow: G.Observer = async () => { if (commitRace) { await db.advance(25 * 3600); clockMs += 25 * 3600_000; } return okObs("watchtower.dbc_pool", POOL); };
-    commitRace = true;
-    const r = await G.run(db, A, { mandateId: c.id, requestId: rid() }, slow, clock);
-    expect(r.status).toBe("denied");
+  it("expired mandate refuses runs; expiry reached mid-run denies the late commit", async () => {
+    const c = await G.createDraft(db, A, { requestId: rid(), terms: terms({ hours: 1 }) }, okObs, clockMs);
+    await G.transition(db, A, c.id, "review"); await G.approve(db, A, c.id, c.draftHash);
+    await db.advance(3590); clockMs += 3590_000;
+    const slow: G.Observer = async () => { await db.advance(20); clockMs += 20_000; return okObs("watchtower.dbc_pool", POOL); };
+    expect(await G.run(db, A, { mandateId: c.id, requestId: rid() }, slow, clock)).toMatchObject({ status: "denied", code: "expired_mandate" });
     expect((await db.pg.query("select * from public.graft_reports")).rows.length).toBe(0);
     expect((await G.getMandate(db, c.id)).status).toBe("expired");
     expect(await G.run(db, A, { mandateId: c.id, requestId: rid() }, okObs, clock)).toMatchObject({ code: "not_active" });
+  });
+
+  it("SQL commit fence rejects a report after expiry even if the worker skips its own gate", async () => {
+    const c = await G.createDraft(db, A, { requestId: rid(), terms: terms({ hours: 1 }) }, okObs, clockMs);
+    await G.transition(db, A, c.id, "review"); await G.approve(db, A, c.id, c.draftHash);
+    const m = await G.getMandate(db, c.id); const req = rid();
+    const { hashOf, reportHash } = await import("@/domain/graft");
+    const input = { schema: "fleuri.graft.job-input/1", mandateId: m.id, draftHash: m.draft_hash, pool: m.draft.pool, tools: m.draft.tools, requestId: req };
+    const ih = hashOf("fleuri.graft.job-input/1", input);
+    await db.advance(3570);
+    const cl = (await db.rpc("graft_claim_job", { _owner: A, _mandate: c.id, _request: req, _input: input, _input_hash: ih, _agent_version_hash: m.agent_version_hash, _owner_limit: 6, _max_inflight: 2, _lease_secs: 60 })).data;
+    await db.advance(40);
+    const rep = { mandateId: m.id, draftHash: m.draft_hash, agentVersionHash: m.agent_version_hash, inputHash: ih };
+    const r = (await db.rpc("graft_commit_report", { _owner: A, _job: cl.job, _lease: cl.lease, _report: rep, _report_hash: reportHash(rep) })).data;
+    expect(r.denied).toBe("expired_mandate");
+    expect((await db.pg.query("select * from public.graft_reports")).rows.length).toBe(0);
   });
 
   it("leases fence workers: a live lease is busy, an expired lease is reclaimed with stored input, the old worker cannot commit", async () => {
