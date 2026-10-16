@@ -61,7 +61,7 @@ describe("bundle verifier", () => {
         { kind: "report", from: "active", to: "active", at: "2026-10-16T12:02:00.000Z", detail: { job: "j1", reportHash: rh } },
         { kind: "revoked", from: "active", to: "revoked", at: "2026-10-16T12:03:00.000Z", detail: {} },
       ],
-      reports: [{ jobId: "j1", reportHash: rh, createdAt: "2026-10-16T12:02:00.000Z", report }], incidents: [], proposals: [], exportedAt: "2026-10-16T12:04:00.000Z", disclosure: DISCLOSURE,
+      reports: [{ jobId: "j1", reportHash: rh, createdAt: "2026-10-16T12:02:00.000Z", report }], incidents: [], proposals: [], evidence: [], exportedAt: "2026-10-16T12:04:00.000Z", disclosure: DISCLOSURE,
     };
     b.contentRoot = contentRoot(b); return b;
   };
@@ -81,6 +81,11 @@ describe("bundle verifier", () => {
     const t6 = bundle(); t6.events[3].at = "2026-10-16T11:00:00.000Z"; t6.contentRoot = contentRoot(t6); expect(verifyBundle(JSON.stringify(t6)).checks.find((c) => c.id === "history")!.status).toBe("fail");
     const t7 = bundle(); t7.proposals = [{ id: MID, status: "paid", proposalHash: "a".repeat(64), proposal: {}, expiresAt: d.expiresAt, decidedAt: null }]; t7.contentRoot = contentRoot(t7); expect(verifyBundle(JSON.stringify(t7)).valid).toBe(false);
     const t8 = bundle(); t8.mandate.approvedHash = null; t8.mandate.approvedAt = null; expect(verifyBundle(JSON.stringify(t8)).checks.find((c) => c.id === "approval")!.status).toBe("fail");
+    // supporting evidence: unknown link, foreign agent or overstated coverage all fail
+    const lm = { schema: "fleuri.graft.evidence-link/1", kind: "bloom_entry", refId: MID, agentId: d.agentId, policyHash: "c".repeat(64), coverage: { policy: "match", model: "covered", promptTemplate: "not_covered", tools: "not_covered" } };
+    const e8 = bundle(); e8.evidence = [{ kind: "bloom_entry", refId: MID, agentId: d.agentId, policyHash: "c".repeat(64), manifest: lm, manifestHash: hashOf("fleuri.graft.evidence-link/1", lm), attachedAt: "2026-10-16T12:00:30.000Z" }]; e8.contentRoot = contentRoot(e8);
+    expect(verifyBundle(JSON.stringify(e8)).checks.find((c) => c.id === "evidence")!.status).toBe("fail");
+    const e9 = bundle(); delete e9.evidence; e9.contentRoot = contentRoot(e9); expect(verifyBundle(JSON.stringify(e9)).valid).toBe(false);
     const t5 = bundle(); t5.mandate.status = "active"; t5.contentRoot = contentRoot(t5); expect(verifyBundle(JSON.stringify(t5)).checks.find((c) => c.id === "history")!.status).toBe("fail");
   });
 });

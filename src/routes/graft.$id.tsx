@@ -5,7 +5,7 @@ import { EmptyState, PageHeader } from "@/components/bits";
 import { Panel } from "@/components/pq/ui";
 import { GraftRibbon, GraftTrustNote, STATUS_LABEL, StatusChip } from "@/components/graft/bits";
 import { useGarden } from "@/store/garden";
-import { graftApprove, graftBundle, graftDecide, graftDetail, graftPropose, graftRun, graftShare, graftShared, graftTransition } from "@/lib/graft.functions";
+import { graftApprove, graftAttach, graftEvidence, graftBundle, graftDecide, graftDetail, graftPropose, graftRun, graftShare, graftShared, graftTransition } from "@/lib/graft.functions";
 import { TOOLS, isAddress } from "@/domain/graft";
 
 export const Route = createFileRoute("/graft/$id")({
@@ -101,6 +101,8 @@ function Detail() {
         <p className="text-xs">Qualifications are hard facts read from chain accounts at the slots shown. They are not predictions of price or profit.</p>
       </Panel>
 
+      <EvidencePanel d={d} id={id} owner={owner} busy={busy} act={act} />
+
       {owner && draft.purchases.services.length > 0 && <Proposals d={d} id={id} busy={busy} act={act} active={st === "active"} />}
 
       <Panel title={`Incidents (${d.incidents.length})`}>
@@ -135,8 +137,9 @@ function Proposals({ d, id, busy, act, active }: { d: any; id: string; busy: boo
           <li key={p.id} className="hair bg-paper p-2">
             <StatusChip s={s} /> <span className="num">{Number(p.proposal.maxAtomic) / 1e6} USDC max</span> · Botanist report for <span className="num break-all">{p.proposal.mint}</span> · until {new Date(p.expires_at).toLocaleString()}
             <p className="text-xs">{p.proposal.purpose}</p>
+            {p.effective_status === "expired" && p.status !== "expired" && <p className="text-xs text-poppy-deep">No longer valid: the mandate is not active or the agent/server version changed.</p>}
             {s === "proposed" && <div className="mt-1 flex gap-2">
-              <button type="button" className="btn btn-red" disabled={busy} onClick={() => act(() => graftDecide({ data: { id: p.id, hash: p.proposal_hash, approve: true } }), (r) => STATUS_LABEL[r.status] ?? r.status)}>Approve proposal</button>
+              <button type="button" className="btn btn-red" disabled={busy} onClick={() => act(() => graftDecide({ data: { id: p.id, hash: p.proposal_hash, approve: true } }), (r) => r.denied ? `Not approved: ${r.denied.replace(/_/g, " ")}${r.denied === "stale_proof" ? " — run the steward again for fresh evidence" : ""}` : STATUS_LABEL[r.status] ?? r.status)}>Approve proposal</button>
               <button type="button" className="btn btn-paper" disabled={busy} onClick={() => act(() => graftDecide({ data: { id: p.id, hash: p.proposal_hash, approve: false } }), () => "Rejected.")}>Reject</button>
             </div>}
             {s === "approved_awaiting_wallet_payment" && <p className="mt-1 text-xs">Nothing has been paid. To buy, use the <Link to="/botanist" className="underline">Botanist checkout</Link> with your own wallet; it shows the live x402 price before you sign.</p>}
@@ -152,6 +155,36 @@ function Proposals({ d, id, busy, act, active }: { d: any; id: string; busy: boo
           <p className="text-xs sm:col-span-3">Needs a steward report within the evidence TTL. Approving a proposal only records your consent; it never pays.</p>
         </div>
       ) : <p className="text-xs">New proposals need an active mandate.</p>}
+    </Panel>
+  );
+}
+
+function EvidencePanel({ d, id, owner, busy, act }: { d: any; id: string; owner: boolean; busy: boolean; act: (f: () => Promise<any>, ok: (r: any) => string) => Promise<void> }) {
+  const [c, setC] = useState<any>(null);
+  const status = d.mandate.status;
+  useEffect(() => {
+    let live = true;
+    if (owner && status === "draft") graftEvidence({ data: { mandateId: id } }).then((r) => { if (live) setC(r.ok ? r : { error: r.error }); }).catch(() => live && setC({ error: "Could not reach the server." }));
+    else setC(null);
+    return () => { live = false; };
+  }, [owner, status, id, d.evidence.length]);
+  const attached = new Set(d.evidence.map((l: any) => l.kind + l.refId));
+  return (
+    <Panel title={`Supporting evidence (${d.evidence.length})`}>
+      <p className="text-xs">Optional context from your own scored Blind Bloom entries or signed research receipts for this same agent. It covers only the rules-engine policy (archetype, risk, strategy, persona), not the model, prompt template or tools. It never grants permission and never replaces fresh pool evidence. It can only be attached while this is a draft; the set is frozen into the approval.</p>
+      {d.evidence.length > 0 && <ul className="space-y-1 text-sm">{d.evidence.map((l: any) => (
+        <li key={l.kind + l.refId} className="hair bg-paper p-2">
+          <span className="chip">{l.kind === "bloom_entry" ? "Blind Bloom entry" : "Research receipt"}</span> <span className="num text-xs break-all">{l.refId}</span>
+          <span className="block text-xs">{l.manifest.verifier}{l.manifest.anchor ? ` · ${l.manifest.anchor}` : ""} · policy match · model/prompt/tools not covered · manifest {short(l.manifestHash)}</span>
+        </li>))}</ul>}
+      {owner && status === "draft" && (c?.error ? <p className="text-xs text-poppy-deep">{c.error}</p> : !c ? <p className="text-xs">Loading your evidence…</p> : (
+        <ul className="space-y-1 text-sm">{[...c.bloom, ...c.receipts].length === 0 ? <li className="text-xs">You have no Blind Bloom entries or signed receipts to attach.</li> : [...c.bloom, ...c.receipts].map((x: any) => (
+          <li key={x.kind + x.id} className="flex flex-wrap items-center gap-2">
+            <span>{x.label}</span><span className="chip">{x.status}</span>
+            {attached.has(x.kind + x.id) ? <span className="text-xs">Attached</span> : x.reason ? <span className="text-xs text-poppy-deep">Not compatible: {x.reason}</span> :
+              <button type="button" className="btn btn-paper" disabled={busy || !c.canAttach} onClick={() => act(() => graftAttach({ data: { mandateId: id, kind: x.kind, refId: x.id } }), () => "Evidence attached.")}>Attach</button>}
+          </li>))}</ul>
+      ))}
     </Panel>
   );
 }
