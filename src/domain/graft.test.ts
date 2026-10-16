@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUNDLE_FORMAT, DISCLOSURE, agentVersion, agentVersionHash, draftHash, gate, hashOf, regressionCases, reportHash, runRegressions, validateDraft, verifyBundle, MANDATE_SCHEMA, REPORT_SCHEMA, type MandateDraft } from "./graft";
+import { JOB_INPUT, OBS_INPUT, OBS_RESULT, contentRoot, BUNDLE_FORMAT, DISCLOSURE, agentVersion, agentVersionHash, draftHash, gate, hashOf, regressionCases, reportHash, runRegressions, validateDraft, verifyBundle, MANDATE_SCHEMA, REPORT_SCHEMA, type MandateDraft } from "./graft";
 
 const NOW = Date.parse("2026-10-16T12:00:00.000Z");
 const POOL = "DwyTJxxgyA8KF2MS8Jnmw4PymX2NjvBjnnQjLjj1tG5r";
@@ -45,20 +45,26 @@ describe("gate + regression cases", () => {
 
 describe("bundle verifier", () => {
   const d = validateDraft(draft(), NOW); const dh = draftHash(d); const vh = agentVersionHash(ver);
+  const MID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const result = { stage: "curve", slot: 10 };
-  const report = { schema: REPORT_SCHEMA, mandateId: "m1", draftHash: dh, agentVersionHash: vh, jobId: "j1", requestId: "r", inputHash: "a".repeat(64), generation: 1, observations: [{ tool: "watchtower.dbc_pool", slot: 10, result, resultHash: hashOf("fleuri.graft.observation-result/1", result) }], qualifications: [], note: "" };
+  const req = "r1";
+  const report = { schema: REPORT_SCHEMA, mandateId: MID, draftHash: dh, agentVersionHash: vh, jobId: "j1", requestId: req, inputHash: hashOf(JOB_INPUT, { schema: JOB_INPUT, mandateId: MID, draftHash: dh, pool: d.pool, tools: d.tools, requestId: req }), generation: 1,
+    observations: [{ tool: "watchtower.dbc_pool", adapter: "watchtower/1", cluster: "mainnet-beta", genesisHash: "g", fetchedAt: "2026-10-16T12:01:50.000Z", slot: 10, inputHash: hashOf(OBS_INPUT, { tool: "watchtower.dbc_pool", pool: d.pool }), result, resultHash: hashOf(OBS_RESULT, result) }], qualifications: [], note: "" };
   const rh = reportHash(report);
-  const bundle = () => ({
-    format: BUNDLE_FORMAT, mandate: { id: "m1", status: "revoked", draft: d, draftHash: dh, agentVersion: ver, agentVersionHash: vh, expiresAt: d.expiresAt, approvedAt: "2026-10-16T12:01:00.000Z", approvedHash: dh, createdAt: "2026-10-16T12:00:00.000Z" },
-    events: [
-      { kind: "created", from: null, to: "draft", at: "2026-10-16T12:00:00.000Z", detail: {} },
-      { kind: "review", from: "draft", to: "review", at: "2026-10-16T12:00:30.000Z", detail: {} },
-      { kind: "approved", from: "review", to: "active", at: "2026-10-16T12:01:00.000Z", detail: {} },
-      { kind: "report", from: "active", to: "active", at: "2026-10-16T12:02:00.000Z", detail: { job: "j1", reportHash: rh } },
-      { kind: "revoked", from: "active", to: "revoked", at: "2026-10-16T12:03:00.000Z", detail: {} },
-    ],
-    reports: [{ jobId: "j1", reportHash: rh, createdAt: "2026-10-16T12:02:00.000Z", report }], incidents: [], proposals: [], exportedAt: "2026-10-16T12:04:00.000Z", disclosure: DISCLOSURE,
-  });
+  const bundle = () => {
+    const b: any = {
+      format: BUNDLE_FORMAT, mandate: { id: MID, status: "revoked", draft: d, draftHash: dh, agentVersion: ver, agentVersionHash: vh, expiresAt: d.expiresAt, approvedAt: "2026-10-16T12:01:00.000Z", approvedHash: dh, approvalProof: null, approvalProofHash: null, createdAt: "2026-10-16T12:00:00.000Z" },
+      events: [
+        { kind: "created", from: null, to: "draft", at: "2026-10-16T12:00:00.000Z", detail: {} },
+        { kind: "review", from: "draft", to: "review", at: "2026-10-16T12:00:30.000Z", detail: {} },
+        { kind: "approved", from: "review", to: "active", at: "2026-10-16T12:01:00.000Z", detail: {} },
+        { kind: "report", from: "active", to: "active", at: "2026-10-16T12:02:00.000Z", detail: { job: "j1", reportHash: rh } },
+        { kind: "revoked", from: "active", to: "revoked", at: "2026-10-16T12:03:00.000Z", detail: {} },
+      ],
+      reports: [{ jobId: "j1", reportHash: rh, createdAt: "2026-10-16T12:02:00.000Z", report }], incidents: [], proposals: [], exportedAt: "2026-10-16T12:04:00.000Z", disclosure: DISCLOSURE,
+    };
+    b.contentRoot = contentRoot(b); return b;
+  };
   it("verifies a consistent bundle", () => { const v = verifyBundle(JSON.stringify(bundle())); expect(v.checks.filter((c) => c.status !== "pass")).toEqual([]); expect(v.valid).toBe(true); });
   it("rejects duplicate keys, non-finite numbers, unknown fields and unsupported versions", () => {
     expect(verifyBundle(JSON.stringify(bundle()).replace('"format"', '"format":"x","format"')).valid).toBe(false);
@@ -70,8 +76,11 @@ describe("bundle verifier", () => {
   it("detects hash, version, history and report tampering", () => {
     const t1 = bundle(); (t1.mandate.draft as any).budgets.runsPerDay = 3; expect(verifyBundle(JSON.stringify(t1)).checks.find((c) => c.id === "draft")!.status).toBe("fail");
     const t2 = bundle(); (t2.mandate.agentVersion as any).modelId = "other"; expect(verifyBundle(JSON.stringify(t2)).checks.find((c) => c.id === "version")!.status).toBe("fail");
-    const t3 = bundle(); t3.events.splice(1, 1); expect(verifyBundle(JSON.stringify(t3)).checks.find((c) => c.id === "history")!.status).toBe("fail");
+    const t3 = bundle(); t3.events.splice(1, 1); t3.contentRoot = contentRoot(t3); expect(verifyBundle(JSON.stringify(t3)).checks.find((c) => c.id === "history")!.status).toBe("fail");
     const t4 = bundle(); (t4.reports[0].report.observations[0].result as any).stage = "graduated"; expect(verifyBundle(JSON.stringify(t4)).valid).toBe(false);
-    const t5 = bundle(); t5.mandate.status = "active"; expect(verifyBundle(JSON.stringify(t5)).checks.find((c) => c.id === "history")!.status).toBe("fail");
+    const t6 = bundle(); t6.events[3].at = "2026-10-16T11:00:00.000Z"; t6.contentRoot = contentRoot(t6); expect(verifyBundle(JSON.stringify(t6)).checks.find((c) => c.id === "history")!.status).toBe("fail");
+    const t7 = bundle(); t7.proposals = [{ id: MID, status: "paid", proposalHash: "a".repeat(64), proposal: {}, expiresAt: d.expiresAt, decidedAt: null }]; t7.contentRoot = contentRoot(t7); expect(verifyBundle(JSON.stringify(t7)).valid).toBe(false);
+    const t8 = bundle(); t8.mandate.approvedHash = null; t8.mandate.approvedAt = null; expect(verifyBundle(JSON.stringify(t8)).checks.find((c) => c.id === "approval")!.status).toBe("fail");
+    const t5 = bundle(); t5.mandate.status = "active"; t5.contentRoot = contentRoot(t5); expect(verifyBundle(JSON.stringify(t5)).checks.find((c) => c.id === "history")!.status).toBe("fail");
   });
 });

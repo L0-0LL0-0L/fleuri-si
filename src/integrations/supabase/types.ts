@@ -821,6 +821,7 @@ export type Database = {
           at: string
           code: string
           detail: string
+          gate_case: Json | null
           id: string
           job_id: string | null
           mandate_id: string
@@ -830,6 +831,7 @@ export type Database = {
           at?: string
           code: string
           detail: string
+          gate_case?: Json | null
           id?: string
           job_id?: string | null
           mandate_id: string
@@ -839,6 +841,7 @@ export type Database = {
           at?: string
           code?: string
           detail?: string
+          gate_case?: Json | null
           id?: string
           job_id?: string | null
           mandate_id?: string
@@ -863,6 +866,7 @@ export type Database = {
       }
       graft_jobs: {
         Row: {
+          agent_version_hash: string | null
           created_at: string
           day: string
           finished_at: string | null
@@ -878,6 +882,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          agent_version_hash?: string | null
           created_at?: string
           day: string
           finished_at?: string | null
@@ -893,6 +898,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          agent_version_hash?: string | null
           created_at?: string
           day?: string
           finished_at?: string | null
@@ -922,6 +928,8 @@ export type Database = {
           agent_id: string
           agent_version: Json
           agent_version_hash: string
+          approval_proof: Json | null
+          approval_proof_hash: string | null
           approved_at: string | null
           approved_hash: string | null
           created_at: string
@@ -939,6 +947,8 @@ export type Database = {
           agent_id: string
           agent_version: Json
           agent_version_hash: string
+          approval_proof?: Json | null
+          approval_proof_hash?: string | null
           approved_at?: string | null
           approved_hash?: string | null
           created_at?: string
@@ -956,6 +966,8 @@ export type Database = {
           agent_id?: string
           agent_version?: Json
           agent_version_hash?: string
+          approval_proof?: Json | null
+          approval_proof_hash?: string | null
           approved_at?: string | null
           approved_hash?: string | null
           created_at?: string
@@ -2377,7 +2389,35 @@ export type Database = {
         }
         Returns: Json
       }
+      graft_approve_v2: {
+        Args: {
+          _agent_version: Json
+          _agent_version_hash: string
+          _draft_hash: string
+          _expires: string
+          _id: string
+          _owner: string
+          _proof: Json
+          _proof_fetched_at: string
+          _proof_hash: string
+        }
+        Returns: Json
+      }
       graft_claim_job: {
+        Args: {
+          _agent_version_hash: string
+          _input: Json
+          _input_hash: string
+          _lease_secs: number
+          _mandate: string
+          _max_inflight: number
+          _owner: string
+          _owner_limit: number
+          _request: string
+        }
+        Returns: Json
+      }
+      graft_claim_job_v2: {
         Args: {
           _agent_version_hash: string
           _input: Json
@@ -2401,6 +2441,18 @@ export type Database = {
         }
         Returns: Json
       }
+      graft_commit_report_v2: {
+        Args: {
+          _agent_version_hash: string
+          _job: string
+          _lease: string
+          _observed_at: string
+          _owner: string
+          _report: Json
+          _report_hash: string
+        }
+        Returns: Json
+      }
       graft_create_draft: {
         Args: {
           _agent: string
@@ -2418,6 +2470,16 @@ export type Database = {
         Args: { _approve: boolean; _hash: string; _id: string; _owner: string }
         Returns: Json
       }
+      graft_decide_v2: {
+        Args: {
+          _agent_version_hash: string
+          _approve: boolean
+          _hash: string
+          _id: string
+          _owner: string
+        }
+        Returns: Json
+      }
       graft_deny: {
         Args: {
           _code: string
@@ -2427,8 +2489,29 @@ export type Database = {
         }
         Returns: Json
       }
+      graft_deny2: {
+        Args: {
+          _case: Json
+          _code: string
+          _detail: string
+          _job: string
+          _m: Database["public"]["Tables"]["graft_mandates"]["Row"]
+        }
+        Returns: Json
+      }
       graft_fail_job: {
         Args: {
+          _code: string
+          _detail: string
+          _job: string
+          _lease: string
+          _owner: string
+        }
+        Returns: Json
+      }
+      graft_fail_job_v2: {
+        Args: {
+          _case: Json
           _code: string
           _detail: string
           _job: string
@@ -2460,6 +2543,18 @@ export type Database = {
         }
         Returns: Json
       }
+      graft_propose_v2: {
+        Args: {
+          _agent_version_hash: string
+          _expires: string
+          _hash: string
+          _mandate: string
+          _owner: string
+          _proposal: Json
+          _request: string
+        }
+        Returns: Json
+      }
       graft_set_shared: {
         Args: { _id: string; _owner: string; _shared: boolean }
         Returns: Json
@@ -2467,6 +2562,21 @@ export type Database = {
       graft_transition: {
         Args: { _id: string; _owner: string; _to: string }
         Returns: Json
+      }
+      graft_transition_internal: {
+        Args: {
+          _m: Database["public"]["Tables"]["graft_mandates"]["Row"]
+          _to: string
+        }
+        Returns: undefined
+      }
+      graft_version_ok: {
+        Args: {
+          _agent_version_hash: string
+          _m: Database["public"]["Tables"]["graft_mandates"]["Row"]
+          _owner: string
+        }
+        Returns: boolean
       }
       greenhouse_attach_evidence: {
         Args: { _owner: string; _proposal: string; _run: string }

@@ -26,5 +26,6 @@
 - [x] Blind Bloom: sealed-strategy sandbox rounds, hidden seed reveal, paired scores, bundles + verifier, /blind-bloom, docs
 - [x] Blind Bloom review fixes: strict verifier envelope/seed states, replay-before-policy-read, bloom_fail expiry fence, QA
 - [ ] Blind Bloom: optional ML-DSA signing of commitments; Pollen deeper rounds
+- [ ] Graft v1 Research Steward: SQL 0022, domain, server, tests (done); review fixes 1-8 via 0023, /graft pages, nav/docs, QA
 - [ ] Pollen Staking deployment: deploy keypair, verified build hash, DFS vault naming the pool PDA, routed fee source — waits on owner
 - [ ] BOTANIST_PAY_TO public payout address — waits on owner (asked at the end)

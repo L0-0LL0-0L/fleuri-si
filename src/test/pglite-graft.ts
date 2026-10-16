@@ -8,7 +8,7 @@ export async function graftDb() {
   await pg.exec("create role anon; create role authenticated; create role service_role bypassrls; create schema auth; create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;");
   await pg.exec(`create table public.agents(id text primary key, handle text not null, name text not null default 'n', archetype text not null, risk int not null, strategy text not null default '', persona text not null default '', owner_id text not null, status text not null default 'active', cash numeric not null default 0);
     grant select on public.agents to anon, authenticated;`);
-  await pg.exec(await readFile(new URL("../pq/sql/0022_graft.sql", import.meta.url), "utf8"));
+  for (const f of ["0022_graft.sql", "0023_graft_review_fixes.sql"]) await pg.exec(await readFile(new URL(`../pq/sql/${f}`, import.meta.url), "utf8"));
   await pg.exec(`create table public.test_clock(t timestamptz); insert into public.test_clock values (now());
     create or replace function public.graft_now() returns timestamptz language sql stable as $$ select t from public.test_clock $$;`);
   const lit = (v: unknown) => (v === null || v === undefined ? null : typeof v === "object" ? JSON.stringify(v) : v);
