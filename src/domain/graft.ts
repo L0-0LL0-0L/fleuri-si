@@ -3,6 +3,7 @@
 // Nothing here can move funds; purchases are proposals only.
 import { parseStrictJson } from "@/pq/strict-json";
 import { sha256Hex, utf8 } from "@/pq/canonical";
+import { b58decode } from "@/pq/memo-reader";
 
 export const MANDATE_SCHEMA = "fleuri.graft.mandate/1";
 export const AGENT_VERSION_SCHEMA = "fleuri.graft.agent-version/1";
@@ -74,6 +75,11 @@ export interface MandateDraft {
 }
 
 const B58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+/** Strict Solana address: base58 alphabet AND decodes to exactly 32 bytes. */
+export function isAddress(s: unknown): s is string {
+  if (typeof s !== "string" || !B58.test(s)) return false;
+  try { return b58decode(s).length === 32; } catch { return false; }
+}
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/;
 const HEX = /^[0-9a-f]{64}$/;
 const keysExact = (o: any, keys: string[], where: string) => {
@@ -93,7 +99,7 @@ export function validateDraft(d: any, now: number): MandateDraft {
   if (d.cluster !== "mainnet-beta") throw new GraftError("invalid", "only mainnet-beta read-only inspection is supported");
   keysExact(d.pool, ["kind", "address"], "pool");
   if (d.pool.kind !== "dbc" && d.pool.kind !== "damm_v2") throw new GraftError("unsupported_pool", "pool kind must be dbc or damm_v2");
-  if (typeof d.pool.address !== "string" || !B58.test(d.pool.address)) throw new GraftError("unsupported_pool", "pool address is not a Solana address");
+  if (!isAddress(d.pool.address)) throw new GraftError("unsupported_pool", "pool address is not a Solana address");
   if (!Array.isArray(d.tools) || d.tools.length < 1 || d.tools.length > 2 || new Set(d.tools).size !== d.tools.length) throw new GraftError("invalid", "choose one or two distinct tools");
   for (const t of d.tools) { if (!(t in TOOLS)) throw new GraftError("invalid", `unsupported tool ${String(t).slice(0, 40)}`); if (!(TOOLS[t as ToolId].kinds as readonly string[]).includes(d.pool.kind)) throw new GraftError("invalid", `${t} does not apply to a ${d.pool.kind} pool`); }
   if (typeof d.expiresAt !== "string" || !ISO.test(d.expiresAt)) throw new GraftError("invalid", "expiry must be an ISO UTC time");
@@ -171,71 +177,131 @@ export function runRegressions(cases: RegressionCase[]) {
 export interface Qualification { id: string; label: string; status: "met" | "not_met" | "unknown"; detail: string }
 
 // ---------- evidence bundle ----------
-export interface Bundle {
-  format: typeof BUNDLE_FORMAT;
-  mandate: { id: string; status: MandateStatus; draft: MandateDraft; draftHash: string; agentVersion: AgentVersion; agentVersionHash: string; expiresAt: string; approvedAt: string | null; approvedHash: string | null; createdAt: string };
-  events: { kind: string; from: string | null; to: string | null; at: string; detail: Record<string, unknown> }[];
-  reports: { jobId: string; reportHash: string; createdAt: string; report: any }[];
-  incidents: { code: DenyCode; detail: string; at: string; jobId: string | null }[];
-  proposals: { id: string; status: string; proposalHash: string; proposal: any; expiresAt: string; decidedAt: string | null }[];
-  exportedAt: string;
-  disclosure: string;
-}
 export const DISCLOSURE = "Hashes show internal consistency of this export. They do not prove when events happened, that the server ran honestly, or that any observation is still current. Purchase approvals are consent records only; no payment is authorized or made by Graft.";
+export const PROPOSAL_STATUSES = ["proposed", "approved_awaiting_wallet_payment", "rejected", "expired"] as const;
+export const DENY_CODES: DenyCode[] = ["expired_mandate", "stale_proof", "changed_config", "service_unavailable", "request_mismatch", "unsupported_pool", "quota_exceeded", "lease_lost", "not_active"];
+export const OBS_INPUT = "fleuri.graft.observation-input/1";
+export const OBS_RESULT = "fleuri.graft.observation-result/1";
+export const JOB_INPUT = "fleuri.graft.job-input/1";
+export const PROOF_SCHEMA = "fleuri.graft.approval-proof/1";
+
+/** Hash chain over the exported history and incidents (self-consistency, not authenticity). */
+export function contentRoot(b: { events: unknown[]; incidents: unknown[]; reports: { reportHash: string }[]; proposals: { proposalHash: string }[] }) {
+  let h = "0".repeat(64);
+  for (const e of b.events) h = digest(`fleuri.graft.event\n${h}\n${stable(e)}`);
+  for (const i of b.incidents) h = digest(`fleuri.graft.incident\n${h}\n${stable(i)}`);
+  for (const r of b.reports) h = digest(`fleuri.graft.report\n${h}\n${r.reportHash}`);
+  for (const p of b.proposals) h = digest(`fleuri.graft.proposal\n${h}\n${p.proposalHash}`);
+  return h;
+}
 
 export type CheckStatus = "pass" | "fail" | "unsupported";
 export interface BundleCheck { id: string; label: string; status: CheckStatus; detail: string }
+const isIso = (v: unknown): v is string => typeof v === "string" && ISO.test(v) && Number.isFinite(Date.parse(v));
+const isHex = (v: unknown): v is string => typeof v === "string" && HEX.test(v);
+const isUuid = (v: unknown) => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
 
-export function verifyBundle(text: string): { valid: boolean; checks: BundleCheck[]; bundle: Bundle | null } {
+export function verifyBundle(text: string): { valid: boolean; checks: BundleCheck[]; bundle: any } {
   const checks: BundleCheck[] = [];
   const add = (id: string, label: string, ok: boolean | "unsupported", detail: string) => checks.push({ id, label, status: ok === "unsupported" ? "unsupported" : ok ? "pass" : "fail", detail });
   let b: any;
-  try { b = parseStrictJson(text, { maxBytes: LIMITS.maxJsonBytes * 8, maxDepth: 40 }); }
+  try { b = parseStrictJson(text, { maxBytes: 2_000_000, maxDepth: 40 }); }
   catch (e) { add("parse", "Strict JSON", false, (e as Error).message); return { valid: false, checks, bundle: null }; }
+  const m = b?.mandate;
   try {
-    keysExact(b, ["format", "mandate", "events", "reports", "incidents", "proposals", "exportedAt", "disclosure"], "bundle");
+    keysExact(b, ["format", "mandate", "events", "reports", "incidents", "proposals", "contentRoot", "exportedAt", "disclosure"], "bundle");
     if (b.format !== BUNDLE_FORMAT) { add("format", "Format version", "unsupported", `Unsupported format ${String(b.format).slice(0, 40)}`); return { valid: false, checks, bundle: null }; }
-    keysExact(b.mandate, ["id", "status", "draft", "draftHash", "agentVersion", "agentVersionHash", "expiresAt", "approvedAt", "approvedHash", "createdAt"], "mandate");
-    if (!(b.mandate.status in TRANSITIONS)) throw new GraftError("invalid", "unknown mandate status");
+    keysExact(m, ["id", "status", "draft", "draftHash", "agentVersion", "agentVersionHash", "expiresAt", "approvedAt", "approvedHash", "approvalProof", "approvalProofHash", "createdAt"], "mandate");
+    if (!isUuid(m.id) || !(m.status in TRANSITIONS) || !isHex(m.draftHash) || !isHex(m.agentVersionHash) || !isIso(m.expiresAt) || !isIso(m.createdAt)) throw new GraftError("invalid", "mandate fields malformed");
+    if ((m.approvedAt === null) !== (m.approvedHash === null) || (m.approvedAt !== null && !isIso(m.approvedAt))) throw new GraftError("invalid", "approval fields inconsistent");
+    if ((m.approvalProof === null) !== (m.approvalProofHash === null)) throw new GraftError("invalid", "approval proof fields inconsistent");
+    validateDraft(m.draft, Date.parse(m.createdAt));
     for (const k of ["events", "reports", "incidents", "proposals"]) if (!Array.isArray(b[k]) || b[k].length > 500) throw new GraftError("invalid", `${k} must be a bounded list`);
+    if (!isIso(b.exportedAt) || !isHex(b.contentRoot) || b.disclosure !== DISCLOSURE) throw new GraftError("invalid", "export envelope malformed");
   } catch (e) { add("schema", "Bundle schema", false, (e as Error).message); return { valid: false, checks, bundle: null }; }
-  add("parse", "Strict JSON", true, "No duplicate keys, finite numbers, within size limits.");
-  const m = b.mandate;
-  let dOk = false;
-  try { dOk = draftHash(m.draft) === m.draftHash && m.draft.expiresAt === m.expiresAt && m.draft.schema === MANDATE_SCHEMA; } catch { dOk = false; }
-  add("draft", "Mandate draft hash", dOk, dOk ? "Recomputed draft hash matches." : "Draft hash, expiry or schema does not match.");
+  add("parse", "Strict JSON and schema", true, "No duplicate keys, finite numbers, known fields and versions, valid addresses, hashes and dates.");
+  const d = m.draft as MandateDraft;
+  add("draft", "Mandate draft hash", draftHash(d) === m.draftHash && d.expiresAt === m.expiresAt, "Recomputed draft hash and expiry.");
   let vOk = false;
-  try { vOk = m.agentVersion?.schema === AGENT_VERSION_SCHEMA && agentVersionHash(m.agentVersion) === m.agentVersionHash && m.draft.agentVersionHash === m.agentVersionHash && m.agentVersion.agentId === m.draft.agentId; } catch { vOk = false; }
-  add("version", "Agent version binding", vOk, vOk ? "Agent version hash recomputes and is the one the draft names." : "Agent version does not match the draft.");
-  add("approval", "Approval binding", m.approvedHash == null || m.approvedHash === m.draftHash, m.approvedHash ? "Approval names this exact draft hash." : "Not approved.");
-  // state history
-  let st: string | null = null; let hOk = true; let prevAt = "";
+  try { vOk = m.agentVersion?.schema === AGENT_VERSION_SCHEMA && agentVersionHash(m.agentVersion) === m.agentVersionHash && d.agentVersionHash === m.agentVersionHash && m.agentVersion.agentId === d.agentId; } catch { vOk = false; }
+  add("version", "Agent version binding", vOk, vOk ? "Agent version recomputes and is the one the draft names." : "Agent version does not match the draft.");
+  // approval: required for any status reached through active
+  const wasActive = b.events.some((e: any) => e?.to === "active");
+  let aOk = (m.approvedHash === null) === !wasActive && (m.approvedHash === null || m.approvedHash === m.draftHash);
+  if (aOk && m.approvalProof) {
+    try {
+      const p = m.approvalProof;
+      aOk = p.schema === PROOF_SCHEMA && p.draftHash === m.draftHash && hashOf(PROOF_SCHEMA, p) === m.approvalProofHash && Array.isArray(p.observations) && p.observations.length > 0
+        && p.observations.every((o: any) => (d.tools as string[]).includes(o.tool) && o.inputHash === hashOf(OBS_INPUT, { tool: o.tool, pool: d.pool }) && isHex(o.resultHash) && Number.isSafeInteger(o.slot) && o.slot > 0 && isIso(o.fetchedAt) && Date.parse(o.fetchedAt) <= Date.parse(m.approvedAt) + 30_000 && Date.parse(m.approvedAt) - Date.parse(o.fetchedAt) <= d.evidenceTtlSecs * 1000);
+    } catch { aOk = false; }
+  }
+  add("approval", "Approval binding and evidence", aOk, m.approvedHash ? (m.approvalProof ? "Approval names this draft and carries fresh pool evidence within the TTL." : "Approval names this draft (recorded before evidence proofs existed).") : "Never approved.");
+  // history
+  let st: string | null = null; let hOk = true; let prev = m.createdAt as string;
   for (const e of b.events) {
     try { keysExact(e, ["kind", "from", "to", "at", "detail"], "event"); } catch { hOk = false; break; }
-    if (typeof e.at !== "string" || !ISO.test(e.at) || e.at < prevAt) { hOk = false; break; }
-    prevAt = e.at;
-    if (e.from === null && st === null) { st = e.to; continue; }
+    if (!isIso(e.at) || e.at < prev || e.at > b.exportedAt || typeof e.kind !== "string" || e.kind.length > 40) { hOk = false; break; }
+    prev = e.at;
+    if (st === null) { if (e.from !== null || e.to !== "draft" || e.kind !== "created") { hOk = false; break; } st = "draft"; continue; }
     if (e.from !== st) { hOk = false; break; }
     if (e.to !== e.from && !(TRANSITIONS[e.from as MandateStatus] ?? []).includes(e.to)) { hOk = false; break; }
     st = e.to;
   }
   hOk = hOk && st === m.status;
-  add("history", "State history", hOk, hOk ? `Transitions are allowed and end in "${m.status}".` : "Event history is out of order, skips states or does not end in the current status.");
-  let rOk = true; let rDetail = `${b.reports.length} report(s) recompute and bind to this mandate and agent version.`;
+  add("history", "State history", hOk, hOk ? `Starts as a draft, transitions are allowed and in order, ends in "${m.status}".` : "History does not start with the draft, is out of order, skips states or does not end in the current status.");
+  // reports
+  let rOk = true; let rDetail = `${b.reports.length} report(s) recompute and bind to this mandate, pool, tools and version.`;
+  const jobs = new Set<string>(); const reqs = new Set<string>();
   for (const r of b.reports) {
     try {
       keysExact(r, ["jobId", "reportHash", "createdAt", "report"], "report");
-      if (r.report?.schema !== REPORT_SCHEMA) { rOk = false; rDetail = "Unsupported report schema."; break; }
-      if (reportHash(r.report) !== r.reportHash) { rOk = false; rDetail = `Report ${String(r.jobId).slice(0, 8)} hash mismatch.`; break; }
-      if (r.report.mandateId !== m.id || r.report.draftHash !== m.draftHash || r.report.agentVersionHash !== m.agentVersionHash || r.report.jobId !== r.jobId) { rOk = false; rDetail = "A report is bound to another mandate, version or job."; break; }
-      for (const o of r.report.observations ?? []) if (hashOf("fleuri.graft.observation-result/1", o.result) !== o.resultHash) { rOk = false; rDetail = "An observation result hash does not recompute."; break; }
-      if (!b.events.some((e: any) => e.kind === "report" && e.detail?.reportHash === r.reportHash)) { rOk = false; rDetail = "A report is missing from the event history."; break; }
+      const x = r.report;
+      if (x?.schema !== REPORT_SCHEMA) throw new Error("Unsupported report schema.");
+      if (reportHash(x) !== r.reportHash) throw new Error(`Report ${String(r.jobId).slice(0, 8)} hash mismatch.`);
+      if (x.mandateId !== m.id || x.draftHash !== m.draftHash || x.agentVersionHash !== m.agentVersionHash || x.jobId !== r.jobId) throw new Error("A report is bound to another mandate, version or job.");
+      if (jobs.has(r.jobId) || reqs.has(x.requestId)) throw new Error("Duplicate job or request.");
+      jobs.add(r.jobId); reqs.add(x.requestId);
+      if (x.inputHash !== hashOf(JOB_INPUT, { schema: JOB_INPUT, mandateId: m.id, draftHash: m.draftHash, pool: d.pool, tools: d.tools, requestId: x.requestId })) throw new Error("Job input hash does not recompute.");
+      if (!Array.isArray(x.observations) || x.observations.length !== d.tools.length) throw new Error("Observations do not cover the approved tools.");
+      for (const o of x.observations) {
+        if (!(d.tools as string[]).includes(o.tool) || o.adapter !== TOOLS[o.tool as ToolId].adapter) throw new Error("Observation tool/adapter not approved.");
+        if (o.inputHash !== hashOf(OBS_INPUT, { tool: o.tool, pool: d.pool })) throw new Error("Observation input hash does not bind the pool.");
+        if (hashOf(OBS_RESULT, o.result) !== o.resultHash) throw new Error("An observation result hash does not recompute.");
+        if (o.cluster !== "mainnet-beta" || typeof o.genesisHash !== "string" || !Number.isSafeInteger(o.slot) || o.slot <= 0 || !isIso(o.fetchedAt)) throw new Error("Observation provenance incomplete.");
+        if (Date.parse(r.createdAt) - Date.parse(o.fetchedAt) > d.requirements.maxObservationAgeSecs * 1000) throw new Error("Observation was stale when the report was saved.");
+      }
+      if (!Array.isArray(x.qualifications) || x.qualifications.some((q: any) => !["met", "not_met", "unknown"].includes(q?.status))) throw new Error("Qualification statuses malformed.");
+      if (!b.events.some((e: any) => e.kind === "report" && e.detail?.reportHash === r.reportHash)) throw new Error("A report is missing from the event history.");
     } catch (e) { rOk = false; rDetail = (e as Error).message; break; }
   }
   add("reports", "Reports and observations", rOk, rDetail);
-  let pOk = true;
-  for (const p of b.proposals) { try { if (proposalHash(p.proposal) !== p.proposalHash || p.proposal.mandateDraftHash !== m.draftHash || p.status === "paid") pOk = false; } catch { pOk = false; } }
-  add("proposals", "Purchase proposals", pOk, pOk ? "Proposals recompute; none claims payment." : "A proposal hash or binding does not match.");
+  // incidents
+  let iOk = true; let iDetail = "Incident codes are known; captured gate cases reproduce their codes.";
+  for (const i of b.incidents) {
+    try {
+      keysExact(i, ["code", "detail", "at", "jobId", "gateCase"], "incident");
+      if (!DENY_CODES.includes(i.code) || typeof i.detail !== "string" || i.detail.length > 240 || !isIso(i.at)) throw new Error("Malformed incident.");
+      if (i.gateCase) { const g = gate(i.gateCase); if ((g.allow ? "allow" : g.code) !== i.code) throw new Error(`Captured case for ${i.code} does not reproduce.`); }
+    } catch (e) { iOk = false; iDetail = (e as Error).message; break; }
+  }
+  add("incidents", "Incidents and captured cases", iOk, iDetail);
+  // proposals
+  let pOk = true; let pDetail = "Proposals recompute, stay within caps and are proposal-only; none claims payment.";
+  const pids = new Set<string>();
+  for (const p of b.proposals) {
+    try {
+      keysExact(p, ["id", "status", "proposalHash", "proposal", "expiresAt", "decidedAt"], "proposal");
+      const x = p.proposal;
+      if (!isUuid(p.id) || pids.has(p.id) || !(PROPOSAL_STATUSES as readonly string[]).includes(p.status) || !isIso(p.expiresAt) || (p.decidedAt !== null && !isIso(p.decidedAt))) throw new Error("Malformed proposal.");
+      pids.add(p.id);
+      if (proposalHash(x) !== p.proposalHash || x.schema !== PROPOSAL_SCHEMA || x.mandateDraftHash !== m.draftHash || x.agentVersionHash !== m.agentVersionHash || x.mandateId !== m.id) throw new Error("A proposal hash or binding does not match.");
+      if (!(d.purchases.services as string[]).includes(x.service) || x.currency !== d.purchases.currency || !isAddress(x.mint) || !/^[1-9]\d{0,9}$/.test(x.maxAtomic) || Number(x.maxAtomic) > Number(d.purchases.maxAtomic)) throw new Error("A proposal exceeds the mandate's service, currency or cap.");
+      if (x.payment !== "proposed_only" || x.expiresAt !== p.expiresAt || p.expiresAt > m.expiresAt) throw new Error("A proposal claims payment or outlives the mandate.");
+    } catch (e) { pOk = false; pDetail = (e as Error).message; break; }
+  }
+  add("proposals", "Purchase proposals", pOk, pDetail);
+  let cOk = false; try { cOk = contentRoot(b) === b.contentRoot; } catch { cOk = false; }
+  add("root", "Content root", cOk, cOk ? "History, incidents, reports and proposals hash to the exported root (detects accidental edits; not proof of authenticity)." : "Content root does not recompute.");
   const valid = checks.every((c) => c.status === "pass");
-  return { valid, checks, bundle: valid ? (b as Bundle) : null };
+  return { valid, checks, bundle: valid ? b : null };
 }
