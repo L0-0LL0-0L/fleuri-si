@@ -3116,6 +3116,16 @@ export type Database = {
         }
         Returns: Json
       }
+      shadow_write_v2: {
+        Args: {
+          _action: string
+          _id: string
+          _owner: string
+          _payload: Json
+          _request: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
