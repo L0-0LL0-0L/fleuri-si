@@ -87,7 +87,7 @@ begin
   if n>=6 then raise exception 'daily_quota'; end if;
   seed:=encode(sha256(convert_to(gen_random_uuid()::text||gen_random_uuid()::text,'UTF8')),'hex');
   f:=jsonb_set(f,'{seedCommit}',to_jsonb(public.shadow_hash('shadow.seed/1',to_jsonb(seed))));
-  insert into public.shadow_seasons(owner_id,agent_id,frozen,input_hash,seed_hex,seed_commit) values(_owner,a.id,f,public.shadow_hash('shadow.input/1',f),seed,f->>'seedCommit') returning * into s;
+  insert into public.shadow_seasons(owner_id,agent_id,frozen,input_hash,seed_hex,seed_commit,created_at) values(_owner,a.id,f,public.shadow_hash('shadow.input/1',f),seed,f->>'seedCommit',public.shadow_now()) returning * into s;
   perform public.shadow_log(s.id,'created',jsonb_build_object('inputHash',s.input_hash));
   r:=jsonb_build_object('id',s.id,'status',s.status,'saveBodyHash',_payload->>'saveBodyHash');
  elsif _action='edit' then
