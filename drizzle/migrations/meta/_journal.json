@@ -197,6 +197,13 @@
       "when": 1792239835908,
       "tag": "0027_shadow_review_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792240314816,
+      "tag": "0028_shadow_history_ceiling",
+      "breakpoints": true
     }
   ]
 }
