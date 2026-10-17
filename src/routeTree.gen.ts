@@ -38,6 +38,8 @@ import { Route as PassportHashRouteImport } from './routes/passport.$hash'
 import { Route as ReceiptsIndexRouteImport } from './routes/receipts.index'
 import { Route as ReceiptsIdRouteImport } from './routes/receipts.$id'
 import { Route as ReceiptsNewRouteImport } from './routes/receipts.new'
+import { Route as ShadowSeasonIndexRouteImport } from './routes/shadow-season.index'
+import { Route as ShadowSeasonIdRouteImport } from './routes/shadow-season.$id'
 import { Route as TMintRouteImport } from './routes/t.$mint'
 import { Route as GreenhouseRIdRouteImport } from './routes/greenhouse.r.$id'
 import { Route as ApiPublicBotanistReportRouteImport } from './routes/api/public/botanist/report'
@@ -188,6 +190,16 @@ const ReceiptsNewRoute = ReceiptsNewRouteImport.update({
   path: '/receipts/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShadowSeasonIndexRoute = ShadowSeasonIndexRouteImport.update({
+  id: '/shadow-season/',
+  path: '/shadow-season/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShadowSeasonIdRoute = ShadowSeasonIdRouteImport.update({
+  id: '/shadow-season/$id',
+  path: '/shadow-season/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TMintRoute = TMintRouteImport.update({
   id: '/t/$mint',
   path: '/t/$mint',
@@ -235,11 +247,13 @@ export interface FileRoutesByFullPath {
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
+  '/shadow-season/$id': typeof ShadowSeasonIdRoute
   '/t/$mint': typeof TMintRoute
   '/blind-bloom/': typeof BlindBloomIndexRoute
   '/graft/': typeof GraftIndexRoute
   '/greenhouse/': typeof GreenhouseIndexRoute
   '/receipts/': typeof ReceiptsIndexRoute
+  '/shadow-season/': typeof ShadowSeasonIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
   '/api/public/botanist/report': typeof ApiPublicBotanistReportRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
@@ -270,11 +284,13 @@ export interface FileRoutesByTo {
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
+  '/shadow-season/$id': typeof ShadowSeasonIdRoute
   '/t/$mint': typeof TMintRoute
   '/blind-bloom': typeof BlindBloomIndexRoute
   '/graft': typeof GraftIndexRoute
   '/greenhouse': typeof GreenhouseIndexRoute
   '/receipts': typeof ReceiptsIndexRoute
+  '/shadow-season': typeof ShadowSeasonIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
   '/api/public/botanist/report': typeof ApiPublicBotanistReportRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
@@ -306,11 +322,13 @@ export interface FileRoutesById {
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
+  '/shadow-season/$id': typeof ShadowSeasonIdRoute
   '/t/$mint': typeof TMintRoute
   '/blind-bloom/': typeof BlindBloomIndexRoute
   '/graft/': typeof GraftIndexRoute
   '/greenhouse/': typeof GreenhouseIndexRoute
   '/receipts/': typeof ReceiptsIndexRoute
+  '/shadow-season/': typeof ShadowSeasonIndexRoute
   '/greenhouse/r/$id': typeof GreenhouseRIdRoute
   '/api/public/botanist/report': typeof ApiPublicBotanistReportRoute
   '/api/public/garden/tick': typeof ApiPublicGardenTickRoute
@@ -343,11 +361,13 @@ export interface FileRouteTypes {
     | '/passport/$hash'
     | '/receipts/$id'
     | '/receipts/new'
+    | '/shadow-season/$id'
     | '/t/$mint'
     | '/blind-bloom/'
     | '/graft/'
     | '/greenhouse/'
     | '/receipts/'
+    | '/shadow-season/'
     | '/greenhouse/r/$id'
     | '/api/public/botanist/report'
     | '/api/public/garden/tick'
@@ -378,11 +398,13 @@ export interface FileRouteTypes {
     | '/passport/$hash'
     | '/receipts/$id'
     | '/receipts/new'
+    | '/shadow-season/$id'
     | '/t/$mint'
     | '/blind-bloom'
     | '/graft'
     | '/greenhouse'
     | '/receipts'
+    | '/shadow-season'
     | '/greenhouse/r/$id'
     | '/api/public/botanist/report'
     | '/api/public/garden/tick'
@@ -413,11 +435,13 @@ export interface FileRouteTypes {
     | '/passport/$hash'
     | '/receipts/$id'
     | '/receipts/new'
+    | '/shadow-season/$id'
     | '/t/$mint'
     | '/blind-bloom/'
     | '/graft/'
     | '/greenhouse/'
     | '/receipts/'
+    | '/shadow-season/'
     | '/greenhouse/r/$id'
     | '/api/public/botanist/report'
     | '/api/public/garden/tick'
@@ -449,11 +473,13 @@ export interface RootRouteChildren {
   PassportHashRoute: typeof PassportHashRoute
   ReceiptsIdRoute: typeof ReceiptsIdRoute
   ReceiptsNewRoute: typeof ReceiptsNewRoute
+  ShadowSeasonIdRoute: typeof ShadowSeasonIdRoute
   TMintRoute: typeof TMintRoute
   BlindBloomIndexRoute: typeof BlindBloomIndexRoute
   GraftIndexRoute: typeof GraftIndexRoute
   GreenhouseIndexRoute: typeof GreenhouseIndexRoute
   ReceiptsIndexRoute: typeof ReceiptsIndexRoute
+  ShadowSeasonIndexRoute: typeof ShadowSeasonIndexRoute
   GreenhouseRIdRoute: typeof GreenhouseRIdRoute
   ApiPublicBotanistReportRoute: typeof ApiPublicBotanistReportRoute
   ApiPublicGardenTickRoute: typeof ApiPublicGardenTickRoute
@@ -664,6 +690,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReceiptsNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/shadow-season/': {
+      id: '/shadow-season/'
+      path: '/shadow-season'
+      fullPath: '/shadow-season/'
+      preLoaderRoute: typeof ShadowSeasonIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shadow-season/$id': {
+      id: '/shadow-season/$id'
+      path: '/shadow-season/$id'
+      fullPath: '/shadow-season/$id'
+      preLoaderRoute: typeof ShadowSeasonIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/t/$mint': {
       id: '/t/$mint'
       path: '/t/$mint'
@@ -721,11 +761,13 @@ const rootRouteChildren: RootRouteChildren = {
   PassportHashRoute: PassportHashRoute,
   ReceiptsIdRoute: ReceiptsIdRoute,
   ReceiptsNewRoute: ReceiptsNewRoute,
+  ShadowSeasonIdRoute: ShadowSeasonIdRoute,
   TMintRoute: TMintRoute,
   BlindBloomIndexRoute: BlindBloomIndexRoute,
   GraftIndexRoute: GraftIndexRoute,
   GreenhouseIndexRoute: GreenhouseIndexRoute,
   ReceiptsIndexRoute: ReceiptsIndexRoute,
+  ShadowSeasonIndexRoute: ShadowSeasonIndexRoute,
   GreenhouseRIdRoute: GreenhouseRIdRoute,
   ApiPublicBotanistReportRoute: ApiPublicBotanistReportRoute,
   ApiPublicGardenTickRoute: ApiPublicGardenTickRoute,

@@ -270,3 +270,8 @@
 @media (prefers-reduced-motion: reduce) {
   .fl-root, .fl-head, .fl-stem, .art-breathe, .live-dot, .flash-in { animation: none !important; }
 }
+
+@keyframes shadow-trace { from { stroke-dashoffset: 1600; } to { stroke-dashoffset: 0; } }
+.shadow-notebook > header h1 { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.shadow-path polyline { stroke-dasharray: 1600; animation: shadow-trace 1.4s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .shadow-path polyline { animation: none; stroke-dasharray: none; } }

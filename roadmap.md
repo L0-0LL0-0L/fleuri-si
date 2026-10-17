@@ -1,5 +1,8 @@
 # Roadmap
 
+- [x] Shadow Season: frozen synthetic range-rebalance model, private persistence, fenced evaluation and strict autopsy replay
+- [x] Shadow Season: routes/navigation/docs and owner/private/share/export desktop/mobile QA; full tests
+
 - [x] Mainnet launchpad, pool config, Pinata, METEORA_DBC_CONFIG verified
 - [x] Living passports: dated observations, append-only history, evidence bundle export
 - [x] Standalone bundle verifier (browser direct RPC + CLI) with fixture tests

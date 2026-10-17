@@ -183,6 +183,27 @@
       "when": 1792192388901,
       "tag": "0025_graft_evidence_and_retries_apply",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792239727213,
+      "tag": "0026_shadow_season",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792239835908,
+      "tag": "0027_shadow_review_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792240314816,
+      "tag": "0028_shadow_history_ceiling",
+      "breakpoints": true
     }
   ]
 }
