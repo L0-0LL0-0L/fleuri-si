@@ -108,17 +108,21 @@ export function verifyBundle(text: string): { ok: boolean; message: string } {
     if (canonicalize(makeTape(b.frozen, b.seed)) !== canonicalize(b.tape)) throw new Error('Tape mismatch');
     const replay = evaluateTape(b.frozen, b.tape);
     if (canonicalize(replay) !== canonicalize(b.result) || resultHash(replay) !== b.resultHash) throw new Error('Result/autopsy mismatch');
-    let previous = '0'.repeat(64), at = 0; let commits = 0, completes = 0;
+    let previous = '0'.repeat(64), at = 0; let commits = 0, completes = 0, generation = 0;
+    let lastInput = '';
     for (const [i, e] of b.events.entries()) {
       const { hash: h, ...rest } = e;
       if (e.seq !== i + 1 || e.previous !== previous || eventHash(rest) !== h || Date.parse(e.at) < at || Date.parse(e.at) > Date.parse(b.exportedAt)) throw new Error('History mismatch');
       const bodies: Record<Event['kind'], z.ZodType> = { created: z.object({ inputHash: hash }).strict(), edited: z.object({ inputHash: hash }).strict(), committed: z.object({ inputHash: hash, commitment: hash }).strict(), evaluating: z.object({ generation: z.number().int().positive() }).strict(), completed: z.object({ resultHash: hash }).strict(), shared: z.object({ shared: z.boolean() }).strict(), annotation: z.object({ text: z.string().min(1).max(500), requestId: z.string().uuid() }).strict() };
       bodies[e.kind].parse(e.body);
       if (i === 0 && e.kind !== 'created') throw new Error('Missing initial event');
-      if (e.kind === 'committed') { if (++commits !== 1 || e.at !== b.committedAt || e.body.commitment !== b.commitment || e.body.inputHash !== inputHash(b.frozen)) throw new Error('Commit event mismatch'); }
+      if (i > 0 && e.kind === 'created') throw new Error('Duplicate creation');
+      if (e.kind === 'created' || e.kind === 'edited') lastInput = String(e.body.inputHash);
+      if (e.kind === 'committed') { if (++commits !== 1 || e.at !== b.committedAt || e.body.commitment !== b.commitment || e.body.inputHash !== inputHash(b.frozen) || lastInput !== inputHash(b.frozen)) throw new Error('Commit event mismatch'); }
       if (e.kind === 'edited' && commits) throw new Error('Post-commit edit');
-      if (e.kind === 'completed') { if (!commits || ++completes !== 1 || e.body.resultHash !== b.resultHash) throw new Error('Completion mismatch'); }
-      if (e.kind === 'evaluating' && (!commits || completes)) throw new Error('Evaluation order');
+      if (e.kind === 'completed') { if (!commits || !generation || ++completes !== 1 || e.body.resultHash !== b.resultHash) throw new Error('Completion mismatch'); }
+      if (e.kind === 'evaluating') { if (!commits || completes || e.body.generation !== generation + 1) throw new Error('Evaluation order'); generation++; }
+      if ((e.kind === 'shared' || e.kind === 'annotation') && !completes) throw new Error('Post-result event before completion');
       previous = h; at = Date.parse(e.at);
     }
     if (commits !== 1 || completes !== 1) throw new Error('Missing completed history');
