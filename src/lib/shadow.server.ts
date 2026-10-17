@@ -2,7 +2,7 @@ import { ENGINE, FORMAT, freeze, versionOf, termsSchema, frozenSchema, makeTape,
 import { domainHash } from '@/pq/canonical';
 const COLS = 'id,owner_id,agent_id,status,frozen,input_hash,seed_commit,committed_at,commitment,result,result_hash,tape,shared,generation,created_at';
 const must = (r: any) => { if (r.error) throw new Error(r.error.message); return r.data; };
-const rpc = async (db: any, owner: string, request: string, action: string, id: string | null, payload: unknown) => must(await db.rpc('shadow_write', { _owner: owner, _request: request, _action: action, _id: id, _payload: payload }));
+const rpc = async (db: any, owner: string, request: string, action: string, id: string | null, payload: unknown) => must(await db.rpc('shadow_write_v2', { _owner: owner, _request: request, _action: action, _id: id, _payload: payload }));
 export async function agentVersion(db: any, owner: string, id: string) {
   const a = must(await db.from('agents').select('id,handle,archetype,risk,persona,strategy,owner_id,status').eq('id', id).maybeSingle());
   if (!a || a.owner_id !== owner || a.status === 'archived') throw new Error('not_owner');
