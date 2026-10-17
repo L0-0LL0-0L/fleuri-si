@@ -1890,6 +1890,119 @@ export type Database = {
         }
         Relationships: []
       }
+      shadow_events: {
+        Row: {
+          event: Json
+          season_id: string
+          seq: number
+        }
+        Insert: {
+          event: Json
+          season_id: string
+          seq: number
+        }
+        Update: {
+          event?: Json
+          season_id?: string
+          seq?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shadow_events_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "shadow_seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shadow_requests: {
+        Row: {
+          body_hash: string
+          created_at: string
+          owner_id: string
+          request_id: string
+          response: Json
+        }
+        Insert: {
+          body_hash: string
+          created_at?: string
+          owner_id: string
+          request_id: string
+          response: Json
+        }
+        Update: {
+          body_hash?: string
+          created_at?: string
+          owner_id?: string
+          request_id?: string
+          response?: Json
+        }
+        Relationships: []
+      }
+      shadow_seasons: {
+        Row: {
+          agent_id: string
+          commitment: string | null
+          committed_at: string | null
+          created_at: string
+          frozen: Json
+          generation: number
+          id: string
+          input_hash: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          owner_id: string
+          result: Json | null
+          result_hash: string | null
+          seed_commit: string
+          seed_hex: string
+          shared: boolean
+          status: string
+          tape: Json | null
+        }
+        Insert: {
+          agent_id: string
+          commitment?: string | null
+          committed_at?: string | null
+          created_at?: string
+          frozen: Json
+          generation?: number
+          id?: string
+          input_hash: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          owner_id: string
+          result?: Json | null
+          result_hash?: string | null
+          seed_commit: string
+          seed_hex: string
+          shared?: boolean
+          status?: string
+          tape?: Json | null
+        }
+        Update: {
+          agent_id?: string
+          commitment?: string | null
+          committed_at?: string | null
+          created_at?: string
+          frozen?: Json
+          generation?: number
+          id?: string
+          input_hash?: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          owner_id?: string
+          result?: Json | null
+          result_hash?: string | null
+          seed_commit?: string
+          seed_hex?: string
+          shared?: boolean
+          status?: string
+          tape?: Json | null
+        }
+        Relationships: []
+      }
       thoughts: {
         Row: {
           agent_id: string
@@ -2983,6 +3096,23 @@ export type Database = {
           _proof: Json
           _public_key: string
           _signature: string
+        }
+        Returns: Json
+      }
+      shadow_canonical: { Args: { v: Json }; Returns: string }
+      shadow_hash: { Args: { d: string; v: Json }; Returns: string }
+      shadow_log: {
+        Args: { _body: Json; _id: string; _kind: string }
+        Returns: undefined
+      }
+      shadow_now: { Args: never; Returns: string }
+      shadow_write: {
+        Args: {
+          _action: string
+          _id: string
+          _owner: string
+          _payload: Json
+          _request: string
         }
         Returns: Json
       }
