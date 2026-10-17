@@ -65,6 +65,7 @@ begin
  if _owner is null or _request is null or octet_length(_payload::text)>500000 then raise exception 'invalid_request'; end if;
  perform pg_advisory_xact_lock(hashtextextended('shadow:'||_owner::text,0));
  bh:=public.shadow_hash('shadow.request/1',jsonb_build_object('action',_action,'id',_id,'payload',_payload));
+ if _action in ('create','edit') then bh:=_payload->>'saveBodyHash'; end if;
  select * into prior from public.shadow_requests where owner_id=_owner and request_id=_request;
  if found then if prior.body_hash<>bh then raise exception 'request_mismatch'; end if; return prior.response; end if;
  if _action not in ('create','edit','commit','claim','finish','share','annotate') then raise exception 'unsupported_action'; end if;
@@ -88,7 +89,7 @@ begin
   f:=jsonb_set(f,'{seedCommit}',to_jsonb(public.shadow_hash('shadow.seed/1',to_jsonb(seed))));
   insert into public.shadow_seasons(owner_id,agent_id,frozen,input_hash,seed_hex,seed_commit) values(_owner,a.id,f,public.shadow_hash('shadow.input/1',f),seed,f->>'seedCommit') returning * into s;
   perform public.shadow_log(s.id,'created',jsonb_build_object('inputHash',s.input_hash));
-  r:=jsonb_build_object('id',s.id,'status',s.status);
+  r:=jsonb_build_object('id',s.id,'status',s.status,'saveBodyHash',_payload->>'saveBodyHash');
  elsif _action='edit' then
   if s.status<>'draft' then raise exception 'frozen'; end if;
   if s.input_hash<>_payload->>'reviewedHash' then raise exception 'draft_conflict'; end if;
@@ -96,7 +97,7 @@ begin
   f:=jsonb_set(f,'{seedCommit}',to_jsonb(s.seed_commit));
   update public.shadow_seasons set frozen=f,input_hash=public.shadow_hash('shadow.input/1',f) where id=s.id returning * into s;
   perform public.shadow_log(s.id,'edited',jsonb_build_object('inputHash',s.input_hash));
-  r:=jsonb_build_object('id',s.id,'status',s.status);
+  r:=jsonb_build_object('id',s.id,'status',s.status,'saveBodyHash',_payload->>'saveBodyHash');
  elsif _action='commit' then
   if s.status<>'draft' then raise exception 'already_committed'; end if;
   if s.input_hash<>_payload->>'reviewedHash' then raise exception 'draft_conflict'; end if;
