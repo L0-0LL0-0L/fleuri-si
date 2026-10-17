@@ -14,7 +14,7 @@ export async function detail(db: any, id: string, owner: string | null) {
   if (!s || (s.owner_id !== owner && !s.shared)) return null;
   const events = must(await db.from('shadow_events').select('event').eq('season_id', id).order('seq', { ascending: true }).limit(200)).map((r: any) => r.event);
   let versionMatches: boolean | null = null;
-  if (owner === s.owner_id) try { versionMatches = domainHash('shadow.version/1', await agentVersion(db, owner, s.agent_id)) === domainHash('shadow.version/1', s.frozen.version); } catch { versionMatches = false; }
+  if (owner && owner === s.owner_id) try { versionMatches = domainHash('shadow.version/1', await agentVersion(db, owner, s.agent_id)) === domainHash('shadow.version/1', s.frozen.version); } catch { versionMatches = false; }
   // No owner identifier, private agent text, lease token or preimage in any DTO.
   const { owner_id, ...season } = s;
   let seed: string | null = null;
