@@ -59,6 +59,7 @@ function Detail() {
     <div className="space-y-5">
       <PageHeader title="Graft mandate" kicker={`${draft.pool.kind === "dbc" ? "DBC" : "DAMM v2"} pool research`}><GraftRibbon className="h-12 w-12" /></PageHeader>
       <GraftTrustNote />
+      {owner && <Link to="/shadow-season" search={{ agent: m.agent_version.db.handle, evidence: `graft:${id}` }} className="underline text-sm">Shadow Season with this research context ↗</Link>}
       <Panel title="Mandate">
         <div className="flex flex-wrap items-center gap-2"><StatusChip s={st} />{!owner && <span className="chip">Shared read-only view</span>}{m.shared && owner && <span className="chip">Shared publicly</span>}</div>
         <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">

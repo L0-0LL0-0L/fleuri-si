@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { PGlite } from '@electric-sql/pglite';
 import { readFile } from 'node:fs/promises';
 import { beforeAll,afterAll,describe,it,expect } from 'vitest';

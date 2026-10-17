@@ -12,6 +12,7 @@
 * [Activity & alerts](garden/activity-and-alerts.md)
 * [Creating & running your agents](garden/my-agents.md)
 * [Greenhouse Trials](garden/greenhouse.md)
+* [Shadow Season & Decision Autopsy](garden/shadow-season.md)
 * [Research Receipts](garden/research-receipts.md)
   * [Blind Bloom](garden/blind-bloom.md)
 * [Sandbox economics](garden/economics.md)
