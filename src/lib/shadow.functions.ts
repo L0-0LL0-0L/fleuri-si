@@ -1,0 +1,18 @@
+import { createServerFn } from '@tanstack/react-start';
+import { z } from 'zod';
+import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
+import { termsSchema } from '@/domain/shadow';
+const id = z.string().uuid();
+const requestId = id;
+const admin = async () => (await import('@/integrations/supabase/client.server')).supabaseAdmin as any;
+const S = () => import('./shadow.server');
+async function safely<T>(f: () => Promise<T>) { try { return { ok: true as const, data: await f() }; } catch (e) { const m = e instanceof Error ? e.message : ''; const known = ['not_owner','request_mismatch','changed_version','daily_quota','draft_conflict','frozen','lease_lost','inflight_quota','complete_before_sharing']; const reason = known.find(k => m.includes(k)); return { ok: false as const, error: reason ? reason.replaceAll('_',' ') : 'This research request could not be completed. Try again safely.' }; } }
+export const shadowMine = createServerFn({ method: 'POST' }).middleware([requireSupabaseAuth]).handler(({ context }) => safely(async () => (await S()).mine(await admin(), context.userId)));
+export const shadowDetail = createServerFn({ method: 'POST' }).middleware([requireSupabaseAuth]).inputValidator((d: unknown) => z.object({ id }).strict().parse(d)).handler(({ data, context }) => safely(async () => (await S()).detail(await admin(), data.id, context.userId)));
+export const shadowShared = createServerFn({ method: 'GET' }).inputValidator((d: unknown) => z.object({ id }).strict().parse(d)).handler(({ data }) => safely(async () => (await S()).detail(await admin(), data.id, null)));
+export const shadowSave = createServerFn({ method: 'POST' }).middleware([requireSupabaseAuth]).inputValidator((d: unknown) => z.object({ requestId, terms: termsSchema, id: id.nullable(), reviewedHash: z.string().regex(/^[a-f0-9]{64}$/).nullable() }).strict().parse(d)).handler(({ data, context }) => safely(async () => (await S()).save(await admin(), context.userId, data.requestId, data.terms, data.id, data.reviewedHash)));
+export const shadowCommit = createServerFn({ method: 'POST' }).middleware([requireSupabaseAuth]).inputValidator((d: unknown) => z.object({ id, requestId, reviewedHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(d)).handler(({ data, context }) => safely(async () => (await S()).commit(await admin(), context.userId, data.id, data.requestId, data.reviewedHash)));
+export const shadowEvaluate = createServerFn({ method: 'POST' }).middleware([requireSupabaseAuth]).inputValidator((d: unknown) => z.object({ id }).strict().parse(d)).handler(({ data, context }) => safely(async () => (await S()).run(await admin(), context.userId, data.id)));
+export const shadowShare = createServerFn({ method: 'POST' }).middleware([requireSupabaseAuth]).inputValidator((d: unknown) => z.object({ id, requestId, shared: z.boolean() }).strict().parse(d)).handler(({ data, context }) => safely(async () => (await S()).share(await admin(), context.userId, data.id, data.requestId, data.shared)));
+export const shadowAnnotate = createServerFn({ method: 'POST' }).middleware([requireSupabaseAuth]).inputValidator((d: unknown) => z.object({ id, requestId, text: z.string().trim().min(1).max(500) }).strict().parse(d)).handler(({ data, context }) => safely(async () => (await S()).annotate(await admin(), context.userId, data.id, data.requestId, data.text)));
+export const shadowExport = createServerFn({ method: 'GET' }).inputValidator((d: unknown) => z.object({ id }).strict().parse(d)).handler(({ data }) => safely(async () => { const s = await S(); const d = await s.detail(await admin(), data.id, null); return d ? s.toBundle(d) : null; }));
