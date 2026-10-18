@@ -211,6 +211,13 @@
       "when": 1792340707778,
       "tag": "0029_forward_watch",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792341227915,
+      "tag": "0030_forward_canonical_order",
+      "breakpoints": true
     }
   ]
 }

@@ -2649,6 +2649,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      forward_canonical: { Args: { v: Json }; Returns: string }
+      forward_hash: { Args: { d: string; v: Json }; Returns: string }
       forward_log: {
         Args: { _at: string; _body: Json; _id: string; _kind: string }
         Returns: undefined
