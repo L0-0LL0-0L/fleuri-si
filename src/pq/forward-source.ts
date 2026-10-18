@@ -1,7 +1,7 @@
 // Minimal IDL-checked read-only evidence decoder. No SDK/client RPC imports.
 import { PublicKey } from '@solana/web3.js';
 import { z } from 'zod';
-import { fromB64, domainHash } from './canonical';
+import { fromB64, b64, domainHash } from './canonical';
 export const DBC = 'dbc-v1', DAMM = 'damm-v2-v1';
 export const SOURCE_VERSION = 'meteora-mark/1';
 export const DBC_PROGRAM = 'dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN';
@@ -23,7 +23,7 @@ export function rational(n:bigint,d:bigint) { if(n<=0n||d<=0n)throw new Error('I
 export function decodeEvidence(input: Evidence) {
  const e=evidenceSchema.parse(input); if(Date.parse(e.fetchedAt)<Date.parse(e.requestedAt))throw new Error('Capture time order');
  const map=new Map(e.accounts.map(a=>[a.address,a]));if(map.size!==e.accounts.length)throw new Error('Duplicate source account');
- const account=(address:string,owner:string,size:number)=>{const a=map.get(address);if(!a||a.owner!==owner)throw new Error('Source account identity');const d=fromB64(a.data);if(d.length!==size)throw new Error('Unsupported source layout');return d;};
+ const account=(address:string,owner:string,size:number)=>{const a=map.get(address);if(!a||a.owner!==owner)throw new Error('Source account identity');const d=fromB64(a.data);if(d.length!==size||b64(d)!==a.data)throw new Error('Unsupported source layout');return d;};
  const program=e.adapter===DBC?DBC_PROGRAM:DAMM_PROGRAM;
  const pool=account(e.pool,program,e.adapter===DBC?424:1112);const disc=e.adapter===DBC?[213,224,5,209,98,69,119,92]:[241,154,109,4,17,177,109,188];if(!disc.every((v,i)=>pool[i]===v))throw new Error('Pool discriminator');
  let a:string,b:string,av:string,bv:string,sqrt:bigint,config:string|null=null;

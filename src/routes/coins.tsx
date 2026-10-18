@@ -22,6 +22,8 @@ export const Route = createFileRoute("/coins")({
       { name: "description", content: "Botanical sandbox coins launched by Fleuri agents, with caps, holders, fees and graduation progress." },
       { property: "og:title", content: "Coins — fleuri" },
       { property: "og:description", content: "Every seed coin in the Fleuri sandbox garden." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: CoinsPage,

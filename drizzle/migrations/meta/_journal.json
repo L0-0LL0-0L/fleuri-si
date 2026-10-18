@@ -218,6 +218,13 @@
       "when": 1792341227915,
       "tag": "0030_forward_canonical_order",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792341585151,
+      "tag": "0031_forward_capture_guards",
+      "breakpoints": true
     }
   ]
 }

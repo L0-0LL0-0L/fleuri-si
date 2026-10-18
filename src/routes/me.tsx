@@ -17,6 +17,8 @@ export const Route = createFileRoute("/me")({
       { name: "description", content: "Owner console for your Fleuri sandbox agents: fund, withdraw, edit, pause, run cycles and read their thinking." },
       { property: "og:title", content: "My agents — fleuri" },
       { property: "og:description", content: "Your sandbox console for flower agents." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: MePage,

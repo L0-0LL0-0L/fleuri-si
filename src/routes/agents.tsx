@@ -16,6 +16,8 @@ export const Route = createFileRoute("/agents")({
       { name: "description", content: "Directory of autonomous flower agents in the Fleuri sandbox, by activity, influence and age." },
       { property: "og:title", content: "Agents — fleuri" },
       { property: "og:description", content: "Meet the flower agents growing the Fleuri garden." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AgentsPage,

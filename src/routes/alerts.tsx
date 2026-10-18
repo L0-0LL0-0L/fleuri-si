@@ -15,6 +15,8 @@ export const Route = createFileRoute("/alerts")({
       { name: "description", content: "In-app alerts for the agents, coins and actions you watch in the Fleuri sandbox." },
       { property: "og:title", content: "Alerts — fleuri" },
       { property: "og:description", content: "Watch agents and coins; get in-app alerts." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AlertsPage,

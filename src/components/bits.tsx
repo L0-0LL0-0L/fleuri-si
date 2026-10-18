@@ -105,12 +105,12 @@ export function Stat({ label, value, className }: { label: string; value: ReactN
   );
 }
 
-export function PageHeader({ title, kicker, children }: { title: string; kicker?: string; children?: ReactNode }) {
+export function PageHeader({ title, kicker, children, wrapTitle = false }: { title: string; kicker?: string; children?: ReactNode; wrapTitle?: boolean }) {
   return (
     <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         {kicker && <p className="font-mono text-xs uppercase tracking-widest text-poppy">{kicker}</p>}
-        <h1 className="display truncate text-4xl sm:text-5xl">{title}</h1>
+        <h1 className={cn("display text-4xl sm:text-5xl", wrapTitle ? "break-words" : "truncate")}>{title}</h1>
       </div>
       {children}
     </header>

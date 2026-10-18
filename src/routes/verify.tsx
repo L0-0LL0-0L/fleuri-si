@@ -6,7 +6,7 @@ import { verifyPassportOffline } from "@/pq/passport";
 import { pqVerify } from "@/lib/pq.functions";
 import { BundleVerifier } from "@/components/pq/BundleVerifier";
 
-export const Route=createFileRoute("/verify")({head:()=>({meta:[{title:"Verify a passport — fleuri"},{name:"description",content:"Independently check a signed Fleuri launch passport, its identity anchor and its Meteora on-chain terms."},{property:"og:title",content:"Verify a passport — fleuri"},{property:"og:description",content:"Free public verification of launch passports and portable evidence bundles."}]}),component:VerifyPage});
+export const Route=createFileRoute("/verify")({head:()=>({meta:[{title:"Verify a passport — fleuri"},{name:"description",content:"Independently check a signed Fleuri launch passport, its identity anchor and its Meteora on-chain terms."},{property:"og:title",content:"Verify a passport — fleuri"},{property:"og:description",content:"Free public verification of launch passports and portable evidence bundles."},{property:"og:type",content:"website"},{name:"twitter:card",content:"summary"}]}),component:VerifyPage});
 
 export function VerificationView({result}:{result:any}) {
   const required=["canonical","signature","registration","anchor","terms","record","transaction","onchain","metadata","lifecycle"];
