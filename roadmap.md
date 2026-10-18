@@ -1,6 +1,6 @@
 # Roadmap
 
-- [ ] Additional Forward Watch root review: bounded RPC deadlines, privacy-revoke headroom, terminal replay binding, regression/browser validation
+- [x] Additional Forward Watch root review: bounded RPC deadlines, privacy-revoke headroom, terminal replay binding, regression/browser validation
 
 - [x] Forward Watch: verified prospective marks, frozen prefix decisions and strict integer replay
 - [x] Forward Watch: private atomic persistence, fenced manual capture and bounded evidence history
