@@ -31,6 +31,8 @@ import { Route as AHandleRouteImport } from './routes/a.$handle'
 import { Route as BlindBloomIndexRouteImport } from './routes/blind-bloom.index'
 import { Route as BlindBloomIdRouteImport } from './routes/blind-bloom.$id'
 import { Route as CSymbolRouteImport } from './routes/c.$symbol'
+import { Route as ForwardWatchIndexRouteImport } from './routes/forward-watch.index'
+import { Route as ForwardWatchIdRouteImport } from './routes/forward-watch.$id'
 import { Route as GraftIndexRouteImport } from './routes/graft.index'
 import { Route as GraftIdRouteImport } from './routes/graft.$id'
 import { Route as GreenhouseIndexRouteImport } from './routes/greenhouse.index'
@@ -155,6 +157,16 @@ const CSymbolRoute = CSymbolRouteImport.update({
   path: '/c/$symbol',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ForwardWatchIndexRoute = ForwardWatchIndexRouteImport.update({
+  id: '/forward-watch/',
+  path: '/forward-watch/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForwardWatchIdRoute = ForwardWatchIdRouteImport.update({
+  id: '/forward-watch/$id',
+  path: '/forward-watch/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GraftIndexRoute = GraftIndexRouteImport.update({
   id: '/graft/',
   path: '/graft/',
@@ -243,6 +255,7 @@ export interface FileRoutesByFullPath {
   '/a/$handle': typeof AHandleRoute
   '/blind-bloom/$id': typeof BlindBloomIdRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/forward-watch/$id': typeof ForwardWatchIdRoute
   '/graft/$id': typeof GraftIdRoute
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
@@ -250,6 +263,7 @@ export interface FileRoutesByFullPath {
   '/shadow-season/$id': typeof ShadowSeasonIdRoute
   '/t/$mint': typeof TMintRoute
   '/blind-bloom/': typeof BlindBloomIndexRoute
+  '/forward-watch/': typeof ForwardWatchIndexRoute
   '/graft/': typeof GraftIndexRoute
   '/greenhouse/': typeof GreenhouseIndexRoute
   '/receipts/': typeof ReceiptsIndexRoute
@@ -280,6 +294,7 @@ export interface FileRoutesByTo {
   '/a/$handle': typeof AHandleRoute
   '/blind-bloom/$id': typeof BlindBloomIdRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/forward-watch/$id': typeof ForwardWatchIdRoute
   '/graft/$id': typeof GraftIdRoute
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
@@ -287,6 +302,7 @@ export interface FileRoutesByTo {
   '/shadow-season/$id': typeof ShadowSeasonIdRoute
   '/t/$mint': typeof TMintRoute
   '/blind-bloom': typeof BlindBloomIndexRoute
+  '/forward-watch': typeof ForwardWatchIndexRoute
   '/graft': typeof GraftIndexRoute
   '/greenhouse': typeof GreenhouseIndexRoute
   '/receipts': typeof ReceiptsIndexRoute
@@ -318,6 +334,7 @@ export interface FileRoutesById {
   '/a/$handle': typeof AHandleRoute
   '/blind-bloom/$id': typeof BlindBloomIdRoute
   '/c/$symbol': typeof CSymbolRoute
+  '/forward-watch/$id': typeof ForwardWatchIdRoute
   '/graft/$id': typeof GraftIdRoute
   '/passport/$hash': typeof PassportHashRoute
   '/receipts/$id': typeof ReceiptsIdRoute
@@ -325,6 +342,7 @@ export interface FileRoutesById {
   '/shadow-season/$id': typeof ShadowSeasonIdRoute
   '/t/$mint': typeof TMintRoute
   '/blind-bloom/': typeof BlindBloomIndexRoute
+  '/forward-watch/': typeof ForwardWatchIndexRoute
   '/graft/': typeof GraftIndexRoute
   '/greenhouse/': typeof GreenhouseIndexRoute
   '/receipts/': typeof ReceiptsIndexRoute
@@ -357,6 +375,7 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/blind-bloom/$id'
     | '/c/$symbol'
+    | '/forward-watch/$id'
     | '/graft/$id'
     | '/passport/$hash'
     | '/receipts/$id'
@@ -364,6 +383,7 @@ export interface FileRouteTypes {
     | '/shadow-season/$id'
     | '/t/$mint'
     | '/blind-bloom/'
+    | '/forward-watch/'
     | '/graft/'
     | '/greenhouse/'
     | '/receipts/'
@@ -394,6 +414,7 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/blind-bloom/$id'
     | '/c/$symbol'
+    | '/forward-watch/$id'
     | '/graft/$id'
     | '/passport/$hash'
     | '/receipts/$id'
@@ -401,6 +422,7 @@ export interface FileRouteTypes {
     | '/shadow-season/$id'
     | '/t/$mint'
     | '/blind-bloom'
+    | '/forward-watch'
     | '/graft'
     | '/greenhouse'
     | '/receipts'
@@ -431,6 +453,7 @@ export interface FileRouteTypes {
     | '/a/$handle'
     | '/blind-bloom/$id'
     | '/c/$symbol'
+    | '/forward-watch/$id'
     | '/graft/$id'
     | '/passport/$hash'
     | '/receipts/$id'
@@ -438,6 +461,7 @@ export interface FileRouteTypes {
     | '/shadow-season/$id'
     | '/t/$mint'
     | '/blind-bloom/'
+    | '/forward-watch/'
     | '/graft/'
     | '/greenhouse/'
     | '/receipts/'
@@ -469,6 +493,7 @@ export interface RootRouteChildren {
   AHandleRoute: typeof AHandleRoute
   BlindBloomIdRoute: typeof BlindBloomIdRoute
   CSymbolRoute: typeof CSymbolRoute
+  ForwardWatchIdRoute: typeof ForwardWatchIdRoute
   GraftIdRoute: typeof GraftIdRoute
   PassportHashRoute: typeof PassportHashRoute
   ReceiptsIdRoute: typeof ReceiptsIdRoute
@@ -476,6 +501,7 @@ export interface RootRouteChildren {
   ShadowSeasonIdRoute: typeof ShadowSeasonIdRoute
   TMintRoute: typeof TMintRoute
   BlindBloomIndexRoute: typeof BlindBloomIndexRoute
+  ForwardWatchIndexRoute: typeof ForwardWatchIndexRoute
   GraftIndexRoute: typeof GraftIndexRoute
   GreenhouseIndexRoute: typeof GreenhouseIndexRoute
   ReceiptsIndexRoute: typeof ReceiptsIndexRoute
@@ -641,6 +667,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CSymbolRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/forward-watch/': {
+      id: '/forward-watch/'
+      path: '/forward-watch'
+      fullPath: '/forward-watch/'
+      preLoaderRoute: typeof ForwardWatchIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forward-watch/$id': {
+      id: '/forward-watch/$id'
+      path: '/forward-watch/$id'
+      fullPath: '/forward-watch/$id'
+      preLoaderRoute: typeof ForwardWatchIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/graft/': {
       id: '/graft/'
       path: '/graft'
@@ -757,6 +797,7 @@ const rootRouteChildren: RootRouteChildren = {
   AHandleRoute: AHandleRoute,
   BlindBloomIdRoute: BlindBloomIdRoute,
   CSymbolRoute: CSymbolRoute,
+  ForwardWatchIdRoute: ForwardWatchIdRoute,
   GraftIdRoute: GraftIdRoute,
   PassportHashRoute: PassportHashRoute,
   ReceiptsIdRoute: ReceiptsIdRoute,
@@ -764,6 +805,7 @@ const rootRouteChildren: RootRouteChildren = {
   ShadowSeasonIdRoute: ShadowSeasonIdRoute,
   TMintRoute: TMintRoute,
   BlindBloomIndexRoute: BlindBloomIndexRoute,
+  ForwardWatchIndexRoute: ForwardWatchIndexRoute,
   GraftIndexRoute: GraftIndexRoute,
   GreenhouseIndexRoute: GreenhouseIndexRoute,
   ReceiptsIndexRoute: ReceiptsIndexRoute,

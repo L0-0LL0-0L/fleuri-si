@@ -26,6 +26,7 @@ const NAV = [
   { to: "/receipts", label: "Research receipts", icon: BookOpen },
   { to: "/graft", label: "Graft steward", icon: Sprout },
   { to: "/shadow-season", label: "Shadow Season", icon: Flower2 },
+  { to: "/forward-watch", label: "Forward Watch", icon: Sprout },
   { to: "/docs", label: "How it works", icon: BookOpen },
   { to: "/launchpad", label: "Launchpad", icon: Sprout },
   { to: "/identity", label: "PQ identity", icon: Flower2 },
