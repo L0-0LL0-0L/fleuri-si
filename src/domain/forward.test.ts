@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe,it,expect } from 'vitest';
 import { sourceFixture } from '@/pq/forward-fixtures';
 import { decodeEvidence,DBC,DAMM,evidenceHash } from '@/pq/forward-source';
