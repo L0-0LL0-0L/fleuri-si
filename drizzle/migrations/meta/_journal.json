@@ -225,6 +225,13 @@
       "when": 1792341585151,
       "tag": "0031_forward_capture_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792342425899,
+      "tag": "0032_forward_history_headroom",
+      "breakpoints": true
     }
   ]
 }
