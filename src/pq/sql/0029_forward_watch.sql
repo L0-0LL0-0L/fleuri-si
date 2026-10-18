@@ -27,7 +27,8 @@ perform pg_advisory_xact_lock(hashtextextended('forward:'||_owner::text,0));nowt
 bh:=_payload->>'bodyHash';if coalesce(bh,'')!~'^[a-f0-9]{64}$' then raise exception 'request_mismatch';end if;
 select * into prior from public.forward_requests where owner_id=_owner and request_id=_request;
 if found and prior.body_hash<>bh then raise exception 'request_mismatch';end if;
-if found and _action not in('finish','fail') then return prior.response;end if;
+if found and _action not in('finish','fail','reserve') then return prior.response;end if;
+if found and _action='reserve' and prior.response->>'status'<>'reserved' then return prior.response;end if;
 if _action not in('create','edit','reserve','finish','fail','share','annotate','end') then raise exception 'unsupported_action';end if;
 if _action<>'create' then select * into w from public.forward_watches where id=_id for update;if not found or w.owner_id<>_owner then raise exception 'not_owner';end if;end if;
 if _action in('create','edit') or (_action='reserve' and w.committed_at is null) then
@@ -63,6 +64,7 @@ elsif _action='reserve' then
 elsif _action in('finish','fail') then
  if w.lease_token::text is distinct from _payload->>'token' or w.generation<>(_payload->>'generation')::int or w.lease_until<=nowtime or w.status<>'watching' then raise exception 'lease_lost';end if;
  initial:=jsonb_array_length(w.observations)=0;
+ if initial and _action='finish' then select * into a from public.agents where id=w.agent_id for update;expected:=jsonb_build_object('handle',a.handle,'archetype',a.archetype,'risk',a.risk,'personaDigest',public.shadow_hash('shadow.persona/1',to_jsonb(a.persona)),'strategyDigest',public.shadow_hash('shadow.strategy/1',to_jsonb(a.strategy)));if a.owner_id<>_owner::text or a.status='archived' or w.frozen->'version'->'db'<>expected then raise exception 'changed_version';end if;end if;
  if _action='fail' then
   update public.forward_watches set lease_token=null,lease_until=null,status=case when _payload->>'reason'='source_changed' or initial then 'incomplete' else 'watching' end where id=w.id;
   perform public.forward_log(w.id,'failure',jsonb_build_object('reason',case when _payload->>'reason' in('source_changed','stale_source','source_unavailable') then _payload->>'reason' else 'source_unavailable' end,'requestedAt',w.request_started,'generation',w.generation),stamp);r:=jsonb_build_object('id',w.id,'status','failed');
