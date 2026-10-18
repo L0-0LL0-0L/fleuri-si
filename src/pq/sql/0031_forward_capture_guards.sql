@@ -1,0 +1,24 @@
+-- Strengthen the existing service-only coordinator without rewriting saved evidence.
+DO $$ declare definition text; begin
+ select pg_get_functiondef('public.forward_write(uuid,uuid,text,uuid,jsonb)'::regprocedure) into definition;
+ definition:=replace(definition,
+ 'if w.status not in(''draft'',''watching'') then raise exception ''ended'';end if;if w.lease_until>nowtime then raise exception ''busy'';end if;',
+ 'if w.status not in(''draft'',''watching'') then raise exception ''ended'';end if;if w.lease_until>nowtime then if prior.response->>''token''=w.lease_token::text and (prior.response->>''generation'')::int=w.generation then return prior.response;end if;raise exception ''busy'';end if;
+ if jsonb_array_length(w.observations)<>jsonb_array_length(w.proposals) then raise exception ''prefix_mismatch'';end if;
+ if jsonb_array_length(w.observations)>=(w.frozen->''terms''->>''maxSteps'')::int then raise exception ''ended'';end if;');
+ definition:=replace(definition,
+ 'lastobs:=w.observations->(jsonb_array_length(w.observations)-1);lastprop:=w.proposals->(jsonb_array_length(w.proposals)-1);',
+ 'lastobs:=w.observations->(jsonb_array_length(w.observations)-1);lastprop:=w.proposals->(jsonb_array_length(w.proposals)-1);
+ if lastobs is not null and ((lastprop->>''index'')::int<>jsonb_array_length(w.observations)-1 or lastprop->>''prefixHash''<>public.forward_hash(''forward.prefix/1'',(select jsonb_agg(public.forward_hash(''forward.evidence/1'',v) order by ord) from jsonb_array_elements(w.observations) with ordinality x(v,ord))) or (lastprop->>''decisionAt'')::timestamptz<(lastobs->>''fetchedAt'')::timestamptz) then raise exception ''prefix_mismatch'';end if;');
+ definition:=replace(definition,
+ 'prop:=jsonb_set(prop,''{decisionAt}'',to_jsonb(stamp));',
+ 'if (obs->>''fetchedAt'')::timestamptz-(obs->>''requestedAt'')::timestamptz>interval ''45 seconds'' or to_timestamp((obs->>''blockTime'')::bigint)>(obs->>''fetchedAt'')::timestamptz+interval ''5 seconds'' or (obs->>''fetchedAt'')::timestamptz>w.committed_at::timestamptz+(w.frozen->''terms''->>''expirySeconds'')::int*interval ''1 second'' then raise exception ''invalid_capture'';end if;
+ prop:=jsonb_set(prop,''{decisionAt}'',to_jsonb(stamp));');
+ -- Full schedule completion derives from stored successful requests, never a caller flag.
+ definition:=replace(definition,
+ 'case when _payload->>''complete''=''true'' then ''complete'' else ''partial'' end',
+ 'case when not exists(select 1 from jsonb_array_elements(observations||jsonb_build_array(obs)) with ordinality x(v,ord) where (v->>''requestedAt'')::timestamptz>w.committed_at::timestamptz+((ord-1)*(w.frozen->''terms''->>''cadenceSeconds'')::int+(w.frozen->''terms''->>''windowSeconds'')::int)*interval ''1 second'') then ''complete'' else ''partial'' end');
+ execute definition;
+end $$;
+revoke all on function public.forward_write(uuid,uuid,text,uuid,jsonb) from public,anon,authenticated,service_role;
+grant execute on function public.forward_write(uuid,uuid,text,uuid,jsonb) to service_role;
