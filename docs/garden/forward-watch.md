@@ -23,3 +23,7 @@ Autopsy compares observed hypothetical accounting, costs, inventory effects and 
 ## Replay and trust
 
 Exports include raw bounded account bytes, source manifests, frozen settings and digests, proposals, observations, events and accounting. The strict new versioned verifier recomputes decoding, source/commitment/prefix/time/history hashes and hypothetical inventory. It rejects malformed, duplicate-key, unknown-version, oversized and inconsistent evidence. It does not prove RPC authenticity, historical timestamp truth, finality, chain execution or AI performance. Existing synthetic Shadow Season exports retain their original version and semantics.
+
+Local verification: `bun scripts/verify-forward.ts evidence.json`, using the notebook verifier with nonzero exit status on failure.
+
+The installed DAMM Pool layout retains no config key. Checks bind program ownership/discriminator, decoded pair, canonical vault PDAs/custody and lifecycle; original config-bound creation PDA/transaction provenance is not independently proved. RPC responses remain trusted.
