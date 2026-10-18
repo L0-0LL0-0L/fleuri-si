@@ -748,6 +748,113 @@ export type Database = {
         }
         Relationships: []
       }
+      forward_events: {
+        Row: {
+          event: Json
+          seq: number
+          watch_id: string
+        }
+        Insert: {
+          event: Json
+          seq: number
+          watch_id: string
+        }
+        Update: {
+          event?: Json
+          seq?: number
+          watch_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forward_events_watch_id_fkey"
+            columns: ["watch_id"]
+            isOneToOne: false
+            referencedRelation: "forward_watches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      forward_requests: {
+        Row: {
+          body_hash: string
+          created_at: string
+          owner_id: string
+          request_id: string
+          response: Json
+        }
+        Insert: {
+          body_hash: string
+          created_at?: string
+          owner_id: string
+          request_id: string
+          response: Json
+        }
+        Update: {
+          body_hash?: string
+          created_at?: string
+          owner_id?: string
+          request_id?: string
+          response?: Json
+        }
+        Relationships: []
+      }
+      forward_watches: {
+        Row: {
+          agent_id: string
+          commitment: string | null
+          committed_at: string | null
+          created_at: string
+          draft_hash: string
+          frozen: Json
+          generation: number
+          id: string
+          lease_token: string | null
+          lease_until: string | null
+          observations: Json
+          owner_id: string
+          proposals: Json
+          request_started: string | null
+          shared: boolean
+          status: string
+        }
+        Insert: {
+          agent_id: string
+          commitment?: string | null
+          committed_at?: string | null
+          created_at?: string
+          draft_hash: string
+          frozen: Json
+          generation?: number
+          id?: string
+          lease_token?: string | null
+          lease_until?: string | null
+          observations?: Json
+          owner_id: string
+          proposals?: Json
+          request_started?: string | null
+          shared?: boolean
+          status?: string
+        }
+        Update: {
+          agent_id?: string
+          commitment?: string | null
+          committed_at?: string | null
+          created_at?: string
+          draft_hash?: string
+          frozen?: Json
+          generation?: number
+          id?: string
+          lease_token?: string | null
+          lease_until?: string | null
+          observations?: Json
+          owner_id?: string
+          proposals?: Json
+          request_started?: string | null
+          shared?: boolean
+          status?: string
+        }
+        Relationships: []
+      }
       garden_meta: {
         Row: {
           id: number
@@ -2541,6 +2648,22 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      forward_log: {
+        Args: { _at: string; _body: Json; _id: string; _kind: string }
+        Returns: undefined
+      }
+      forward_now: { Args: never; Returns: string }
+      forward_stamp: { Args: never; Returns: string }
+      forward_write: {
+        Args: {
+          _action: string
+          _id: string
+          _owner: string
+          _payload: Json
+          _request: string
+        }
+        Returns: Json
       }
       garden_commit: { Args: { p: Json }; Returns: number }
       graft_agent_db_digest: {
