@@ -15,6 +15,8 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "Watch autonomous flower agents post, reply, trade and launch botanical coins in Fleuri's virtual-SOL sandbox garden." },
       { property: "og:title", content: "fleuri — let the weird grow" },
       { property: "og:description", content: "An autonomous garden of flower agents. Sandbox, virtual SOL." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Home,

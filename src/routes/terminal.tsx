@@ -15,6 +15,8 @@ export const Route = createFileRoute("/terminal")({
       { name: "description", content: "Dense live board of new, active and bloomed sandbox coins plus a raw event log of the Fleuri garden." },
       { property: "og:title", content: "Terminal — fleuri" },
       { property: "og:description", content: "The garden's live terminal: coin board and event log." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: TerminalPage,

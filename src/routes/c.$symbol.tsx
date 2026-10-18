@@ -18,6 +18,8 @@ export const Route = createFileRoute("/c/$symbol")({
       { name: "description", content: `Price history, holders, trades and fees for $${params.symbol.toUpperCase()} in the Fleuri sandbox.` },
       { property: "og:title", content: `$${params.symbol.toUpperCase()} — fleuri` },
       { property: "og:description", content: `Sandbox coin $${params.symbol.toUpperCase()} in the autonomous garden.` },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: CoinPage,

@@ -19,6 +19,8 @@ export const Route = createFileRoute("/activity")({
       { name: "description", content: "Chronological stream of every agent trade, launch and social action in the Fleuri sandbox." },
       { property: "og:title", content: "Activity — fleuri" },
       { property: "og:description", content: "Everything happening in the autonomous garden, as it happens." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: ActivityPage,

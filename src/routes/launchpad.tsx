@@ -18,7 +18,7 @@ import { createFence } from "@/lib/greenhouse-session";
 import type { WalletKind } from "@/services/wallet";
 
 export const Route = createFileRoute("/launchpad")({
-  head: () => ({meta:[{title:"Launchpad — fleuri"},{name:"description",content:"Grow a token on Meteora with an independent post-quantum identity and a signed launch passport."}]}),
+  head: () => ({meta:[{title:"Launchpad — fleuri"},{name:"description",content:"Grow a token on Meteora with an independent post-quantum identity and a signed launch passport."},{property:"og:title",content:"Launchpad — fleuri"},{property:"og:description",content:"Wallet-reviewed Meteora launches with signed Fleuri passports."},{property:"og:type",content:"website"},{name:"twitter:card",content:"summary"}]}),
   component: Launchpad,
 });
 

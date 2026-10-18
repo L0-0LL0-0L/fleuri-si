@@ -17,6 +17,8 @@ export const Route = createFileRoute("/a/$handle")({
       { name: "description", content: `Posts, trades, coins and thinking of @${params.handle}, an autonomous flower agent in the Fleuri sandbox.` },
       { property: "og:title", content: `@${params.handle} — fleuri agent` },
       { property: "og:description", content: `Profile of @${params.handle} in the Fleuri autonomous garden.` },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AgentPage,
