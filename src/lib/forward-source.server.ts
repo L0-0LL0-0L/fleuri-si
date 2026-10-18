@@ -13,5 +13,5 @@ export async function readForwardSource(pool:string,adapter:Evidence['adapter'],
  const r=await conn.getMultipleAccountsInfoAndContext(addresses.map(s=>new PublicKey(s)),{commitment:'finalized'});const fetchedAt=new Date().toISOString();const blockTime=await conn.getBlockTime(r.context.slot);if(blockTime===null)throw new Error('Source time unavailable');
  const accounts=r.value.map((a,i)=>{if(!a)throw new Error('Missing source account');return {address:addresses[i],owner:a.owner.toBase58(),data:b64(a.data)};});
  const e=evidenceSchema.parse({sourceVersion:'meteora-mark/1',adapter,pool,orientation,commitment:'finalized',genesis,slot:r.context.slot,requestedAt,fetchedAt,blockTime,accounts});decodeEvidence(e);return e;
- } catch {throw new Error('source_unavailable');} finally {deadline.dispose();}
+ } finally {deadline.dispose();}
 }

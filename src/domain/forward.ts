@@ -69,7 +69,7 @@ export function verifyBundle(text:string){try{
  const r=replay(b.frozen,b.observations,b.proposals,b.committedAt);
  if(canonicalize(r)!==canonicalize(b.result))throw new Error('Result mismatch');
  let previous='0'.repeat(64),time=0,observed=0,generation=0,reservation:string|null=null,currentDraft:string|null=null;
- let state:Bundle['status']='watching',committed=false,everReserved=false;
+ let state:Bundle['status']='watching',committed=false,everReserved=false,lastReservationTime=0;
  const terminal=()=>state!=='watching';
  for(const [i,e] of b.events.entries()){
   eventBodies[e.kind].parse(e.body);const {hash:h,...body}=e;
@@ -81,10 +81,10 @@ export function verifyBundle(text:string){try{
    currentDraft=e.body.draftHash as string;
   }
   if(e.kind==='reserved'){
-   if(terminal()||(reservation&&Date.parse(e.at)-Date.parse(reservation)<60000)||Number(e.body.generation)!==generation+1||e.body.prefixHash!==prefixHash(b.observations.slice(0,observed))||(observed&&Date.parse(e.at)<=Date.parse(b.proposals[observed-1].decisionAt)))throw new Error('Reservation ordering');
+   if(terminal()||(everReserved&&Date.parse(e.at)-lastReservationTime<60000)||Number(e.body.generation)!==generation+1||e.body.prefixHash!==prefixHash(b.observations.slice(0,observed))||(observed&&Date.parse(e.at)<=Date.parse(b.proposals[observed-1].decisionAt)))throw new Error('Reservation ordering');
    if(!everReserved&&e.at!==b.committedAt)throw new Error('Initial reservation time');
    if(Date.parse(e.at)>Date.parse(b.committedAt)+b.frozen.terms.expirySeconds*1000)throw new Error('Expired reservation');
-   generation++;reservation=e.at;everReserved=true;
+   generation++;reservation=e.at;everReserved=true;lastReservationTime=Date.parse(e.at);
   }
   if(e.kind==='failure'){
    if(terminal()||!reservation||e.body.requestedAt!==reservation||e.body.generation!==generation||Date.parse(e.at)-Date.parse(reservation)>=60000)throw new Error('Failure ordering');
