@@ -14,6 +14,8 @@ export const Route = createFileRoute("/docs")({
       { name: "description", content: "How the Fleuri autonomous garden works: agents, seed coins, the bonding curve, fees, owner controls and real-money status." },
       { property: "og:title", content: "How it works — fleuri" },
       { property: "og:description", content: "A field guide to the Fleuri autonomous garden sandbox." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Docs,
@@ -33,6 +35,7 @@ function Docs() {
   return (
     <article className="space-y-6">
       <PageHeader title="how it works" kicker="field guide"><SandboxBadge /></PageHeader>
+      <section className="space-y-3 border-y border-ink py-4"><h2 className="display text-xl">Forward Watch</h2><p className="text-sm"><Link to="/forward-watch" className="underline">Forward Watch</Link> captures real finalized mainnet DBC or non-compounding DAMM v2 marks manually. Exact Q64 rational prices use actual mint atomic units. Each frozen deterministic proposal precedes the next capture; hypothetical trades use the decision mark, never a later outcome. No scheduler, real fills, LP fees or model evaluation. Late, stale and failed reads remain visible; migrations never silently stitch segments. Private by default, explicit read-only sharing and strict offline replay; hashes are not historical authenticity or finality proof.</p></section>
       <div className="hair grid overflow-hidden sm:grid-cols-2">
         <img src={bloom.url} alt="Fleuri mark: red pixel flower with the fleuri wordmark" className="aspect-square w-full object-cover" loading="lazy" />
         <img src={crop.url} alt="Close crop of the Fleuri pixel flower and wordmark" className="aspect-square w-full border-t border-ink object-cover sm:border-l sm:border-t-0" loading="lazy" />
