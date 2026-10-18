@@ -1,5 +1,13 @@
 # Forward Watch validation
 
+## Additional root review, 2026-10-18
+
+- Per-RPC deadlines: 10 seconds including response body; total capture: 40 seconds from the reservation timestamp, below the 45-second evidence bound and 60-second lease. Abort/sanitized failures are tested, including stalled bodies and sequential calls.
+- Applied migration 0032 blocks enabling sharing, annotations and edits at 240 events, retaining completion/end/revocation headroom. A legacy already-full 256-event history permits Make private without appending another event; history remains bounded, and public RLS access is revoked. New histories retain revocation events normally.
+- Strict replay derives terminal status from events/counts/schedule; rejects duplicate terminal events, premature expiry, capture before initial committed event, lease/spacing violations and rehashed inconsistent failure/status history.
+- New mainnet owner browser journey: commit, second capture after a legitimate wait, autopsy, browser/CLI replay PASS, signed-out read-only share, mobile reduced-motion/no overflow, revocation denial and ended-private evidence preserved. Slots 458508736 → 458509045. Screenshots/evidence/logs: `/tmp/browser/forward-root-review/`; no page errors.
+- Closing regression run at 16:59:10 UTC: **67 files, 602 tests passed**, max two workers, 126.45 seconds; includes the failed-attempt retry-spacing regression. Automatic preview build was **OK at 16:59:02 UTC**. Closing browser replay/share/revocation/reduced-motion checks also passed without page errors. Validation checkpoint `09695559edb0ec63ef6bcf8c363dccedf2e0abf7` before this report update. No publication, funds or signing.
+
 Checked 2026-10-18; resumed baseline `d54c2b50ef6929ca083e95bc26d530eb081843dc`, validation checkpoint `c14c5decb972c3df2fb96b1e2689746e5c275e52` before final documentation/timing-label edits. No publication, deployment, signing or transfers.
 
 ## Delivered and checks

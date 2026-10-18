@@ -63,5 +63,54 @@ export const eventHash=(e:Omit<Event,'hash'>)=>domainHash('forward.event/1',e);
 const bundleSchema=z.object({format:z.literal(FORMAT),id:z.string().uuid(),frozen:frozenSchema,committedAt:date,commitment:hash,observations:z.array(evidenceSchema).min(1).max(48),proposals:z.array(proposalSchema).min(1).max(48),events:z.array(eventSchema).min(3).max(256),result:z.unknown(),status:z.enum(['watching','complete','partial','ended','expired','incomplete']),root:hash}).strict();
 export type Bundle=z.infer<typeof bundleSchema>;
 export const bundleRoot=(b:Omit<Bundle,'root'>)=>domainHash('forward.bundle/1',b);
-export function verifyBundle(text:string){try{const b=bundleSchema.parse(parseStrictJson(text,{maxBytes:1500000,maxDepth:24}));if(b.commitment!==commitmentHash(b.frozen,b.committedAt,b.observations[0]))throw new Error('Commitment mismatch');const r=replay(b.frozen,b.observations,b.proposals,b.committedAt);if(canonicalize(r)!==canonicalize(b.result))throw new Error('Result mismatch');if(b.status==='complete'&&!r.complete)throw new Error('Incomplete schedule');let previous='0'.repeat(64),time=0,observed=0,generation=0,reservation:string|null=null,currentDraft:string|null=null,ended=false;for(const [i,e] of b.events.entries()){eventBodies[e.kind].parse(e.body);const {hash:h,...body}=e;if(e.seq!==i+1||e.previous!==previous||eventHash(body)!==h||Date.parse(e.at)<time)throw new Error('History mismatch');time=Date.parse(e.at);previous=h;if(i===0&&e.kind!=='created')throw new Error('Missing creation');if(e.kind==='created'||e.kind==='edited'){if(reservation||observed||ended||(e.kind==='created'&&i!==0))throw new Error('Draft ordering');currentDraft=e.body.draftHash as string;}if(e.kind==='reserved'){if(ended||(reservation&&Date.parse(e.at)-Date.parse(reservation)<60000)||Number(e.body.generation)!==generation+1||e.body.prefixHash!==prefixHash(b.observations.slice(0,observed))||(observed&&Date.parse(e.at)<=Date.parse(b.proposals[observed-1].decisionAt)))throw new Error('Reservation ordering');generation++;reservation=e.at;}if(e.kind==='failure'){if(!reservation||e.body.requestedAt!==reservation||e.body.generation!==generation)throw new Error('Failure ordering');reservation=null;}if(e.kind==='ended'){ended=true;reservation=null;}if(e.kind==='committed'||e.kind==='capture'){const n=e.kind==='committed'?0:observed;if(ended||!reservation||n>=b.observations.length||b.observations[n].requestedAt!==reservation||e.body.commitment!==b.commitment||(n===0&&(reservation!==b.committedAt||currentDraft!==draftHash(b.frozen)))||n!==observed||e.body.evidenceHash!==evidenceHash(b.observations[n])||e.body.proposalHash!==proposalHash(b.proposals[n])||e.at!==b.proposals[n].decisionAt)throw new Error('Observation/history binding');observed++;reservation=null;}}if(observed!==b.observations.length)throw new Error('Missing history');if((b.status==='ended'||b.status==='expired')!==ended)throw new Error('Terminal history mismatch');if(b.status==='partial'&&observed!==b.frozen.terms.maxSteps)throw new Error('Partial terminal count');if(b.status==='watching'&&observed===b.frozen.terms.maxSteps)throw new Error('Terminal observation count');const {root,...body}=b;if(bundleRoot(body)!==root)throw new Error('Root mismatch');return {ok:true,message:'PASS · source decoding and hypothetical prefix replay consistent; not RPC authenticity, timestamp or finality proof.'};}catch(e){return {ok:false,message:e instanceof Error?e.message:'Invalid evidence'};}}
+export function verifyBundle(text:string){try{
+ const b=bundleSchema.parse(parseStrictJson(text,{maxBytes:1500000,maxDepth:24}));
+ if(b.commitment!==commitmentHash(b.frozen,b.committedAt,b.observations[0]))throw new Error('Commitment mismatch');
+ const r=replay(b.frozen,b.observations,b.proposals,b.committedAt);
+ if(canonicalize(r)!==canonicalize(b.result))throw new Error('Result mismatch');
+ let previous='0'.repeat(64),time=0,observed=0,generation=0,reservation:string|null=null,currentDraft:string|null=null;
+ let state:Bundle['status']='watching',committed=false,everReserved=false,lastReservationTime=0;
+ const terminal=()=>state!=='watching';
+ for(const [i,e] of b.events.entries()){
+  eventBodies[e.kind].parse(e.body);const {hash:h,...body}=e;
+  if(e.seq!==i+1||e.previous!==previous||eventHash(body)!==h||Date.parse(e.at)<time)throw new Error('History mismatch');
+  time=Date.parse(e.at);previous=h;
+  if(i===0&&e.kind!=='created')throw new Error('Missing creation');
+  if(e.kind==='created'||e.kind==='edited'){
+   if(everReserved||observed||terminal()||(e.kind==='created'&&i!==0))throw new Error('Draft ordering');
+   currentDraft=e.body.draftHash as string;
+  }
+  if(e.kind==='reserved'){
+   if(terminal()||(everReserved&&Date.parse(e.at)-lastReservationTime<60000)||Number(e.body.generation)!==generation+1||e.body.prefixHash!==prefixHash(b.observations.slice(0,observed))||(observed&&Date.parse(e.at)<=Date.parse(b.proposals[observed-1].decisionAt)))throw new Error('Reservation ordering');
+   if(!everReserved&&e.at!==b.committedAt)throw new Error('Initial reservation time');
+   if(Date.parse(e.at)>Date.parse(b.committedAt)+b.frozen.terms.expirySeconds*1000)throw new Error('Expired reservation');
+   generation++;reservation=e.at;everReserved=true;lastReservationTime=Date.parse(e.at);
+  }
+  if(e.kind==='failure'){
+   if(terminal()||!reservation||e.body.requestedAt!==reservation||e.body.generation!==generation||Date.parse(e.at)-Date.parse(reservation)>=60000)throw new Error('Failure ordering');
+   reservation=null;if(!committed||e.body.reason==='source_changed')state='incomplete';
+  }
+  if(e.kind==='ended'){
+   if(terminal())throw new Error('Duplicate or inconsistent terminal event');
+   if(e.body.reason==='expired'){
+    if(!everReserved||Date.parse(e.at)<=Date.parse(b.committedAt)+b.frozen.terms.expirySeconds*1000)throw new Error('Premature expiry');
+    state='expired';
+   }else state='ended';
+   reservation=null;
+  }
+  if(e.kind==='committed'||e.kind==='capture'){
+   if((e.kind==='committed'&&committed)||(e.kind==='capture'&&!committed))throw new Error('First observation must be committed');
+   const n=observed;
+   if(terminal()||!reservation||n>=b.observations.length||b.observations[n].requestedAt!==reservation||Date.parse(e.at)-Date.parse(reservation)>=60000||e.body.commitment!==b.commitment||(n===0&&(reservation!==b.committedAt||currentDraft!==draftHash(b.frozen)))||e.body.evidenceHash!==evidenceHash(b.observations[n])||e.body.proposalHash!==proposalHash(b.proposals[n])||e.at!==b.proposals[n].decisionAt)throw new Error('Observation/history binding');
+   observed++;committed=true;reservation=null;
+   if(observed===b.frozen.terms.maxSteps)state=r.complete?'complete':'partial';
+  }
+  if(e.kind==='shared'&&e.body.shared===true&&!committed)throw new Error('Share before commitment');
+ }
+ if(observed!==b.observations.length||!committed)throw new Error('Missing history');
+ if(state!==b.status)throw new Error('Terminal history mismatch');
+ const {root,...body}=b;if(bundleRoot(body)!==root)throw new Error('Root mismatch');
+ return {ok:true,message:'PASS · source decoding and hypothetical prefix replay consistent; not RPC authenticity, timestamp or finality proof.'};
+ }catch(e){return {ok:false,message:e instanceof Error?e.message:'Invalid evidence'};}}
+
 export function toBundle(d:{id:string;frozen:Frozen;committedAt:string;commitment:string;observations:Evidence[];proposals:Proposal[];events:Event[];status:Bundle['status']}):Bundle{const b:Omit<Bundle,'root'>={format:FORMAT,...d,result:replay(d.frozen,d.observations,d.proposals,d.committedAt)};return {...b,root:bundleRoot(b)};}
