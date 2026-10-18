@@ -12,7 +12,7 @@ The configured RPC must be mainnet and have the correct genesis. No client-suppl
 
 DBC VirtualPool sqrtPrice offset 280; DAMM v2 Pool offset 456, u128 little-endian Q64. A/base as token gives quote atomic per token atomic = sqrtPrice² / 2^128. B as token inverts that rational. Whole-unit price additionally scales by 10^(tokenDecimals − quoteDecimals). Reserves are never substituted for spot price. Installed reference IDLs: DBC SDK 1.5.13 and cp-amm SDK 1.5.1.
 
-After a captured mark, the fixed-bound rule may hypothetically rebalance at that same decision mark to equal token/quote value. This is an accounting convention, not a claim of available execution. Fee plus slippage basis points are quote-notional costs rounded down. No liquidity, volume, MEV, fills or earned fees are modeled. The next observation cannot affect an earlier proposal. Hold uses identical initial inventory; cost-free all-token benchmark converts initial equity at the initial mark with integer rounding.
+After a captured mark, the fixed-bound rule may propose a hypothetical rebalance at that same decision mark to equal token/quote value. The proposal is persisted before the next read and its balances and costs are evaluated only when a subsequent observation arrives. The final proposal is pending/not evaluated, so ending cannot manufacture a terminal fill. This is an accounting convention, not a claim of available execution. Fee plus slippage basis points are quote-notional costs rounded down. No liquidity, volume, MEV, fills or earned fees are modeled. The next observation cannot affect an earlier proposal. Hold uses identical initial inventory; cost-free all-token benchmark converts initial equity at the initial mark with integer rounding.
 
 ## Manual windows and evidence
 
