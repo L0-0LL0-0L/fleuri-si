@@ -1,5 +1,9 @@
 # Roadmap
 
+- [ ] Forward Watch: verified prospective marks, frozen prefix decisions and strict integer replay
+- [ ] Forward Watch: private atomic persistence, fenced manual capture and bounded evidence history
+- [ ] Forward Watch: integrated routes/docs, regression tests and real owner browser QA
+
 - [x] Shadow Season: frozen synthetic range-rebalance model, private persistence, fenced evaluation and strict autopsy replay
 - [x] Shadow Season: routes/navigation/docs and owner/private/share/export desktop/mobile QA; full tests
 
